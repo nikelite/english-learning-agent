@@ -119,6 +119,7 @@ export default function App() {
     // Take up to 2 of the OLDEST wrong answers, tag them as 'isReview', and append!
     if (!isSharedQuiz && wrongAnswers.length > 0) {
       const oldestMistakes = [...wrongAnswers]
+        .filter(wa => wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title)
         .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
         .slice(0, 2)
         .map((wa, idx) => ({

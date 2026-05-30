@@ -409,35 +409,61 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             </div>
           )}
 
-          {/* TAB 2: KEY VOCABULARY LIST FLASHCARDS */}
+          {/* TAB 2: KEY STUDY LIST FLASHCARDS (VOCAB, GRAMMAR, EXPRESSIONS, CONTEXT) */}
           {rightActiveTab === 'vocab' && (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                💡 본문에서 엄선한 핵심 학술 어휘 목록입니다. 마우스를 올리면 입체적인 쉐도우 효과가 연출됩니다.
+                💡 본문에서 엄선한 핵심 어휘, 문법 요소, 중요 표현 및 맥락 정보의 상세 분석 목록입니다.
               </div>
 
-              {lesson.vocabulary.map((v, idx) => (
-                <div key={idx} className="vocab-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h4 style={{ fontSize: '1.25rem', color: 'white', fontFamily: 'var(--font-display)', fontWeight: '700' }}>
-                      {v.word}
-                    </h4>
-                    {v.pronunciation && (
-                      <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--secondary)', background: 'rgba(6,182,212,0.1)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
-                        /{v.pronunciation}/
-                      </span>
+              {lesson.vocabulary.map((v, idx) => {
+                const itemType = v.type || 'vocabulary';
+                let typeBadge: any = null;
+                if (itemType === 'vocabulary') typeBadge = <span className="badge badge-vocabulary" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>🔤 주요어휘</span>;
+                else if (itemType === 'grammar') typeBadge = <span className="badge badge-grammar" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>⚖️ 문법구조</span>;
+                else if (itemType === 'expression') typeBadge = <span className="badge badge-expression" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>💬 핵심표현</span>;
+                else if (itemType === 'context') typeBadge = <span className="badge badge-context" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>🌐 맥락정보</span>;
+
+                return (
+                  <div key={idx} className="vocab-card" style={{ borderLeft: `4px solid ${
+                    itemType === 'vocabulary' ? 'var(--secondary)' : 
+                    itemType === 'grammar' ? 'var(--primary)' : 
+                    itemType === 'expression' ? 'var(--success)' : 
+                    'var(--accent)'
+                  }` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {typeBadge}
+                        <h4 style={{ fontSize: '1.2rem', color: 'white', fontFamily: 'var(--font-display)', fontWeight: '700' }}>
+                          {v.word}
+                        </h4>
+                      </div>
+                      {v.pronunciation && (
+                        <span style={{ fontSize: '0.725rem', fontFamily: 'var(--font-mono)', color: 'var(--secondary)', background: 'rgba(6,182,212,0.08)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                          /{v.pronunciation}/
+                        </span>
+                      )}
+                    </div>
+
+                    <p style={{ color: 'white', fontSize: '0.925rem', fontWeight: '600', marginTop: '0.25rem' }}>
+                      {v.meaning}
+                    </p>
+
+                    <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem', marginTop: '0.25rem', fontSize: '0.825rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: '1.4' }}>
+                      <strong>Context Ex:</strong> "{v.sentence}"
+                    </div>
+
+                    {v.contextNote && (
+                      <div style={{ background: 'rgba(0,0,0,0.18)', border: '1px dashed rgba(255,255,255,0.05)', borderRadius: '6px', padding: '0.6rem 0.75rem', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.15rem', letterSpacing: '0.5px' }}>
+                          💡 상세 분석 및 학습 가이드
+                        </span>
+                        {v.contextNote}
+                      </div>
                     )}
                   </div>
-
-                  <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: '700' }}>
-                    {v.meaning}
-                  </p>
-
-                  <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem', marginTop: '0.25rem', fontSize: '0.825rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: '1.4' }}>
-                    <strong>Ex:</strong> "{v.sentence}"
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

@@ -13,6 +13,8 @@ export interface ReadingVocabulary {
   meaning: string;
   sentence: string;
   pronunciation?: string;
+  type?: 'vocabulary' | 'grammar' | 'expression' | 'context';
+  contextNote?: string;
 }
 
 export interface ReadingParagraph {

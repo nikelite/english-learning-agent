@@ -239,7 +239,7 @@ export async function generateLessonFromText(text: string, apiKey: string): Prom
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [

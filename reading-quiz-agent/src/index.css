@@ -242,6 +242,30 @@ h1, h2, h3, h4, h5 {
   box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
 }
 
+.badge-vocabulary {
+  background: rgba(6, 182, 212, 0.15) !important;
+  color: #22d3ee !important;
+  border: 1px solid rgba(6, 182, 212, 0.4) !important;
+}
+
+.badge-grammar {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(139, 92, 246, 0.4) !important;
+}
+
+.badge-expression {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+}
+
+.badge-context {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fb7185 !important;
+  border: 1px solid rgba(244, 63, 94, 0.4) !important;
+}
+
 /* Quiz option items */
 .quiz-choices {
   display: flex;

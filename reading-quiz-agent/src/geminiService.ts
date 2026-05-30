@@ -185,8 +185,15 @@ Strict Target & Formatting Rules:
 3. EASY & DETAILED KOREAN RATIONALES (오답 해설):
    - The 'rationale' (해설) for each quiz MUST be written in simple, clear, and highly encouraging KOREAN.
    - IMPORTANT: To prove the correct/incorrect answers, you MUST DIRECTLY CITE AND QUOTE the exact original English sentence(s) from the passage in your Korean rationale, translating and explaining them step-by-step.
-   - Format: "정답은 X번입니다. [원문 인용 문장]에 의하면... 따라서 ~의 의미가 되므로 X가 적절합니다."
-   - Dissect why each of the other three wrong choices is incorrect or misleading by referencing the passage details.
+    - Format: "정답은 X번입니다. [원문 인용 문장]에 의하면... 따라서 ~의 의미가 되므로 X가 적절합니다."
+    - Dissect why each of the other three wrong choices is incorrect or misleading by referencing the passage details.
+4. CORE STUDY ITEMS (VIBRANT VOCABULARY & ANALYSIS LIST):
+   - The 'vocabulary' array MUST contain at least 6 key items extracted from the passage, representing a balanced mix of:
+     - 'vocabulary': Key academic/TOEFL vocabulary words.
+     - 'grammar': Key grammatical structures or syntax rules used in the passage.
+     - 'expression': Key idioms, collocations, or common English expressions found in the text.
+     - 'context': Thematic terms, context markers, or cultural backgrounds essential to understand the passage.
+   - For each item, you must specify the 'type' (which must be 'vocabulary', 'grammar', 'expression', or 'context') and a 'contextNote' in KOREAN providing a clear grammatical explanation, context detail, or translation tip.
 
 Strict JSON Schema Requirements:
 {
@@ -200,10 +207,12 @@ Strict JSON Schema Requirements:
   ],
   "vocabulary": [
     {
-      "word": "word",
-      "meaning": "meaning in Korean",
-      "sentence": "A clean English sentence demonstrating this word's usage in context",
-      "pronunciation": "Phonetic respelling with capitalized stressed syllable, e.g. 'SIN-thuh-syz'"
+      "word": "word, grammar rule, or idiom in English",
+      "meaning": "translation or short summary in Korean",
+      "sentence": "the original sentence from the passage or an illustrative example showing its usage in context",
+      "pronunciation": "Phonetic respelling with capitalized stressed syllable, e.g. 'SIN-thuh-syz'",
+      "type": "Must be one of: 'vocabulary', 'grammar', 'expression', or 'context'",
+      "contextNote": "A highly informative explanation or grammatical/contextual breakdown in Korean (e.g. '이 구문은 ~로 쓰였으며, 독해 시 주어-동사 수일치에 유의해야 합니다.')"
     }
   ],
   "quizzes": [
@@ -238,7 +247,7 @@ export async function generateReadingLesson(
     throw new Error("분석할 독해 지문 텍스트가 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -306,7 +315,9 @@ export async function generateReadingLesson(
         word: v.word || "",
         meaning: v.meaning || "",
         sentence: v.sentence || "",
-        pronunciation: v.pronunciation || ""
+        pronunciation: v.pronunciation || "",
+        type: v.type || "vocabulary",
+        contextNote: v.contextNote || ""
       })),
       quizzes: (parsedJson.quizzes || []).map((q: any, idx: number) => ({
         id: q.id || `q-${Date.now()}-${idx}`,
