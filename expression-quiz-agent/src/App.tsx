@@ -86,11 +86,9 @@ export default function App() {
     }
   }, []);
 
-  const [injectedQuizzes, setInjectedQuizzes] = useState<QuizItem[]>([]);
-
-  // Update Injected Quizzes list when Lesson or wrongAnswers changes
-  useEffect(() => {
-    if (!activeLesson) return;
+  // Injected quizzes calculated synchronously in the render phase
+  const injectedQuizzes = (() => {
+    if (!activeLesson) return [];
     let list = [...activeLesson.quizzes];
 
     if (wrongAnswers.length > 0) {
@@ -112,9 +110,8 @@ export default function App() {
         });
       list = [...list, ...oldestMistakes];
     }
-
-    setInjectedQuizzes(list);
-  }, [activeLesson, wrongAnswers]);
+    return list;
+  })();
 
   // Save API Key
   const handleSaveApiKey = (key: string) => {

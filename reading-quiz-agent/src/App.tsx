@@ -52,8 +52,33 @@ export default function App() {
   const [isSharedQuiz, setIsSharedQuiz] = useState<boolean>(false);
   const [isShareOpen, setIsShareOpen] = useState<boolean>(false);
 
-  // Injected quizzes (includes standard ones + oldest past mistakes)
-  const [injectedQuizzes, setInjectedQuizzes] = useState<ReadingQuizItem[]>([]);
+  // Injected quizzes (includes standard ones + oldest past mistakes) calculated synchronously
+  const injectedQuizzes = (() => {
+    if (!activeLesson) return [];
+    let list = [...activeLesson.quizzes];
+
+    if (!isSharedQuiz && wrongAnswers.length > 0) {
+      const oldestMistakes = [...wrongAnswers]
+        .filter(wa => !wa.lessonId.startsWith('preset-')) // Retroactively filter out presets
+        .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
+        .slice(0, 2)
+        .map((wa, idx) => {
+          const isSameLesson = wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title;
+          const label = isSameLesson 
+            ? `🔄 [현재 지문 오답 복습]` 
+            : `🔄 [과거 다른 지문 오답] (지문: ${wa.lessonTitle})`;
+          return {
+            ...wa.quizItem,
+            id: wa.id, // Keep the wrong answer ID to identify it during graduation
+            isReview: true,
+            question: `${label} ${wa.quizItem.question.replace(/^Q\d+\.\s*/i, '')}`
+          };
+        });
+      
+      list = [...list, ...oldestMistakes];
+    }
+    return list;
+  })();
 
   // Local storage persistence
   useEffect(() => {
@@ -103,44 +128,11 @@ export default function App() {
         setViewMode('split');
         
         // No wrong answers injection during external link shares to preserve clean environment
-        setInjectedQuizzes(decodedLesson.quizzes);
       }
     }
   }, []);
 
-  // Update Injected Quizzes list when Lesson changes
-  // Update Injected Quizzes list when Lesson changes
-  useEffect(() => {
-    if (!activeLesson) return;
 
-    // Default to core quizzes
-    let list = [...activeLesson.quizzes];
-
-    // If this is a personal (non-shared) session and we have wrong answers:
-    // Take up to 2 of the OLDEST wrong answers, tag them as 'isReview', and append!
-    if (!isSharedQuiz && wrongAnswers.length > 0) {
-      const oldestMistakes = [...wrongAnswers]
-        .filter(wa => !wa.lessonId.startsWith('preset-')) // Retroactively filter out presets
-        .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
-        .slice(0, 2)
-        .map((wa, idx) => {
-          const isSameLesson = wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title;
-          const label = isSameLesson 
-            ? `🔄 [현재 지문 오답 복습]` 
-            : `🔄 [과거 다른 지문 오답] (지문: ${wa.lessonTitle})`;
-          return {
-            ...wa.quizItem,
-            id: wa.id, // Keep the wrong answer ID to identify it during graduation
-            isReview: true,
-            question: `${label} ${wa.quizItem.question.replace(/^Q\d+\.\s*/i, '')}`
-          };
-        });
-      
-      list = [...list, ...oldestMistakes];
-    }
-
-    setInjectedQuizzes(list);
-  }, [activeLesson, wrongAnswers, isSharedQuiz]);
 
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
