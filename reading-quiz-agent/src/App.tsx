@@ -7,6 +7,7 @@ import { ShareModal } from './components/ShareModal';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { loadLessonFromCloud } from './firebaseService';
 
 export default function App() {
   // 1. Core API & Key Settings
@@ -122,10 +123,11 @@ export default function App() {
     }
   }, []);
 
-  // CHECK AND DECODE URL SHARE LINK (`?share=...`)
+  // CHECK AND DECODE URL SHARE LINK (`?share=...` or `?cloudShare=...`)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sharePayload = params.get('share');
+    const cloudDocId = params.get('cloudShare');
     
     if (sharePayload) {
       deserializeLesson(sharePayload).then((decodedLesson) => {
@@ -134,6 +136,22 @@ export default function App() {
           setIsSharedQuiz(true);
           setViewMode('split');
         }
+      });
+    } else if (cloudDocId) {
+      setIsLoading(true);
+      setError(null);
+      loadLessonFromCloud(cloudDocId).then((decodedLesson) => {
+        if (decodedLesson) {
+          setActiveLesson(decodedLesson);
+          setIsSharedQuiz(true);
+          setViewMode('split');
+        } else {
+          setError("공유된 클라우드 학습 데이터를 찾을 수 없습니다.");
+        }
+      }).catch((err: any) => {
+        setError(err.message || "클라우드 데이터를 가져오는 중 에러가 발생했습니다.");
+      }).finally(() => {
+        setIsLoading(false);
       });
     }
   }, []);

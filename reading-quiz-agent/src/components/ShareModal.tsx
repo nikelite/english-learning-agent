@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Share2, Clipboard, Check, Sparkles, Globe, Shield } from 'lucide-react';
+import { X, Share2, Clipboard, Check, Sparkles, Globe, Cloud, Link, AlertCircle } from 'lucide-react';
 import { ReadingLesson } from '../types';
 import { serializeLesson } from '../geminiService';
+import { saveLessonToCloud } from '../firebaseService';
 
 interface ShareModalProps {
   lesson: ReadingLesson;
@@ -14,21 +15,45 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const [shareUrl, setShareUrl] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'cloud' | 'serverless'>('cloud');
+  const [cloudUrl, setCloudUrl] = useState<string>('');
+  const [serverlessUrl, setServerlessUrl] = useState<string>('');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Generate the serverless GZIP Base64 link
   useEffect(() => {
     if (isOpen && lesson) {
       serializeLesson(lesson).then((base64Payload) => {
         const url = `${window.location.origin}${window.location.pathname}?share=${base64Payload}`;
-        setShareUrl(url);
+        setServerlessUrl(url);
       });
+      // Reset cloud sharing state when modal opens
+      setCloudUrl('');
+      setUploadError(null);
+      setIsUploading(false);
     }
   }, [isOpen, lesson]);
 
-  const handleCopy = () => {
-    if (!shareUrl) return;
-    navigator.clipboard.writeText(shareUrl).then(() => {
+  // Upload to Firebase Firestore for Cloud Share
+  const handleCloudUpload = async () => {
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      const docId = await saveLessonToCloud(lesson);
+      const url = `${window.location.origin}${window.location.pathname}?cloudShare=${docId}`;
+      setCloudUrl(url);
+    } catch (err: any) {
+      setUploadError(err.message || "클라우드 퀴즈 서버 업로드에 실패했습니다.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCopy = (urlToCopy: string) => {
+    if (!urlToCopy) return;
+    navigator.clipboard.writeText(urlToCopy).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -38,7 +63,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', padding: '2rem 1.75rem' }}>
+        {/* Close Button */}
         <button 
           className="btn btn-secondary" 
           style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.25rem', borderRadius: '50%' }}
@@ -47,53 +73,194 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           <X size={16} />
         </button>
 
-        <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)' }}>
-          <Share2 size={20} style={{ color: 'var(--secondary)' }} />
-          스마트 퀴즈 링크 공유
+        {/* Title */}
+        <h3 style={{ fontSize: '1.3rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: '800' }}>
+          <Share2 size={22} style={{ color: 'var(--secondary)' }} />
+          학습 세트 공유하기
         </h3>
 
-        <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--secondary)', background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.02) 100%)', padding: '1.25rem', borderRadius: '0 12px 12px 0', marginBottom: '1.25rem', fontSize: '0.85rem', lineHeight: '1.5' }}>
-          <Sparkles size={14} style={{ color: 'var(--secondary)', marginRight: '0.25rem' }} />
-          <strong>서버가 없는 혁신적인 쉐어링 시스템!</strong><br />
-          이 지문의 해석, 단어장, 퀴즈 문제들 일체가 URL 주소 안에 압축되어 저장되었습니다. 링크를 받는 사람은 별도의 백엔드 데이터베이스 없이 즉시 시험을 치를 수 있습니다!
+        {/* Tab Navigation Controls */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '0.3rem', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+          <button
+            type="button"
+            className="btn"
+            style={{
+              padding: '0.55rem',
+              fontSize: '0.8rem',
+              fontWeight: activeTab === 'cloud' ? '700' : '400',
+              borderRadius: '7px',
+              border: 'none',
+              background: activeTab === 'cloud' ? 'var(--secondary)' : 'transparent',
+              color: activeTab === 'cloud' ? 'white' : 'var(--text-secondary)',
+              boxShadow: activeTab === 'cloud' ? '0 4px 12px rgba(6,182,212,0.2)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              transition: 'all 0.2s ease'
+            }}
+            onClick={() => setActiveTab('cloud')}
+          >
+            <Cloud size={14} />
+            클라우드 공유 (단축 URL)
+          </button>
+          
+          <button
+            type="button"
+            className="btn"
+            style={{
+              padding: '0.55rem',
+              fontSize: '0.8rem',
+              fontWeight: activeTab === 'serverless' ? '700' : '400',
+              borderRadius: '7px',
+              border: 'none',
+              background: activeTab === 'serverless' ? 'var(--primary)' : 'transparent',
+              color: activeTab === 'serverless' ? 'white' : 'var(--text-secondary)',
+              boxShadow: activeTab === 'serverless' ? '0 4px 12px rgba(139,92,246,0.2)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              transition: 'all 0.2s ease'
+            }}
+            onClick={() => setActiveTab('serverless')}
+          >
+            <Link size={14} />
+            압축 직접 공유 (서버리스)
+          </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
-          <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-            생성된 단독 공유 링크
-          </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              readOnly
-              value={shareUrl}
-              className="input-glow"
-              style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis' }}
-              onClick={(e) => (e.target as HTMLInputElement).select()}
-            />
-            <button 
-              className="btn btn-primary"
-              style={{
-                background: copied ? 'var(--success)' : 'linear-gradient(135deg, var(--secondary) 0%, #0891b2 100%)',
-                boxShadow: 'none',
-                flexShrink: 0
-              }}
-              onClick={handleCopy}
-            >
-              {copied ? <Check size={16} /> : <Clipboard size={16} />}
-              {copied ? '복사됨!' : '복사'}
-            </button>
+        {/* Tab Contents: Cloud Share */}
+        {activeTab === 'cloud' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--secondary)', background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.02) 100%)', padding: '1.15rem', borderRadius: '0 12px 12px 0', fontSize: '0.8rem', lineHeight: '1.5' }}>
+              <Sparkles size={14} style={{ color: 'var(--secondary)', marginRight: '0.25rem', display: 'inline' }} />
+              <strong>개인 Cloud 데이터베이스 안전 보관!</strong><br />
+              현재 지문의 전체 해설, 단어장, 퀴즈가 구글 Firebase Cloud에 저장되어 **15자 내외의 초단축 고유 ID**가 발급됩니다. 카카오톡, 라인 등 메신저 공유 시 글자 수 초과 잘림 걱정 없이 완벽하게 전송됩니다.
+            </div>
+
+            {!cloudUrl ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleCloudUpload}
+                  disabled={isUploading}
+                  style={{
+                    width: '100%',
+                    padding: '0.85rem',
+                    background: 'linear-gradient(135deg, var(--secondary) 0%, #0891b2 100%)',
+                    boxShadow: '0 4px 15px rgba(6,182,212,0.2)',
+                    fontSize: '0.85rem',
+                    fontWeight: '700'
+                  }}
+                >
+                  {isUploading ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                      <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%' }}></span>
+                      클라우드 서버에 안전하게 보관하는 중...
+                    </span>
+                  ) : (
+                    <>
+                      <Cloud size={16} />
+                      클라우드 단축 공유 링크 생성하기
+                    </>
+                  )}
+                </button>
+                {uploadError && (
+                  <div style={{ display: 'flex', gap: '0.4rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.08)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.15)', alignItems: 'center' }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', fontWeight: '700' }}>
+                  생성된 클라우드 단축 URL
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={cloudUrl}
+                    className="input-glow"
+                    style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis' }}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <button 
+                    className="btn btn-primary"
+                    style={{
+                      background: copied ? 'var(--success)' : 'linear-gradient(135deg, var(--secondary) 0%, #0891b2 100%)',
+                      boxShadow: 'none',
+                      flexShrink: 0,
+                      padding: '0.65rem 1.15rem'
+                    }}
+                    onClick={() => handleCopy(cloudUrl)}
+                  >
+                    {copied ? <Check size={15} /> : <Clipboard size={15} />}
+                    {copied ? '복사됨!' : '링크 복사'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+        {/* Tab Contents: Serverless Share */}
+        {activeTab === 'serverless' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--primary)', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(6, 182, 212, 0.01) 100%)', padding: '1.15rem', borderRadius: '0 12px 12px 0', fontSize: '0.8rem', lineHeight: '1.5' }}>
+              <Sparkles size={14} style={{ color: 'var(--primary)', marginRight: '0.25rem', display: 'inline' }} />
+              <strong>서버가 전혀 필요 없는 압축 URL 공유!</strong><br />
+              지문, 단어, 퀴즈 메타데이터 일체가 GZIP 알고리즘으로 압축되어 URL 주소 내부에 원형 그대로 보관됩니다. DB 서버 점검이나 유실 걱정 없이 100% 안전하게 작동합니다.<br />
+              <span style={{ color: 'var(--error)', fontSize: '0.75rem', display: 'block', marginTop: '0.5rem', fontWeight: '600' }}>
+                ※ 주의: 본문과 해설이 너무 길면 링크가 엄청 길어져 일부 앱(카카오톡 등)에서 메신저 자체 글자수 제한으로 잘릴 수 있습니다.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', fontWeight: '700' }}>
+                생성된 무제한 압축 URL
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={serverlessUrl}
+                  className="input-glow"
+                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis' }}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button 
+                  className="btn btn-primary"
+                  style={{
+                    background: copied ? 'var(--success)' : 'linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%)',
+                    boxShadow: 'none',
+                    flexShrink: 0,
+                    padding: '0.65rem 1.15rem'
+                  }}
+                  onClick={() => handleCopy(serverlessUrl)}
+                >
+                  {copied ? <Check size={15} /> : <Clipboard size={15} />}
+                  {copied ? '복사됨!' : '링크 복사'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Global Footnote Information */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', fontSize: '0.725rem', color: 'var(--text-muted)', lineHeight: '1.4', marginTop: '1.25rem' }}>
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <Globe size={13} style={{ color: 'var(--secondary)' }} />
-            <span>이 링크는 카카오톡, 라인, 이메일, 노션 페이지에 붙여넣어 무제한 공유할 수 있습니다.</span>
+            <span>이 단독 링크는 노션, 슬랙, 이메일, LMS 게시판에 자유롭게 공유할 수 있습니다.</span>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-            <Shield size={13} style={{ color: 'var(--primary)' }} />
-            <span>어떠한 백엔드 서버도 거치지 않고 직접 상대방 브라우저에서 해독되므로 개인정보 및 보안상 100% 안전합니다.</span>
+            <Sparkles size={13} style={{ color: 'var(--primary)' }} />
+            <span>퀴즈를 받은 학생들은 별도의 로그인 없이 링크 클릭만으로 즉시 시험에 응시할 수 있습니다.</span>
           </div>
         </div>
       </div>
