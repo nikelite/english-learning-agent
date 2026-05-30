@@ -59,7 +59,14 @@ export default function App() {
 
     if (!isSharedQuiz && wrongAnswers.length > 0) {
       const oldestMistakes = [...wrongAnswers]
-        .filter(wa => !wa.lessonId.startsWith('preset-')) // Retroactively filter out presets
+        .filter(wa => {
+          // If the wrong answer is from a preset, only inject it when studying that exact same preset
+          if (wa.lessonId.startsWith('preset-')) {
+            return wa.lessonId === activeLesson.id;
+          }
+          // Custom lesson mistakes are only injected when studying custom lessons
+          return !activeLesson.id.startsWith('preset-');
+        })
         .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
         .slice(0, 2)
         .map((wa, idx) => {
@@ -173,9 +180,6 @@ export default function App() {
   // Wrong Answers notebook callbacks
   const handleAddWrongAnswer = (quizItem: ReadingQuizItem, selectedIndex: number) => {
     if (!activeLesson) return;
-
-    // Exclude preset lessons from being saved into the Mistakes Notebook
-    if (activeLesson.id.startsWith('preset-')) return;
 
     setWrongAnswers(prev => {
       // Avoid duplicates based on original question string
