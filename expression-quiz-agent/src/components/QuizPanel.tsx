@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck } from 'lucide-react';
 import { Lesson, QuizItem } from '../types';
 
@@ -7,16 +7,31 @@ interface QuizPanelProps {
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
   onQuizCompleted: (correctCount: number, totalCount: number) => void;
   onBackToStudy: () => void;
+  injectedQuizzes: QuizItem[];
+  onGraduateReview: (wrongId: string) => void;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
   lesson,
   onAddWrongAnswer,
   onQuizCompleted,
-  onBackToStudy
+  onBackToStudy,
+  injectedQuizzes,
+  onGraduateReview
 }) => {
-  const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => lesson.quizzes);
+  const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
+
+  useEffect(() => {
+    setActiveQuizzes(injectedQuizzes);
+    setSessionWrongs([]);
+    setCurrentIdx(0);
+    setSelectedAns(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setShowResult(false);
+    setSavedWrongId(null);
+  }, [lesson.id]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
@@ -41,6 +56,9 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     
     if (isCorrect) {
       setScore(prev => prev + 1);
+      if (activeQuestion.isReview) {
+        onGraduateReview(activeQuestion.id);
+      }
     } else {
       // Add to session wrongs for targeted review
       setSessionWrongs(prev => {
@@ -67,7 +85,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleRestart = () => {
-    setActiveQuizzes(lesson.quizzes);
+    setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);

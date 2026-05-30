@@ -4,6 +4,7 @@ export interface QuizItem {
   choices: string[];
   correctIndex: number;
   rationale: string;
+  isReview?: boolean;
 }
 
 export interface Eli5Data {

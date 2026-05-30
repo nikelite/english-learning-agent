@@ -86,6 +86,36 @@ export default function App() {
     }
   }, []);
 
+  const [injectedQuizzes, setInjectedQuizzes] = useState<QuizItem[]>([]);
+
+  // Update Injected Quizzes list when Lesson or wrongAnswers changes
+  useEffect(() => {
+    if (!activeLesson) return;
+    let list = [...activeLesson.quizzes];
+
+    if (wrongAnswers.length > 0) {
+      const oldestMistakes = [...wrongAnswers]
+        .filter(wa => !wa.lessonId.startsWith('preset-')) // Exclude presets
+        .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
+        .slice(0, 2)
+        .map((wa, idx) => {
+          const isSameLesson = wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title;
+          const label = isSameLesson 
+            ? `🔄 [현재 세트 오답 복습]` 
+            : `🔄 [과거 다른 세트 오답] (출처: ${wa.lessonTitle})`;
+          return {
+            ...wa.quizItem,
+            id: wa.id, // Keep the wrong answer ID for graduation
+            isReview: true,
+            question: `${label}\n\n${wa.quizItem.question}`
+          };
+        });
+      list = [...list, ...oldestMistakes];
+    }
+
+    setInjectedQuizzes(list);
+  }, [activeLesson, wrongAnswers]);
+
   // Save API Key
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
@@ -118,6 +148,9 @@ export default function App() {
   const handleAddWrongAnswer = (quizItem: QuizItem, selectedAnswerIndex: number) => {
     if (!activeLesson) return;
 
+    // Exclude preset lessons from being saved into the Mistakes Notebook
+    if (activeLesson.id.startsWith('preset-')) return;
+
     // Avoid duplicating exact same question
     setWrongAnswers(prev => {
       if (prev.some(wa => wa.quizItem.id === quizItem.id)) {
@@ -133,6 +166,14 @@ export default function App() {
       };
       return [newWrong, ...prev];
     });
+  };
+
+  const handleGraduateReview = (wrongId: string) => {
+    setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    setStats(prev => ({
+      ...prev,
+      masteredCount: prev.masteredCount + 1
+    }));
   };
 
   // Remove single wrong answer from mistakes notebook
@@ -233,6 +274,8 @@ export default function App() {
                   onAddWrongAnswer={handleAddWrongAnswer}
                   onQuizCompleted={handleQuizCompleted}
                   onBackToStudy={() => setViewMode('study')}
+                  injectedQuizzes={injectedQuizzes}
+                  onGraduateReview={handleGraduateReview}
                 />
               )}
             </main>

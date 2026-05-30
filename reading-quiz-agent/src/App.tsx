@@ -109,6 +109,7 @@ export default function App() {
   }, []);
 
   // Update Injected Quizzes list when Lesson changes
+  // Update Injected Quizzes list when Lesson changes
   useEffect(() => {
     if (!activeLesson) return;
 
@@ -119,15 +120,21 @@ export default function App() {
     // Take up to 2 of the OLDEST wrong answers, tag them as 'isReview', and append!
     if (!isSharedQuiz && wrongAnswers.length > 0) {
       const oldestMistakes = [...wrongAnswers]
-        .filter(wa => wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title)
+        .filter(wa => !wa.lessonId.startsWith('preset-')) // Retroactively filter out presets
         .sort((a, b) => a.timestamp - b.timestamp) // Oldest first
         .slice(0, 2)
-        .map((wa, idx) => ({
-          ...wa.quizItem,
-          id: wa.id, // Keep the wrong answer ID to identify it during graduation
-          isReview: true,
-          question: `🔄 [오답 복습 문제] ${wa.quizItem.question.replace(/^Q\d+\.\s*/i, '')}`
-        }));
+        .map((wa, idx) => {
+          const isSameLesson = wa.lessonId === activeLesson.id || wa.lessonTitle === activeLesson.title;
+          const label = isSameLesson 
+            ? `🔄 [현재 지문 오답 복습]` 
+            : `🔄 [과거 다른 지문 오답] (지문: ${wa.lessonTitle})`;
+          return {
+            ...wa.quizItem,
+            id: wa.id, // Keep the wrong answer ID to identify it during graduation
+            isReview: true,
+            question: `${label} ${wa.quizItem.question.replace(/^Q\d+\.\s*/i, '')}`
+          };
+        });
       
       list = [...list, ...oldestMistakes];
     }
@@ -177,6 +184,9 @@ export default function App() {
   // Wrong Answers notebook callbacks
   const handleAddWrongAnswer = (quizItem: ReadingQuizItem, selectedIndex: number) => {
     if (!activeLesson) return;
+
+    // Exclude preset lessons from being saved into the Mistakes Notebook
+    if (activeLesson.id.startsWith('preset-')) return;
 
     setWrongAnswers(prev => {
       // Avoid duplicates based on original question string
