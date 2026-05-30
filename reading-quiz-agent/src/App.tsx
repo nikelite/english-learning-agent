@@ -229,7 +229,7 @@ export default function App() {
       if (!prev) return null;
       return {
         ...prev,
-        vocabulary: [...prev.vocabulary, newVocab]
+        vocabulary: [newVocab, ...prev.vocabulary]
       };
     });
   };
