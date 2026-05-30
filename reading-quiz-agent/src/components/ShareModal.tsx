@@ -19,9 +19,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   useEffect(() => {
     if (isOpen && lesson) {
-      const base64Payload = serializeLesson(lesson);
-      const url = `${window.location.origin}${window.location.pathname}?share=${base64Payload}`;
-      setShareUrl(url);
+      serializeLesson(lesson).then((base64Payload) => {
+        const url = `${window.location.origin}${window.location.pathname}?share=${base64Payload}`;
+        setShareUrl(url);
+      });
     }
   }, [isOpen, lesson]);
 

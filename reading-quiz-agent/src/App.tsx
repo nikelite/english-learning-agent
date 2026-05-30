@@ -121,18 +121,15 @@ export default function App() {
     const sharePayload = params.get('share');
     
     if (sharePayload) {
-      const decodedLesson = deserializeLesson(sharePayload);
-      if (decodedLesson) {
-        setActiveLesson(decodedLesson);
-        setIsSharedQuiz(true);
-        setViewMode('split');
-        
-        // No wrong answers injection during external link shares to preserve clean environment
-      }
+      deserializeLesson(sharePayload).then((decodedLesson) => {
+        if (decodedLesson) {
+          setActiveLesson(decodedLesson);
+          setIsSharedQuiz(true);
+          setViewMode('split');
+        }
+      });
     }
   }, []);
-
-
 
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
