@@ -1,4 +1,4 @@
-import { ReadingLesson } from './types';
+import { ReadingLesson, ReadingVocabulary } from './types';
 
 // Preloaded Premium Reading Lessons (Upgraded to TOEFL 7th Grade Style with English Questions and Citing Korean Rationales)
 export const PRESET_READING_LESSONS: ReadingLesson[] = [
@@ -402,5 +402,94 @@ export async function generateReadingLesson(
   } catch (error: any) {
     console.error("Gemini Reading Generation Error:", error);
     throw new Error(error.message || "지문을 분석하고 퀴즈를 출제하는 중 알 수 없는 장애가 발생했습니다.");
+  }
+}
+
+// Generate a detailed study card for a user-submitted custom word or expression, using the passage's context
+export async function generateCustomVocabItem(
+  passageText: string,
+  targetWordOrPhrase: string,
+  apiKey: string
+): Promise<ReadingVocabulary> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+  }
+  
+  const cleanWord = targetWordOrPhrase.trim();
+  if (!cleanWord) {
+    throw new Error("분석할 단어 또는 표현이 비어 있습니다.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an elite academic English linguist and ESL curriculum developer.
+Analyze the following English target word or phrase: "${cleanWord}"
+strictly in the context of this English reading passage:
+\"\"\"
+${passageText}
+\"\"\"
+
+Generate a highly detailed and helpful vocabulary study card for this item in the following strict JSON format:
+{
+  "word": "${cleanWord}",
+  "meaning": "Clear, contextual meaning or definition in Korean, matching how it is used in the passage",
+  "sentence": "The exact original sentence from the passage where this word/phrase is used, or a highly relevant contextual example from the passage",
+  "pronunciation": "Phonetic respelling with capitalized stressed syllable (e.g. 'SIN-thuh-syz')",
+  "type": "Categorize it as one of: 'vocabulary', 'grammar', 'expression', or 'context'",
+  "contextNote": "A brief, highly informative contextual analysis in Korean explaining its grammatical role, syntax breakdown, or usage context in the passage (e.g. '이 문맥에서는 ~한 뜻을 지닌 분사구문으로 쓰여 주어가 ~함을 묘사합니다.')"
+}
+
+Ensure the response is a single, valid JSON object and nothing else. Do not wrap in markdown code blocks.`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1
+    }
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+      throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error("Gemini가 유효한 분석결과를 반환하지 않았습니다.");
+    }
+
+    const parsed = JSON.parse(responseText);
+    return {
+      word: parsed.word || cleanWord,
+      meaning: parsed.meaning || "의미를 분석할 수 없습니다.",
+      sentence: parsed.sentence || "",
+      pronunciation: parsed.pronunciation || "",
+      type: parsed.type || "vocabulary",
+      contextNote: parsed.contextNote || ""
+    };
+  } catch (error: any) {
+    console.error("Gemini Custom Vocab Generation Error:", error);
+    throw new Error(error.message || "단어 분석 중 오류가 발생했습니다.");
   }
 }

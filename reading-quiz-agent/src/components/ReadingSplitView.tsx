@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary } from '../types';
+import { generateCustomVocabItem } from '../geminiService';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -10,6 +11,8 @@ interface ReadingSplitViewProps {
   onBackToCreator?: () => void;
   injectedQuizzes: ReadingQuizItem[]; // Contains standard + review wrong answers injected
   onGraduateReview: (wrongId: string) => void; // Call when review question is answered correctly
+  apiKey: string;
+  onAddCustomVocabulary: (newVocab: ReadingVocabulary) => void;
 }
 
 export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
@@ -19,12 +22,19 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   onOpenShare,
   onBackToCreator,
   injectedQuizzes,
-  onGraduateReview
+  onGraduateReview,
+  apiKey,
+  onAddCustomVocabulary
 }) => {
   // UI preferences
   const [fontSize, setFontSize] = useState<number>(16);
   const [activeParagraphId, setActiveParagraphId] = useState<number | null>(null);
   const [rightActiveTab, setRightActiveTab] = useState<'quiz' | 'vocab'>('quiz');
+
+  // Custom Vocab Addition States
+  const [customInput, setCustomInput] = useState<string>('');
+  const [isCustomVocabLoading, setIsCustomVocabLoading] = useState<boolean>(false);
+  const [customVocabError, setCustomVocabError] = useState<string | null>(null);
 
   // Quiz States
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -114,6 +124,27 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setScore(0);
     setShowResult(false);
     setSavedWrongId(null);
+  };
+
+  const handleAddNewVocab = async () => {
+    const word = customInput.trim();
+    if (!word) return;
+    if (!apiKey) {
+      setCustomVocabError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 먼저 등록해 주세요.");
+      return;
+    }
+
+    setIsCustomVocabLoading(true);
+    setCustomVocabError(null);
+    try {
+      const newItem = await generateCustomVocabItem(lesson.passageText, word, apiKey);
+      onAddCustomVocabulary(newItem);
+      setCustomInput('');
+    } catch (err: any) {
+      setCustomVocabError(err.message || "표현 분석 및 추가에 실패했습니다.");
+    } finally {
+      setIsCustomVocabLoading(false);
+    }
   };
 
   return (
@@ -412,6 +443,46 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           {/* TAB 2: KEY STUDY LIST FLASHCARDS (VOCAB, GRAMMAR, EXPRESSIONS, CONTEXT) */}
           {rightActiveTab === 'vocab' && (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Context-aware Word/Expression Addition Form */}
+              <div className="vocab-card" style={{ background: 'rgba(139, 92, 246, 0.04)', border: '1px dashed var(--primary)', padding: '1.25rem', marginBottom: '0.25rem', borderRadius: '12px' }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '700', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-display)' }}>
+                  <Sparkles size={14} /> AI 문맥 분석 단어/구문/문법 추가
+                </h4>
+                <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginBottom: '0.85rem', lineHeight: '1.4' }}>
+                  공부하고 싶은 단어, 표현, 숙어나 특정 문법 구문을 입력하세요. AI가 본문 문맥(Context)을 분석하여 뜻과 원문 활용예문, 상세 학습 가이드를 자동으로 채워 넣습니다!
+                </p>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    placeholder="예: deter, upon receiving, tannin 등 본문 단어나 표현"
+                    value={customInput}
+                    onChange={(e) => setCustomInput(e.target.value)}
+                    className="input-glow"
+                    style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem', flex: 1 }}
+                    disabled={isCustomVocabLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && customInput.trim() && !isCustomVocabLoading) {
+                        handleAddNewVocab();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAddNewVocab}
+                    className="btn btn-primary"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', flexShrink: 0 }}
+                    disabled={isCustomVocabLoading || !customInput.trim()}
+                  >
+                    {isCustomVocabLoading ? "분석 중..." : "추가"}
+                  </button>
+                </div>
+                {customVocabError && (
+                  <div style={{ color: 'var(--error)', fontSize: '0.725rem', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <span>⚠️ {customVocabError}</span>
+                  </div>
+                )}
+              </div>
+
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
                 💡 본문에서 엄선한 핵심 어휘, 문법 요소, 중요 표현 및 맥락 정보의 상세 분석 목록입니다.
               </div>

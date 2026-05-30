@@ -4,7 +4,7 @@ import { ReadingSplitView } from './components/ReadingSplitView';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
-import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem } from './types';
+import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 
@@ -223,6 +223,17 @@ export default function App() {
     }));
   };
 
+  const handleAddCustomVocabulary = (newVocab: ReadingVocabulary) => {
+    if (!activeLesson) return;
+    setActiveLesson(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        vocabulary: [...prev.vocabulary, newVocab]
+      };
+    });
+  };
+
   return (
     <div className="app-container">
       {/* Universal header */}
@@ -399,6 +410,8 @@ export default function App() {
                 onBackToCreator={!isSharedQuiz ? () => setViewMode('creator') : undefined}
                 injectedQuizzes={injectedQuizzes}
                 onGraduateReview={handleGraduateReview}
+                apiKey={apiKey}
+                onAddCustomVocabulary={handleAddCustomVocabulary}
               />
             )}
           </div>
