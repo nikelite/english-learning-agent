@@ -224,12 +224,16 @@ Strict Schema Requirements:
 }
 
 Important Instructions:
-1. Make sure to generate exactly 5 distinct multiple-choice quizzes under the 'quizzes' array.
+1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array.
 2. In the quizzes, test different angles of the topic: preposition matching, active vs passive voice, tense, subject-verb agreement, etc.
 3. Keep the tone friendly, encouraging, and highly professional yet simple.
 4. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
-export async function generateLessonFromText(text: string, apiKey: string): Promise<Lesson> {
+export async function generateLessonFromText(
+  text: string,
+  apiKey: string,
+  questionCount: number = 5
+): Promise<Lesson> {
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
@@ -247,7 +251,15 @@ export async function generateLessonFromText(text: string, apiKey: string): Prom
         role: "user",
         parts: [
           {
-            text: `${SYSTEM_PROMPT}\n\nHere is the study text to analyze:\n"""\n${cleanText}\n"""`
+            text: `${SYSTEM_PROMPT}
+            
+            Strict Request Parameters:
+            - Generate EXACTLY ${questionCount} multiple-choice quizzes under the 'quizzes' array.
+            
+            Here is the study text to analyze:
+            """
+            ${cleanText}
+            """`
           }
         ]
       }

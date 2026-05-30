@@ -5,7 +5,7 @@ import { PRESET_LESSONS } from '../geminiService';
 
 interface LessonCreatorProps {
   apiKey: string;
-  onGenerate: (text: string) => Promise<void>;
+  onGenerate: (text: string, questionCount: number) => Promise<void>;
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
@@ -19,6 +19,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
   activeLesson
 }) => {
   const [inputText, setInputText] = useState('');
+  const [questionCount, setQuestionCount] = useState<number>(5);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +38,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
     }
 
     try {
-      await onGenerate(text);
+      await onGenerate(text, questionCount);
       setInputText('');
     } catch (err: any) {
       setError(err.message || "학습 데이터를 생성하는 중 에러가 발생했습니다.");
@@ -66,6 +67,23 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
             style={{ minHeight: '130px', fontSize: '0.9rem' }}
             disabled={isLoading}
           />
+        </div>
+
+        {/* Question Count Selector */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>생성할 퀴즈 문항 수</label>
+          <select
+            value={questionCount}
+            onChange={(e) => setQuestionCount(Number(e.target.value))}
+            className="select-glow"
+            disabled={isLoading}
+            style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
+          >
+            <option value={3}>3 문항</option>
+            <option value={5}>5 문항 (기본)</option>
+            <option value={8}>8 문항</option>
+            <option value={10}>10 문항</option>
+          </select>
         </div>
 
         {error && (

@@ -120,10 +120,10 @@ export default function App() {
   };
 
   // AI custom generation trigger
-  const handleGenerateLesson = async (text: string) => {
+  const handleGenerateLesson = async (text: string, questionCount: number) => {
     setIsLoading(true);
     try {
-      const generated = await generateLessonFromText(text, apiKey);
+      const generated = await generateLessonFromText(text, apiKey, questionCount);
       setActiveLesson(generated);
       setViewMode('study');
       setActiveStudyTab('eli5');
