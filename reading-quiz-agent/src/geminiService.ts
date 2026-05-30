@@ -247,7 +247,7 @@ export async function generateReadingLesson(
     throw new Error("분석할 독해 지문 텍스트가 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
