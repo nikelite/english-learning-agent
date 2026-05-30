@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary } from '../types';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
   onAddWrongAnswer: (quizItem: ReadingQuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number) => void;
   onOpenShare: () => void;
   onBackToCreator?: () => void;
   injectedQuizzes: ReadingQuizItem[]; // Contains standard + review wrong answers injected
-  onGraduateReview: (quizItemId: string) => void; // Call when review question is answered correctly
+  onGraduateReview: (wrongId: string) => void; // Call when review question is answered correctly
 }
 
 export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
@@ -27,6 +27,20 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [rightActiveTab, setRightActiveTab] = useState<'quiz' | 'vocab'>('quiz');
 
   // Quiz States
+  const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
+  const [sessionWrongs, setSessionWrongs] = useState<ReadingQuizItem[]>([]);
+
+  useEffect(() => {
+    setActiveQuizzes(injectedQuizzes);
+    setSessionWrongs([]);
+    setCurrentIdx(0);
+    setSelectedAns(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setShowResult(false);
+    setSavedWrongId(null);
+  }, [lesson.id]);
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -34,8 +48,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
 
-  const activeQuestion = injectedQuizzes[currentIdx];
-  const progressPercent = injectedQuizzes.length > 0 ? ((currentIdx) / injectedQuizzes.length) * 100 : 0;
+  const activeQuestion = activeQuizzes[currentIdx];
+  const progressPercent = activeQuizzes.length > 0 ? ((currentIdx) / activeQuizzes.length) * 100 : 0;
 
   const handleSelect = (idx: number) => {
     if (isSubmitted) return;
@@ -56,6 +70,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         onGraduateReview(activeQuestion.id);
       }
     } else {
+      // Add to session wrongs for targeted review
+      setSessionWrongs(prev => {
+        if (prev.some(q => q.id === activeQuestion.id)) return prev;
+        return [...prev, activeQuestion];
+      });
       // Save to Wrong Answers local storage
       onAddWrongAnswer(activeQuestion, selectedAns);
       setSavedWrongId(activeQuestion.id);
@@ -67,15 +86,28 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setSelectedAns(null);
     setIsSubmitted(false);
 
-    if (currentIdx < injectedQuizzes.length - 1) {
+    if (currentIdx < activeQuizzes.length - 1) {
       setCurrentIdx(prev => prev + 1);
     } else {
       setShowResult(true);
-      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0));
+      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0), activeQuizzes.length);
     }
   };
 
   const handleRestart = () => {
+    setActiveQuizzes(injectedQuizzes);
+    setSessionWrongs([]);
+    setCurrentIdx(0);
+    setSelectedAns(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setShowResult(false);
+    setSavedWrongId(null);
+  };
+
+  const handleRetryIncorrect = () => {
+    setActiveQuizzes([...sessionWrongs]);
+    setSessionWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -219,23 +251,35 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                       <div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>정답률</span>
                         <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--secondary)' }}>
-                          {Math.round((score / injectedQuizzes.length) * 100)}%
+                          {Math.round((score / activeQuizzes.length) * 100)}%
                         </span>
                       </div>
                       <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
                       <div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>점수</span>
                         <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--primary)' }}>
-                          {score} / {injectedQuizzes.length}
+                          {score} / {activeQuizzes.length}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <button className="btn btn-primary" onClick={handleRestart} style={{ width: '100%' }}>
-                    <RefreshCw size={16} />
-                    이 지문으로 다시 풀기
-                  </button>
+                  <div style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
+                    {sessionWrongs.length > 0 && (
+                      <button 
+                        className="btn btn-accent" 
+                        onClick={handleRetryIncorrect}
+                        style={{ width: '100%', background: 'linear-gradient(135deg, var(--accent) 0%, #f43f5e 100%)', boxShadow: '0 4px 15px rgba(244,63,94,0.2)' }}
+                      >
+                        ✍️ 틀린 문제만 다시 풀기 ({sessionWrongs.length})
+                      </button>
+                    )}
+                    
+                    <button className="btn btn-primary" onClick={handleRestart} style={{ width: '100%' }}>
+                      <RefreshCw size={16} />
+                      이 지문으로 다시 풀기
+                    </button>
+                  </div>
                 </div>
               ) : (
                 /* PLAY ACTIVE QUESTION */
@@ -245,7 +289,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <span>실전 테스트</span>
                       <span style={{ fontWeight: '700', color: 'var(--secondary)' }}>
-                        {currentIdx + 1} / {injectedQuizzes.length} 문항
+                        {currentIdx + 1} / {activeQuizzes.length} 문항
                       </span>
                     </div>
                     <div className="quiz-progress-bar" style={{ height: '4px' }}>
@@ -325,7 +369,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                         onClick={handleNext}
                       >
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                          {currentIdx < injectedQuizzes.length - 1 ? (
+                          {currentIdx < activeQuizzes.length - 1 ? (
                             <>
                               다음 문제 넘어가기
                               <ArrowRight size={15} />

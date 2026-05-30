@@ -5,7 +5,7 @@ import { Lesson, QuizItem } from '../types';
 interface QuizPanelProps {
   lesson: Lesson;
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number) => void;
   onBackToStudy: () => void;
 }
 
@@ -15,6 +15,9 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   onQuizCompleted,
   onBackToStudy
 }) => {
+  const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => lesson.quizzes);
+  const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -22,8 +25,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
 
-  const activeQuestion = lesson.quizzes[currentIdx];
-  const progressPercent = ((currentIdx) / lesson.quizzes.length) * 100;
+  const activeQuestion = activeQuizzes[currentIdx];
+  const progressPercent = activeQuizzes.length > 0 ? ((currentIdx) / activeQuizzes.length) * 100 : 0;
 
   const handleSelect = (idx: number) => {
     if (isSubmitted) return;
@@ -39,6 +42,11 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     if (isCorrect) {
       setScore(prev => prev + 1);
     } else {
+      // Add to session wrongs for targeted review
+      setSessionWrongs(prev => {
+        if (prev.some(q => q.id === activeQuestion.id)) return prev;
+        return [...prev, activeQuestion];
+      });
       // Automatically save to Wrong Answers Review Room
       onAddWrongAnswer(activeQuestion, selectedAns);
       setSavedWrongId(activeQuestion.id);
@@ -50,15 +58,28 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setSelectedAns(null);
     setIsSubmitted(false);
 
-    if (currentIdx < lesson.quizzes.length - 1) {
+    if (currentIdx < activeQuizzes.length - 1) {
       setCurrentIdx(prev => prev + 1);
     } else {
       setShowResult(true);
-      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0));
+      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0), activeQuizzes.length);
     }
   };
 
   const handleRestart = () => {
+    setActiveQuizzes(lesson.quizzes);
+    setSessionWrongs([]);
+    setCurrentIdx(0);
+    setSelectedAns(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setShowResult(false);
+    setSavedWrongId(null);
+  };
+
+  const handleRetryIncorrect = () => {
+    setActiveQuizzes([...sessionWrongs]);
+    setSessionWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -69,7 +90,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
 
   // Render Result Screen
   if (showResult) {
-    const successRate = Math.round((score / lesson.quizzes.length) * 100);
+    const successRate = Math.round((score / activeQuizzes.length) * 100);
     let encourageMsg = "좋은 시도였습니다! 오답 노트를 복습해서 완벽하게 마스터해 보세요. 👍";
     if (successRate === 100) encourageMsg = "와우! 완벽합니다! 모든 문법 개념을 정복하셨습니다. 🎉";
     else if (successRate >= 80) encourageMsg = "아주 훌륭해요! 사소한 실수만 잡으면 완벽하겠어요! 🚀";
@@ -89,7 +110,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>정답 개수</span>
               <span style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--primary)' }}>
-                {score} / {lesson.quizzes.length}
+                {score} / {activeQuizzes.length}
               </span>
             </div>
             <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
@@ -106,13 +127,24 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={onBackToStudy}>
             학습자료 다시보기
           </button>
+          
+          {sessionWrongs.length > 0 && (
+            <button 
+              className="btn btn-accent" 
+              onClick={handleRetryIncorrect}
+              style={{ background: 'linear-gradient(135deg, var(--accent) 0%, #f43f5e 100%)', boxShadow: '0 4px 15px rgba(244,63,94,0.2)' }}
+            >
+              ✍️ 틀린 문제만 다시 풀기 ({sessionWrongs.length})
+            </button>
+          )}
+
           <button className="btn btn-primary" onClick={handleRestart}>
             <RefreshCw size={16} />
-            퀴즈 다시 풀기
+            처음부터 다시 풀기
           </button>
         </div>
       </div>
@@ -126,7 +158,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
           <span>실전 테스트 진행 상태</span>
           <span style={{ fontWeight: '700', color: 'var(--primary)' }}>
-            {currentIdx + 1} / {lesson.quizzes.length} 문제
+            {currentIdx + 1} / {activeQuizzes.length} 문제
           </span>
         </div>
         <div className="quiz-progress-bar">
@@ -193,7 +225,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             onClick={handleNext}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-              {currentIdx < lesson.quizzes.length - 1 ? (
+              {currentIdx < activeQuizzes.length - 1 ? (
                 <>
                   다음 문제 풀기
                   <ArrowRight size={16} />

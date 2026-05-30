@@ -152,10 +152,10 @@ export default function App() {
   };
 
   // Update stats on quiz completion
-  const handleQuizCompleted = (correctCount: number) => {
+  const handleQuizCompleted = (correctCount: number, totalCount: number) => {
     setStats(prev => ({
       ...prev,
-      totalQuizzesTaken: prev.totalQuizzesTaken + 5,
+      totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
       totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
     }));
   };

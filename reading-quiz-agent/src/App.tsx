@@ -215,10 +215,10 @@ export default function App() {
   };
 
   // Stats updates
-  const handleQuizCompleted = (correctCount: number) => {
+  const handleQuizCompleted = (correctCount: number, totalCount: number) => {
     setStats(prev => ({
       ...prev,
-      totalQuizzesTaken: prev.totalQuizzesTaken + injectedQuizzes.length,
+      totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
       totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
     }));
   };
