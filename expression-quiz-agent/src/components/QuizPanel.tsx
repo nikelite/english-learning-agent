@@ -5,7 +5,7 @@ import { Lesson, QuizItem } from '../types';
 interface QuizPanelProps {
   lesson: Lesson;
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number, totalCount: number) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[]) => void;
   onBackToStudy: () => void;
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
@@ -21,10 +21,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
+  const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
 
   useEffect(() => {
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -65,6 +67,17 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         if (prev.some(q => q.id === activeQuestion.id)) return prev;
         return [...prev, activeQuestion];
       });
+      // Track wrong answer and choice for attempt logging
+      setAttemptWrongs(prev => {
+        if (prev.some(w => w.question === activeQuestion.question)) return prev;
+        return [...prev, {
+          question: activeQuestion.question,
+          choices: activeQuestion.choices,
+          userAnswerIndex: selectedAns,
+          correctIndex: activeQuestion.correctIndex,
+          rationale: activeQuestion.rationale
+        }];
+      });
       // Automatically save to Wrong Answers Review Room
       onAddWrongAnswer(activeQuestion, selectedAns);
       setSavedWrongId(activeQuestion.id);
@@ -80,13 +93,27 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       setCurrentIdx(prev => prev + 1);
     } else {
       setShowResult(true);
-      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0), activeQuizzes.length);
+      const finalScore = score + (selectedAns === activeQuestion.correctIndex ? 1 : 0);
+      let finalWrongs = [...attemptWrongs];
+      if (selectedAns !== null && selectedAns !== activeQuestion.correctIndex) {
+        if (!finalWrongs.some(w => w.question === activeQuestion.question)) {
+          finalWrongs.push({
+            question: activeQuestion.question,
+            choices: activeQuestion.choices,
+            userAnswerIndex: selectedAns,
+            correctIndex: activeQuestion.correctIndex,
+            rationale: activeQuestion.rationale
+          });
+        }
+      }
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs);
     }
   };
 
   const handleRestart = () => {
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -98,6 +125,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const handleRetryIncorrect = () => {
     setActiveQuizzes([...sessionWrongs]);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);

@@ -8,7 +8,18 @@ import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
 import { PRESET_LESSONS, generateLessonFromText, deserializeLesson } from './geminiService';
 import { GraduationCap, Info, BookOpen, Share2, Sparkles } from 'lucide-react';
-import { loadLessonFromCloud, saveLessonToCloud, syncUserLessons, removeLessonAssociation } from './firebaseService';
+import { 
+  loadLessonFromCloud, 
+  saveLessonToCloud, 
+  syncUserLessons, 
+  removeLessonAssociation,
+  saveStatsToCloud,
+  loadStatsFromCloud,
+  saveWrongAnswersToCloud,
+  loadWrongAnswersFromCloud,
+  logQuizAttempt,
+  sendEmailReport
+} from './firebaseService';
 import { ShareModal } from './components/ShareModal';
 
 export default function App() {
@@ -67,15 +78,21 @@ export default function App() {
     };
   });
 
-  // Persist Wrong Answers
+  // Persist Wrong Answers & Cloud background backup
   useEffect(() => {
     localStorage.setItem('eng_agent_wrong_answers', JSON.stringify(wrongAnswers));
-  }, [wrongAnswers]);
+    if (userId) {
+      saveWrongAnswersToCloud(userId, wrongAnswers);
+    }
+  }, [wrongAnswers, userId]);
 
-  // Persist Stats
+  // Persist Stats & Cloud background backup
   useEffect(() => {
     localStorage.setItem('eng_agent_stats', JSON.stringify(stats));
-  }, [stats]);
+    if (userId) {
+      saveStatsToCloud(userId, stats);
+    }
+  }, [stats, userId]);
 
   // Trigger cloud sync when userId changes or on mount
   useEffect(() => {
@@ -92,6 +109,7 @@ export default function App() {
     const localSaved = localStorage.getItem('eng_expr_lessons_history');
     const localList: Lesson[] = localSaved ? JSON.parse(localSaved) : [];
     
+    // Sync Lesson History
     syncUserLessons(userId, localList).then((syncedList) => {
       if (isMounted) {
         setLessonsHistory(syncedList);
@@ -105,6 +123,34 @@ export default function App() {
         setSyncError(err.message || "동기화 오류");
       }
     });
+
+    // Sync lifetime stats in parallel
+    loadStatsFromCloud(userId).then((cloudStats) => {
+      if (cloudStats && isMounted) {
+        setStats(prev => ({
+          streak: Math.max(prev.streak, cloudStats.streak),
+          lastActiveDate: prev.lastActiveDate || cloudStats.lastActiveDate,
+          totalQuizzesTaken: Math.max(prev.totalQuizzesTaken, cloudStats.totalQuizzesTaken),
+          totalCorrectAnswers: Math.max(prev.totalCorrectAnswers, cloudStats.totalCorrectAnswers),
+          masteredCount: Math.max(prev.masteredCount, cloudStats.masteredCount)
+        }));
+      }
+    }).catch(err => console.error("Cloud stats load failed:", err));
+
+    // Sync mistakes notebook in parallel
+    loadWrongAnswersFromCloud(userId).then((cloudWrong) => {
+      if (cloudWrong && isMounted) {
+        setWrongAnswers(prev => {
+          const merged = [...prev];
+          cloudWrong.forEach(cw => {
+            if (!merged.some(w => w.quizItem.question === cw.quizItem.question)) {
+              merged.push(cw);
+            }
+          });
+          return merged;
+        });
+      }
+    }).catch(err => console.error("Cloud wrong answers load failed:", err));
     
     return () => {
       isMounted = false;
@@ -352,12 +398,27 @@ export default function App() {
   };
 
   // Update stats on quiz completion
-  const handleQuizCompleted = (correctCount: number, totalCount: number) => {
-    setStats(prev => ({
-      ...prev,
-      totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
-      totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
-    }));
+  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[]) => {
+    const list = wrongQuestionsList || [];
+
+    setStats(prev => {
+      const newStats = {
+        ...prev,
+        totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
+        totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
+      };
+
+      if (userId && activeLesson) {
+        logQuizAttempt(userId, activeLesson.id, activeLesson.title, correctCount, totalCount, list);
+        sendEmailReport(userId, activeLesson.title, correctCount, totalCount, list, newStats);
+
+        setTimeout(() => {
+          alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 리포트 메일이 발송 대기열에 추가되었습니다!`);
+        }, 500);
+      }
+
+      return newStats;
+    });
   };
 
   return (

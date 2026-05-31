@@ -6,7 +6,7 @@ import { generateCustomVocabItem } from '../geminiService';
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
   onAddWrongAnswer: (quizItem: ReadingQuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number, totalCount: number) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[]) => void;
   onOpenShare: () => void;
   onBackToCreator?: () => void;
   injectedQuizzes: ReadingQuizItem[]; // Contains standard + review wrong answers injected
@@ -39,10 +39,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   // Quiz States
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<ReadingQuizItem[]>([]);
+  const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
 
   useEffect(() => {
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -85,6 +87,17 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         if (prev.some(q => q.id === activeQuestion.id)) return prev;
         return [...prev, activeQuestion];
       });
+      // Track wrong answer and choice for attempt logging
+      setAttemptWrongs(prev => {
+        if (prev.some(w => w.question === activeQuestion.question)) return prev;
+        return [...prev, {
+          question: activeQuestion.question,
+          choices: activeQuestion.choices,
+          userAnswerIndex: selectedAns,
+          correctIndex: activeQuestion.correctIndex,
+          rationale: activeQuestion.rationale
+        }];
+      });
       // Save to Wrong Answers local storage
       onAddWrongAnswer(activeQuestion, selectedAns);
       setSavedWrongId(activeQuestion.id);
@@ -100,13 +113,27 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       setCurrentIdx(prev => prev + 1);
     } else {
       setShowResult(true);
-      onQuizCompleted(score + (selectedAns === activeQuestion.correctIndex ? 1 : 0), activeQuizzes.length);
+      const finalScore = score + (selectedAns === activeQuestion.correctIndex ? 1 : 0);
+      let finalWrongs = [...attemptWrongs];
+      if (selectedAns !== null && selectedAns !== activeQuestion.correctIndex) {
+        if (!finalWrongs.some(w => w.question === activeQuestion.question)) {
+          finalWrongs.push({
+            question: activeQuestion.question,
+            choices: activeQuestion.choices,
+            userAnswerIndex: selectedAns,
+            correctIndex: activeQuestion.correctIndex,
+            rationale: activeQuestion.rationale
+          });
+        }
+      }
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs);
     }
   };
 
   const handleRestart = () => {
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -118,6 +145,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const handleRetryIncorrect = () => {
     setActiveQuizzes([...sessionWrongs]);
     setSessionWrongs([]);
+    setAttemptWrongs([]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);

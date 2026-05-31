@@ -11,9 +11,10 @@ import {
   updateDoc, 
   arrayUnion, 
   arrayRemove, 
-  deleteDoc 
+  deleteDoc,
+  addDoc
 } from 'firebase/firestore';
-import { ReadingLesson } from './types';
+import { ReadingLesson, AppStats, WrongReadingAnswer } from './types';
 
 // Embedded Firebase Configuration for User's english-agent project
 const firebaseConfig = {
@@ -32,9 +33,6 @@ const db = getFirestore(app);
 
 /**
  * Saves a ReadingLesson object directly to Firebase Firestore with optional Owner ID
- * @param lesson The ReadingLesson to save
- * @param userId The User ID of the creator (optional)
- * @returns The unique document ID created for this lesson
  */
 export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string | null): Promise<string> {
   try {
@@ -66,8 +64,6 @@ export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string |
 
 /**
  * Loads a ReadingLesson from Firestore by its Document ID
- * @param docId The Firestore document ID to retrieve
- * @returns The ReadingLesson object or null if not found
  */
 export async function loadLessonFromCloud(docId: string): Promise<ReadingLesson | null> {
   try {
@@ -87,8 +83,6 @@ export async function loadLessonFromCloud(docId: string): Promise<ReadingLesson 
 
 /**
  * Shares a lesson with another user ID directly
- * @param docId The document ID
- * @param recipientUserId The target user's ID
  */
 export async function shareLessonWithUser(docId: string, recipientUserId: string): Promise<void> {
   try {
@@ -104,8 +98,6 @@ export async function shareLessonWithUser(docId: string, recipientUserId: string
 
 /**
  * Removes association between user and lesson in the cloud
- * @param docId The document ID
- * @param userId The User ID requesting removal
  */
 export async function removeLessonAssociation(docId: string, userId: string): Promise<void> {
   try {
@@ -119,16 +111,13 @@ export async function removeLessonAssociation(docId: string, userId: string): Pr
       
       if (ownerId === userId) {
         if (sharedWith.length === 0) {
-          // If no other user relies on this, delete completely
           await deleteDoc(lessonRef);
         } else {
-          // Keep for shared users, remove creator's ownership
           await updateDoc(lessonRef, {
             ownerId: null
           });
         }
       } else if (sharedWith.includes(userId)) {
-        // Remove user from shared list
         await updateDoc(lessonRef, {
           sharedWith: arrayRemove(userId)
         });
@@ -142,12 +131,9 @@ export async function removeLessonAssociation(docId: string, userId: string): Pr
 
 /**
  * Bidirectionally synchronizes local storage history with cloud Firestore lessons
- * @param userId The User ID to sync
- * @param localLessons The array of local lessons currently in history
  */
 export async function syncUserLessons(userId: string, localLessons: ReadingLesson[]): Promise<ReadingLesson[]> {
   try {
-    // 1. Query lessons owned by user
     const qOwner = query(collection(db, 'lessons'), where('ownerId', '==', userId));
     const querySnapOwner = await getDocs(qOwner);
     const ownerLessons: ReadingLesson[] = [];
@@ -155,7 +141,6 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
       ownerLessons.push(docSnap.data() as ReadingLesson);
     });
     
-    // 2. Query lessons shared with user
     const qShared = query(collection(db, 'lessons'), where('sharedWith', 'array-contains', userId));
     const querySnapShared = await getDocs(qShared);
     const sharedLessons: ReadingLesson[] = [];
@@ -163,7 +148,6 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
       sharedLessons.push(docSnap.data() as ReadingLesson);
     });
     
-    // Merge cloud lists
     const cloudLessonsMap = new Map<string, ReadingLesson>();
     [...ownerLessons, ...sharedLessons].forEach((lesson) => {
       cloudLessonsMap.set(lesson.id, lesson);
@@ -171,7 +155,6 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
     
     const syncedLessons: ReadingLesson[] = [];
     
-    // 3. Merge local lessons. If offline local lesson is not in cloud, upload it.
     for (const localLesson of localLessons) {
       if (localLesson.id.startsWith('preset-')) continue;
       
@@ -180,7 +163,6 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
         syncedLessons.push(inCloud);
         cloudLessonsMap.delete(localLesson.id);
       } else {
-        // Offline custom lesson: upload to cloud under this user
         try {
           const uploadedId = await saveLessonToCloud(localLesson, userId);
           const uploadedLesson = {
@@ -192,20 +174,254 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
           syncedLessons.push(uploadedLesson);
         } catch (err) {
           console.warn("Failed to upload local offline lesson during sync:", err);
-          syncedLessons.push(localLesson); // Preserve locally
+          syncedLessons.push(localLesson);
         }
       }
     }
     
-    // 4. Append cloud-only lessons that weren't in local storage
     cloudLessonsMap.forEach((cloudLesson) => {
       syncedLessons.push(cloudLesson);
     });
     
-    // Sort by creation date descending
     return syncedLessons.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error: any) {
     console.error("Firebase sync failed:", error);
     throw new Error(`클라우드 동기화 실패: ${error.message || "알 수 없는 오류가 발생했습니다."}`);
+  }
+}
+
+/**
+ * Saves overall lifetime application stats of a user to Cloud
+ */
+export async function saveStatsToCloud(userId: string, stats: AppStats): Promise<void> {
+  try {
+    const statsRef = doc(db, 'user_stats', userId);
+    await setDoc(statsRef, stats);
+  } catch (error: any) {
+    console.error("Firebase save stats failed:", error);
+  }
+}
+
+/**
+ * Loads overall lifetime application stats of a user from Cloud
+ */
+export async function loadStatsFromCloud(userId: string): Promise<AppStats | null> {
+  try {
+    const statsRef = doc(db, 'user_stats', userId);
+    const docSnap = await getDoc(statsRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as AppStats;
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Firebase load stats failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Saves the entire wrong answers array of a user to a single Cloud document (efficient!)
+ */
+export async function saveWrongAnswersToCloud(userId: string, wrongAnswers: WrongReadingAnswer[]): Promise<void> {
+  try {
+    const wrongAnswersRef = doc(db, 'wrong_answers', userId);
+    await setDoc(wrongAnswersRef, { list: wrongAnswers });
+  } catch (error: any) {
+    console.error("Firebase save wrong answers failed:", error);
+  }
+}
+
+/**
+ * Loads the wrong answers array of a user from Cloud
+ */
+export async function loadWrongAnswersFromCloud(userId: string): Promise<WrongReadingAnswer[] | null> {
+  try {
+    const wrongAnswersRef = doc(db, 'wrong_answers', userId);
+    const docSnap = await getDoc(wrongAnswersRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return (data.list || []) as WrongReadingAnswer[];
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Firebase load wrong answers failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Logs a detailed quiz attempt score sheet to the cloud database
+ */
+export async function logQuizAttempt(
+  userId: string,
+  lessonId: string,
+  lessonTitle: string,
+  correctCount: number,
+  totalCount: number,
+  wrongQuestionsList: any[]
+): Promise<void> {
+  try {
+    const attemptsCollection = collection(db, 'quiz_attempts');
+    await addDoc(attemptsCollection, {
+      userId,
+      lessonId,
+      lessonTitle,
+      correctCount,
+      totalCount,
+      scorePercentage: Math.round((correctCount / totalCount) * 100),
+      timestamp: Date.now(),
+      wrongQuestions: wrongQuestionsList
+    });
+  } catch (error: any) {
+    console.error("Firebase log attempt failed:", error);
+  }
+}
+
+/**
+ * Compiles a beautiful HTML summary report and queues it to the 'mail' collection for trigger sending
+ */
+export async function sendEmailReport(
+  userId: string,
+  lessonTitle: string,
+  correctCount: number,
+  totalCount: number,
+  wrongQuestionsList: any[],
+  stats: AppStats
+): Promise<void> {
+  try {
+    const percentage = Math.round((correctCount / totalCount) * 100);
+    const isPerfect = correctCount === totalCount;
+    const primaryColor = '#06b6d4'; // Sleek Cyan theme
+    const secondaryColor = '#8b5cf6'; // Premium Purple theme
+    const successColor = '#10b981'; // Green
+    
+    let wrongQuestionsHtml = '';
+    
+    if (wrongQuestionsList.length > 0) {
+      wrongQuestionsList.forEach((wa, index) => {
+        const questionText = wa.question;
+        const choices = wa.choices || [];
+        const userAnswerIndex = wa.userAnswerIndex;
+        const correctIndex = wa.correctIndex;
+        const rationale = wa.rationale || '해설이 제공되지 않았습니다.';
+        
+        let choicesListHtml = '';
+        choices.forEach((choice: string, cIdx: number) => {
+          let style = 'padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 0.85rem; border: 1px solid #334155; color: #cbd5e1;';
+          let badge = '';
+          if (cIdx === correctIndex) {
+            style = 'padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 0.85rem; background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; font-weight: bold;';
+            badge = ' <span style="font-size: 0.7rem; background-color: #10b981; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">정답</span>';
+          } else if (cIdx === userAnswerIndex) {
+            style = 'padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 0.85rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #ef4444; font-weight: bold;';
+            badge = ' <span style="font-size: 0.7rem; background-color: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">선택한 답</span>';
+          }
+          choicesListHtml += `<div style="${style}">${choice}${badge}</div>`;
+        });
+        
+        wrongQuestionsHtml += `
+          <div style="background-color: #1e293b; border-left: 4px solid #ef4444; padding: 16px; margin: 16px 0; border-radius: 0 12px 12px 0;">
+            <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #f8fafc;">Q${index + 1}. ${questionText}</h4>
+            <div style="margin-bottom: 12px;">${choicesListHtml}</div>
+            <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px dashed #475569; padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.5; color: #94a3b8;">
+              <strong style="color: #cbd5e1; display: block; margin-bottom: 4px;">💡 AI 상세 해설:</strong>
+              ${rationale}
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      wrongQuestionsHtml = `
+        <div style="text-align: center; padding: 32px; background-color: #1e293b; border-radius: 12px; border: 1px dashed #10b981; color: #10b981; margin: 16px 0;">
+          <h3 style="margin: 0 0 8px 0;">💯 만점 달성!</h3>
+          <p style="margin: 0; font-size: 0.85rem; color: #94a3b8;">모든 문제를 완벽하게 맞추셨습니다. 정말 훌륭합니다!</p>
+        </div>
+      `;
+    }
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>영어 독해 퀴즈 결과 리포트</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 32px 16px;">
+          <!-- Header -->
+          <div style="text-align: center; margin-bottom: 32px;">
+            <h1 style="margin: 0; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; color: ${primaryColor}; text-shadow: 0 0 10px rgba(6, 182, 212, 0.2);">
+              📖 READ.AGENT REPORT
+            </h1>
+            <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8;">사용자 ID: <strong>${userId}</strong> | 일시: ${new Date().toLocaleString()}</p>
+          </div>
+
+          <!-- Score Card -->
+          <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 1px;">이번 지문 테스트 점수</span>
+            <h2 style="font-size: 3rem; font-weight: 900; margin: 8px 0; color: ${isPerfect ? successColor : '#f8fafc'};">
+              ${correctCount} / ${totalCount}
+              <span style="font-size: 1.5rem; font-weight: 500; color: #94a3b8;">(${percentage}%)</span>
+            </h2>
+            <div style="background-color: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2); padding: 8px 16px; border-radius: 8px; display: inline-block; font-size: 0.85rem; color: #22d3ee; font-weight: bold; margin-bottom: 8px;">
+              🔥 ${stats.streak}일 연속 스트릭 달성 중!
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 0.9rem; color: #cbd5e1; font-weight: bold;">
+              주제: "${lessonTitle}"
+            </p>
+          </div>
+
+          <!-- Lifetime Stats -->
+          <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 16px 20px; margin-bottom: 32px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 0.9rem; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">📊 나의 누적 클라우드 통계</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <tr>
+                <td style="padding: 6px 0; color: #94a3b8;">누적 풀이 문항 수</td>
+                <td style="padding: 6px 0; text-align: right; color: #f8fafc; font-weight: bold;">${stats.totalQuizzesTaken} 문제</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #94a3b8;">누적 정답 수</td>
+                <td style="padding: 6px 0; text-align: right; color: #10b981; font-weight: bold;">${stats.totalCorrectAnswers} 문제</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #94a3b8;">누적 정답률</td>
+                <td style="padding: 6px 0; text-align: right; color: #22d3ee; font-weight: bold;">
+                  ${stats.totalQuizzesTaken > 0 ? Math.round((stats.totalCorrectAnswers / stats.totalQuizzesTaken) * 100) : 0}%
+                </td>
+              </tr>
+              <tr style="border-top: 1px solid #334155;">
+                <td style="padding: 8px 0 0 0; color: #94a3b8;">오답 졸업(정복) 수</td>
+                <td style="padding: 8px 0 0 0; text-align: right; color: ${secondaryColor}; font-weight: bold;">${stats.masteredCount} 문제</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Wrong Questions Breakdown -->
+          <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #f8fafc; border-bottom: 2px solid #ef4444; padding-bottom: 6px;">
+            📝 오답 및 상세 해설 분석
+          </h3>
+          ${wrongQuestionsHtml}
+
+          <!-- Footer -->
+          <div style="text-align: center; margin-top: 48px; border-top: 1px solid #334155; padding-top: 16px; font-size: 0.75rem; color: #64748b;">
+            <p style="margin: 0;">본 메일은 <strong>READ.AGENT</strong> 인공지능 영어 학습 도우미가 발송한 결과 보고서입니다.</p>
+            <p style="margin: 4px 0 0 0;">클라우드 데이터베이스와 구글 Firebase SMTP 메일 트리거 기능에 의해 자동으로 발송되었습니다.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    // Add document to the 'mail' collection in Firestore
+    const mailCollection = collection(db, 'mail');
+    await addDoc(mailCollection, {
+      to: 'nikelite@gmail.com',
+      message: {
+        subject: `[READ.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
+        html: emailHtml
+      }
+    });
+  } catch (error: any) {
+    console.error("Firebase sendEmailReport failed:", error);
   }
 }
