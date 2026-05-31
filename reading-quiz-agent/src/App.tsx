@@ -39,6 +39,7 @@ export default function App() {
 
   // 4. Main Generation configuration states
   const [inputText, setInputText] = useState('');
+  const [titleInput, setTitleInput] = useState('');
   const [comprehensionCount, setComprehensionCount] = useState<number>(3);
   const [vocabCount, setVocabCount] = useState<number>(2);
   const [isLoading, setIsLoading] = useState(false);
@@ -290,9 +291,13 @@ export default function App() {
     setIsLoading(true);
     try {
       const generated = await generateReadingLesson(text, apiKey, comprehensionCount, vocabCount);
+      if (titleInput.trim()) {
+        generated.title = titleInput.trim();
+      }
       setActiveLesson(generated);
       setViewMode('split');
       setInputText('');
+      setTitleInput('');
       saveLessonToHistory(generated);
     } catch (err: any) {
       setError(err.message || "지문 분석에 실패했습니다.");
@@ -426,6 +431,20 @@ export default function App() {
                   />
                 </div>
 
+                {/* Title Input Field */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>학습 세트 제목 (선택)</label>
+                  <input
+                    type="text"
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    placeholder="미입력 시 지문 내용으로 자동 설정"
+                    className="input-glow"
+                    style={{ fontSize: '0.85rem', padding: '0.55rem 0.75rem' }}
+                    disabled={isLoading}
+                  />
+                </div>
+
                 {/* Configurations */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -514,187 +533,178 @@ export default function App() {
             </div>
 
             {/* Instruction manual / Recent Library column */}
-            {lessonsHistory.length > 0 ? (
-              <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px', padding: '1.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                  <div style={{ textAlign: 'left' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <BookOpen size={20} style={{ color: 'var(--secondary)' }} />
-                      📚 나의 최근 학습 보관함
-                      {userId ? (
-                        <span style={{ 
-                          fontSize: '0.7rem', 
-                          background: syncStatus === 'syncing' ? 'rgba(234, 179, 8, 0.15)' : syncStatus === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                          color: syncStatus === 'syncing' ? '#eab308' : syncStatus === 'error' ? 'var(--error)' : 'var(--success)',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '6px',
-                          border: '1px solid currentColor',
-                          fontWeight: '600',
-                          marginLeft: '0.5rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.25rem'
-                        }}>
-                          {syncStatus === 'syncing' ? '🔄 동기화 중...' : syncStatus === 'error' ? '⚠️ 동기화 실패' : '☁️ 클라우드 동기화 완료'}
-                        </span>
-                      ) : (
-                        <span style={{ 
-                          fontSize: '0.7rem', 
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          color: 'var(--text-secondary)',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--border-color)',
-                          fontWeight: '500',
-                          marginLeft: '0.5rem'
-                        }}>
-                          🔒 로컬 보관함 사용 중
-                        </span>
-                      )}
-                    </h3>
-                    <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                      {userId 
-                        ? `클라우드 계정 '${userId}'에 실시간 동기화되는 안전한 보관함입니다.`
-                        : "생성하거나 공유받은 독해 지문들이 안전하게 보관됩니다. 우측 상단 ⚙️ 설정을 눌러 User ID를 등록하시면 클라우드와 자동 동기화됩니다."}
-                    </p>
-                  </div>
-                  
-                  {/* Search Bar */}
-                  <div style={{ position: 'relative', width: '240px' }}>
-                    <input
-                      type="text"
-                      placeholder="학습 제목 및 지문 검색..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="input-glow"
-                      style={{ padding: '0.5rem 0.85rem', fontSize: '0.775rem', borderRadius: '8px', width: '100%' }}
-                    />
-                  </div>
+            {/* Recent Library column */}
+            <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px', padding: '1.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ textAlign: 'left' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <BookOpen size={20} style={{ color: 'var(--secondary)' }} />
+                    📚 나의 최근 학습 보관함
+                    {userId ? (
+                      <span style={{ 
+                        fontSize: '0.7rem', 
+                        background: syncStatus === 'syncing' ? 'rgba(234, 179, 8, 0.15)' : syncStatus === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: syncStatus === 'syncing' ? '#eab308' : syncStatus === 'error' ? 'var(--error)' : 'var(--success)',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid currentColor',
+                        fontWeight: '600',
+                        marginLeft: '0.5rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                      }}>
+                        {syncStatus === 'syncing' ? '🔄 동기화 중...' : syncStatus === 'error' ? '⚠️ 동기화 실패' : '☁️ 클라우드 동기화 완료'}
+                      </span>
+                    ) : (
+                      <span style={{ 
+                        fontSize: '0.7rem', 
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--text-secondary)',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontWeight: '500',
+                        marginLeft: '0.5rem'
+                      }}>
+                        🔒 로컬 보관함 사용 중
+                      </span>
+                    )}
+                  </h3>
+                  <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                    {userId 
+                      ? `클라우드 계정 '${userId}'에 실시간 동기화되는 안전한 보관함입니다.`
+                      : "생성하거나 공유받은 독해 지문들이 안전하게 보관됩니다. 우측 상단 ⚙️ 설정을 눌러 User ID를 등록하시면 클라우드와 자동 동기화됩니다."}
+                  </p>
                 </div>
+                
+                {/* Search Bar */}
+                <div style={{ position: 'relative', width: '240px' }}>
+                  <input
+                    type="text"
+                    placeholder="학습 제목 및 지문 검색..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="input-glow"
+                    style={{ padding: '0.5rem 0.85rem', fontSize: '0.775rem', borderRadius: '8px', width: '100%' }}
+                  />
+                </div>
+              </div>
 
-                <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '380px', paddingRight: '0.25rem' }}>
-                  {lessonsHistory.filter(item => {
+              <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '380px', paddingRight: '0.25rem' }}>
+                {lessonsHistory.length === 0 ? (
+                  <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border-color)', borderRadius: '12px', marginTop: '1rem' }}>
+                    <div className="pulse-glow" style={{ width: '48px', height: '48px', background: 'rgba(6, 182, 212, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <BookOpen size={20} style={{ color: 'var(--secondary)' }} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', marginBottom: '0.25rem' }}>보관함에 아직 학습 세트가 없습니다</h4>
+                      <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', lineHeight: '1.5', maxWidth: '360px', margin: '0 auto' }}>
+                        좌측 지문 생성기에 본문을 붙여넣고 분석하시거나, 아래 추천 프리셋 지문을 선택해 즉시 훈련을 진행해 보세요! 생성된 학습 세트는 여기에 자동으로 저장됩니다.
+                      </p>
+                    </div>
+                  </div>
+                ) : lessonsHistory.filter(item => {
+                  const q = searchQuery.toLowerCase().trim();
+                  if (!q) return true;
+                  return item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
+                }).length > 0 ? (
+                  lessonsHistory.filter(item => {
                     const q = searchQuery.toLowerCase().trim();
                     if (!q) return true;
                     return item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
-                  }).length > 0 ? (
-                    lessonsHistory.filter(item => {
-                      const q = searchQuery.toLowerCase().trim();
-                      if (!q) return true;
-                      return item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
-                    }).map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          setActiveLesson(item);
-                          setIsSharedQuiz(false); // Reset shared banner when playing own history
-                          setViewMode('split');
-                        }}
-                        className="eli5-analogy-box"
-                        style={{
-                          margin: 0,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '1rem',
-                          background: 'rgba(255,255,255,0.02)',
-                          borderLeftWidth: '4px',
-                          borderLeftColor: 'var(--secondary)',
-                          transition: 'transform 0.15s ease, background 0.15s ease',
-                          borderRadius: '0 8px 8px 0'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                          e.currentTarget.style.transform = 'translateX(2px)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                          e.currentTarget.style.transform = 'none';
-                        }}
-                      >
-                        <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
-                            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                              📅 {new Date(item.createdAt).toLocaleDateString()}
+                  }).map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setActiveLesson(item);
+                        setIsSharedQuiz(false); // Reset shared banner when playing own history
+                        setViewMode('split');
+                      }}
+                      className="eli5-analogy-box"
+                      style={{
+                        margin: 0,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '1rem',
+                        background: 'rgba(255,255,255,0.02)',
+                        borderLeftWidth: '4px',
+                        borderLeftColor: 'var(--secondary)',
+                        transition: 'transform 0.15s ease, background 0.15s ease',
+                        borderRadius: '0 8px 8px 0'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                        e.currentTarget.style.transform = 'translateX(2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                        e.currentTarget.style.transform = 'none';
+                      }}
+                    >
+                      <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                            📅 {new Date(item.createdAt).toLocaleDateString()}
+                          </span>
+                           <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                            📝 {item.quizzes.length} 문항
+                          </span>
+                          {item.ownerId && item.ownerId !== userId && (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(236,72,153,0.12)', color: 'var(--accent)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                              📥 {item.ownerId}님 공유
                             </span>
-                             <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
-                              📝 {item.quizzes.length} 문항
+                          )}
+                          {item.ownerId && item.ownerId === userId && (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                              ☁️ My 클라우드
                             </span>
-                            {item.ownerId && item.ownerId !== userId && (
-                              <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(236,72,153,0.12)', color: 'var(--accent)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
-                                📥 {item.ownerId}님 공유
-                              </span>
-                            )}
-                            {item.ownerId && item.ownerId === userId && (
-                              <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
-                                ☁️ My 클라우드
-                              </span>
-                            )}
-                          </div>
-                          <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {item.title}
-                          </h4>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
-                            {item.passageText}
-                          </p>
+                          )}
                         </div>
-
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                          >
-                            학습 개시
-                          </button>
-                          <button
-                            onClick={(e) => handleDeleteHistory(e, item.id)}
-                            className="btn"
-                            style={{
-                              padding: '0.45rem',
-                              borderRadius: '6px',
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              color: 'var(--error)',
-                              border: '1px solid rgba(239, 68, 68, 0.15)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.title}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
+                          {item.passageText}
+                        </p>
                       </div>
-                    ))
-                  ) : (
-                    <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      검색어와 일치하는 보관함 지문이 없습니다.
+
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                        >
+                          학습 개시
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteHistory(e, item.id)}
+                          className="btn"
+                          style={{
+                            padding: '0.45rem',
+                            borderRadius: '6px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: 'var(--error)',
+                            border: '1px solid rgba(239, 68, 68, 0.15)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </main>
-            ) : (
-              <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '450px', padding: '3rem 2rem', textAlign: 'center' }}>
-                <div className="pulse-glow" style={{ width: '64px', height: '64px', background: 'var(--primary-glow)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                  <BookOpen size={30} style={{ color: 'var(--primary)' }} />
-                </div>
-                <h3 style={{ fontSize: '1.45rem', fontWeight: '800', marginBottom: '0.5rem', fontFamily: 'var(--font-display)' }}>
-                  독해 훈련을 시작하세요!
-                </h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.925rem', maxWidth: '450px', lineHeight: '1.6', marginBottom: '1.5rem' }}>
-                  좌측에 원하는 영어 본문(뉴스, 모의고사, 학술자료 등)을 붙여넣으세요. 실시간으로 완벽한 문단 번역 가이드와 핵심 단어장, 그리고 실전 독해 평가 퀴즈가 펼쳐집니다.
-                </p>
-                
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  {PRESET_READING_LESSONS[0] && (
-                    <button className="btn btn-primary" onClick={() => handleLoadPreset(PRESET_READING_LESSONS[0])}>
-                      프리셋 지문 바로 훈련하기
-                    </button>
-                  )}
-                </div>
-              </main>
-            )}
+                  ))
+                ) : (
+                  <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    검색어와 일치하는 보관함 지문이 없습니다.
+                  </div>
+                )}
+              </div>
+            </main>
           </div>
         ) : (
           /* SECTION B: SPLIT PASSAGE & INTERACTIVE PANEL VIEW */

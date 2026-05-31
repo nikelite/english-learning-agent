@@ -5,7 +5,7 @@ import { PRESET_LESSONS } from '../geminiService';
 
 interface LessonCreatorProps {
   apiKey: string;
-  onGenerate: (text: string, questionCount: number) => Promise<void>;
+  onGenerate: (text: string, questionCount: number, title?: string) => Promise<void>;
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
@@ -19,6 +19,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
   activeLesson
 }) => {
   const [inputText, setInputText] = useState('');
+  const [titleInput, setTitleInput] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,8 +39,9 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
     }
 
     try {
-      await onGenerate(text, questionCount);
+      await onGenerate(text, questionCount, titleInput.trim());
       setInputText('');
+      setTitleInput('');
     } catch (err: any) {
       setError(err.message || "학습 데이터를 생성하는 중 에러가 발생했습니다.");
     }
@@ -65,6 +67,20 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
             placeholder="예시 입력:&#10;Despite our preparation, we failed the exam. / Although we prepared well... 두 표현의 차이를 알려줘."
             className="textarea-glow"
             style={{ minHeight: '130px', fontSize: '0.9rem' }}
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Title Input Field */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>학습 세트 제목 (선택)</label>
+          <input
+            type="text"
+            value={titleInput}
+            onChange={(e) => setTitleInput(e.target.value)}
+            placeholder="미입력 시 지문 내용으로 자동 설정"
+            className="input-glow"
+            style={{ fontSize: '0.85rem', padding: '0.55rem 0.75rem' }}
             disabled={isLoading}
           />
         </div>
