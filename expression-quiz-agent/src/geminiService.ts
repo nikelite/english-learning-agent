@@ -335,3 +335,87 @@ export async function generateLessonFromText(
     throw new Error(error.message || "학습자료를 생성하는 도중 알 수 없는 에러가 발생했습니다.");
   }
 }
+
+export async function serializeLesson(lesson: Lesson): Promise<string> {
+  try {
+    const jsonStr = JSON.stringify(lesson);
+    const byteArray = new TextEncoder().encode(jsonStr);
+    
+    const cs = new CompressionStream("gzip");
+    const writer = cs.writable.getWriter();
+    writer.write(byteArray);
+    writer.close();
+    
+    const reader = cs.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    
+    const concat = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      concat.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    let binary = "";
+    for (let i = 0; i < concat.byteLength; i++) {
+      binary += String.fromCharCode(concat[i]);
+    }
+    const base64 = btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+      
+    return base64;
+  } catch (error) {
+    console.error("Failed to serialize expression lesson:", error);
+    return "";
+  }
+}
+
+export async function deserializeLesson(base64Str: string): Promise<Lesson | null> {
+  if (!base64Str) return null;
+  try {
+    let standardBase64 = base64Str.replace(/-/g, "+").replace(/_/g, "/");
+    while (standardBase64.length % 4) {
+      standardBase64 += "=";
+    }
+    
+    const binaryStr = atob(standardBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    
+    const ds = new DecompressionStream("gzip");
+    const writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    
+    const reader = ds.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    
+    const concat = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      concat.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    const jsonStr = new TextDecoder().decode(concat);
+    return JSON.parse(jsonStr) as Lesson;
+  } catch (error) {
+    console.error("Failed to deserialize expression lesson:", error);
+    return null;
+  }
+}
+

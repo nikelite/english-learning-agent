@@ -6,8 +6,10 @@ import { QuizPanel } from './components/QuizPanel';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
-import { PRESET_LESSONS, generateLessonFromText } from './geminiService';
-import { GraduationCap, Info } from 'lucide-react';
+import { PRESET_LESSONS, generateLessonFromText, deserializeLesson } from './geminiService';
+import { GraduationCap, Info, BookOpen, Share2, Sparkles } from 'lucide-react';
+import { loadLessonFromCloud } from './firebaseService';
+import { ShareModal } from './components/ShareModal';
 
 export default function App() {
   // 1. API Key State
@@ -26,6 +28,15 @@ export default function App() {
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSharedQuiz, setIsSharedQuiz] = useState<boolean>(false);
+  const [isShareOpen, setIsShareOpen] = useState<boolean>(false);
+
+  // 7. Recent Lessons History Library
+  const [lessonsHistory, setLessonsHistory] = useState<Lesson[]>(() => {
+    const saved = localStorage.getItem('eng_expr_lessons_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // 4. Wrong Answers State (Mistakes review database)
   const [wrongAnswers, setWrongAnswers] = useState<WrongAnswer[]>(() => {
@@ -55,6 +66,62 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('eng_agent_stats', JSON.stringify(stats));
   }, [stats]);
+
+  // Save lesson to history library
+  const saveLessonToHistory = (lesson: Lesson) => {
+    if (!lesson || lesson.id.startsWith('preset-')) return;
+    setLessonsHistory(prev => {
+      const filtered = prev.filter(item => item.id !== lesson.id && item.title !== lesson.title);
+      const updated = [lesson, ...filtered];
+      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteHistory = (e: React.MouseEvent, lessonId: string) => {
+    e.stopPropagation();
+    if (window.confirm("이 학습 세트를 보관함에서 삭제하시겠습니까?")) {
+      setLessonsHistory(prev => {
+        const updated = prev.filter(item => item.id !== lessonId);
+        localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  // CHECK AND DECODE URL SHARE LINK (`?share=...` or `?cloudShare=...`)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharePayload = params.get('share');
+    const cloudDocId = params.get('cloudShare');
+    
+    if (sharePayload) {
+      deserializeLesson(sharePayload).then((decodedLesson) => {
+        if (decodedLesson) {
+          setActiveLesson(decodedLesson);
+          setIsSharedQuiz(true);
+          setViewMode('study');
+          setActiveStudyTab('eli5');
+          saveLessonToHistory(decodedLesson);
+        }
+      });
+    } else if (cloudDocId) {
+      setIsLoading(true);
+      loadLessonFromCloud(cloudDocId).then((decodedLesson) => {
+        if (decodedLesson) {
+          setActiveLesson(decodedLesson);
+          setIsSharedQuiz(true);
+          setViewMode('study');
+          setActiveStudyTab('eli5');
+          saveLessonToHistory(decodedLesson);
+        }
+      }).catch((err: any) => {
+        console.error("Firestore loading error:", err);
+      }).finally(() => {
+        setIsLoading(false);
+      });
+    }
+  }, []);
 
   // Daily Streak Counter Logic
   useEffect(() => {
@@ -134,6 +201,7 @@ export default function App() {
       setActiveLesson(generated);
       setViewMode('study');
       setActiveStudyTab('eli5');
+      saveLessonToHistory(generated);
     } catch (error) {
       throw error;
     } finally {
@@ -240,7 +308,18 @@ export default function App() {
                   </h2>
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {!activeLesson.id.startsWith('preset-') && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setIsShareOpen(true)}
+                      style={{ padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}
+                    >
+                      <Share2 size={15} style={{ color: 'var(--secondary)' }} />
+                      공유하기
+                    </button>
+                  )}
+
                   {viewMode === 'study' ? (
                     <button
                       className="btn btn-accent"
@@ -280,14 +359,134 @@ export default function App() {
                 />
               )}
             </main>
-          ) : (
-            /* Fallback state when no lesson is actively loaded */
-            <main className="glass-panel main-panel text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}>
-              <Info size={36} style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>학습 세트가 선택되지 않았습니다</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>좌측 추천 리스트에서 공부할 주제를 고르거나 새로운 문제 텍스트를 분석해 보세요.</p>
-            </main>
-          )}
+          ) : lessonsHistory.length > 0 ? (
+            <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px', padding: '1.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <BookOpen size={20} style={{ color: 'var(--secondary)' }} />
+                      📚 나의 최근 학습 보관함
+                    </h3>
+                    <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                      사용자님이 생성하거나 공유받은 문법/표현 세트가 모두 안전하게 로컬에 보관되어 있습니다.
+                    </p>
+                  </div>
+                  
+                  {/* Search Bar */}
+                  <div style={{ position: 'relative', width: '240px' }}>
+                    <input
+                      type="text"
+                      placeholder="학습 제목 및 내용 검색..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="input-glow"
+                      style={{ padding: '0.5rem 0.85rem', fontSize: '0.775rem', borderRadius: '8px', width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '380px', paddingRight: '0.25rem' }}>
+                  {lessonsHistory.filter(item => {
+                    const q = searchQuery.toLowerCase().trim();
+                    if (!q) return true;
+                    return item.title.toLowerCase().includes(q) || item.sourceText.toLowerCase().includes(q);
+                  }).length > 0 ? (
+                    lessonsHistory.filter(item => {
+                      const q = searchQuery.toLowerCase().trim();
+                      if (!q) return true;
+                      return item.title.toLowerCase().includes(q) || item.sourceText.toLowerCase().includes(q);
+                    }).map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setActiveLesson(item);
+                          setIsSharedQuiz(false); // Reset shared banner when playing own history
+                          setViewMode('study');
+                          setActiveStudyTab('eli5');
+                        }}
+                        className="eli5-analogy-box"
+                        style={{
+                          margin: 0,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '1rem',
+                          background: 'rgba(255,255,255,0.02)',
+                          borderLeftWidth: '4px',
+                          borderLeftColor: 'var(--secondary)',
+                          transition: 'transform 0.15s ease, background 0.15s ease',
+                          borderRadius: '0 8px 8px 0'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                          e.currentTarget.style.transform = 'translateX(2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                          e.currentTarget.style.transform = 'none';
+                        }}
+                      >
+                        <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                              📅 {new Date(item.createdAt).toLocaleDateString()}
+                            </span>
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                              📝 {item.quizzes.length} 문항
+                            </span>
+                          </div>
+                          <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.title}
+                          </h4>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
+                            {item.sourceText}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                          >
+                            학습 개시
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteHistory(e, item.id)}
+                            className="btn"
+                            style={{
+                              padding: '0.45rem',
+                              borderRadius: '6px',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: 'var(--error)',
+                              border: '1px solid rgba(239, 68, 68, 0.15)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      검색어와 일치하는 보관함 세트가 없습니다.
+                    </div>
+                  )}
+                </div>
+              </main>
+            ) : (
+              /* Fallback state when no lesson is actively loaded */
+              <main className="glass-panel main-panel text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}>
+                <Info size={36} style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>학습 세트가 선택되지 않았습니다</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>좌측 추천 리스트에서 공부할 주제를 고르거나 새로운 문제 텍스트를 분석해 보세요.</p>
+              </main>
+            )
+          }
         </div>
       )}
 
@@ -310,6 +509,14 @@ export default function App() {
             wrongAnswersCount={wrongAnswers.length}
           />
         </div>
+      )}
+      {/* Share Modal Popup */}
+      {activeLesson && (
+        <ShareModal
+          lesson={activeLesson}
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+        />
       )}
     </div>
   );
