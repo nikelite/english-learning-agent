@@ -510,57 +510,58 @@ Ensure the response is a single, valid JSON object and nothing else. Do not wrap
   }
 }
 
-// Dynamically analyze a paragraph sentence by sentence using Gemini
-export async function analyzeParagraphSentences(
-  paragraphText: string,
+// Dynamically analyze the entire passage sentence by sentence, paragraph by paragraph, in one single Gemini call
+export async function analyzePassageSentences(
+  paragraphs: { id: number; englishText: string }[],
   passageText: string,
   apiKey: string
-): Promise<SentenceAnalysis[]> {
+): Promise<Record<number, SentenceAnalysis[]>> {
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
   }
 
-  const cleanPara = paragraphText.trim();
-  if (!cleanPara) {
-    throw new Error("분석할 문단 텍스트가 비어 있습니다.");
+  if (!paragraphs || paragraphs.length === 0) {
+    throw new Error("분석할 문단 목록이 비어 있습니다.");
   }
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
+  const paragraphsInput = paragraphs.map(p => `Paragraph [ID: ${p.id}]:\n"${p.englishText}"`).join('\n\n');
+
   const prompt = `You are an elite academic English linguist and ESL curriculum developer.
-Analyze the sentences in the following English paragraph:
-"""
-${cleanPara}
-"""
-which is part of this larger reading passage:
+Analyze the sentences in all the paragraphs of the following English reading passage:
 """
 ${passageText}
 """
 
-Split the paragraph into its individual, complete English sentences. For each sentence, generate a highly detailed linguistic analysis in the following strict JSON format:
-[
-  {
-    "sentence": "The original complete English sentence",
-    "translation": "High-fidelity, natural Korean translation of this sentence",
-    "vocabulary": [
-      {
-        "word": "important word",
-        "meaning": "contextual meaning in Korean"
-      }
-    ],
-    "expressions": [
-      {
-        "expression": "idiom or phrase",
-        "meaning": "meaning in Korean",
-        "contextNote": "why/how it is used in this context"
-      }
-    ],
-    "grammar": "Detailed explanation of key grammatical structures, clauses, syntax, or structural elements in this sentence, in Korean.",
-    "context": "Contextual explanation of this sentence's role inside the paragraph (e.g. introduces the topic, provides supporting evidence, transitions, wraps up), in Korean."
-  }
-]
+Here are the individual paragraphs with their corresponding IDs:
+${paragraphsInput}
 
-Ensure the response is a single, valid JSON array of objects and nothing else. Do not wrap in markdown code blocks.`;
+Split each paragraph into its individual, complete English sentences. For each sentence, generate a highly detailed linguistic analysis in the following strict JSON format, mapping the results by the Paragraph ID as the key:
+{
+  "1": [ // For Paragraph ID 1
+    {
+      "sentence": "The original complete English sentence",
+      "vocabulary": [
+        {
+          "word": "important word",
+          "meaning": "contextual meaning in Korean"
+        }
+      ],
+      "expressions": [
+        {
+          "expression": "idiom or phrase",
+          "meaning": "meaning in Korean",
+          "contextNote": "why/how it is used in this context"
+        }
+      ],
+      "grammar": "Detailed explanation of key grammatical structures, clauses, syntax, or structural elements in this sentence, in Korean.",
+      "context": "Contextual explanation of this sentence's role inside the paragraph (e.g. introduces the topic, provides supporting evidence, transitions, wraps up), in Korean."
+    }
+  ]
+}
+
+Ensure the response is a single, valid JSON object where keys are the Paragraph IDs (as strings) and the values are arrays of sentence analysis objects. Do not wrap in markdown code blocks.`;
 
   const requestBody = {
     contents: [
@@ -601,28 +602,32 @@ Ensure the response is a single, valid JSON array of objects and nothing else. D
     }
 
     const parsed = JSON.parse(responseText);
-    if (!Array.isArray(parsed)) {
-      throw new Error("Gemini가 문장 분석 결과를 배열 형식으로 반환하지 않았습니다.");
-    }
+    const result: Record<number, SentenceAnalysis[]> = {};
 
-    return parsed.map((item: any) => ({
-      sentence: item.sentence || "",
-      translation: item.translation || "",
-      vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
-        word: v.word || "",
-        meaning: v.meaning || ""
-      })) : [],
-      expressions: Array.isArray(item.expressions) ? item.expressions.map((e: any) => ({
-        expression: e.expression || "",
-        meaning: e.meaning || "",
-        contextNote: e.contextNote || ""
-      })) : [],
-      grammar: item.grammar || "문법 분석이 제공되지 않았습니다.",
-      context: item.context || "문맥 분석이 제공되지 않았습니다."
-    }));
+    Object.entries(parsed).forEach(([key, val]) => {
+      const pId = parseInt(key, 10);
+      if (isNaN(pId) || !Array.isArray(val)) return;
+
+      result[pId] = val.map((item: any) => ({
+        sentence: item.sentence || "",
+        vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
+          word: v.word || "",
+          meaning: v.meaning || ""
+        })) : [],
+        expressions: Array.isArray(item.expressions) ? item.expressions.map((e: any) => ({
+          expression: e.expression || "",
+          meaning: e.meaning || "",
+          contextNote: e.contextNote || ""
+        })) : [],
+        grammar: item.grammar || "문법 분석이 제공되지 않았습니다.",
+        context: item.context || "문맥 분석이 제공되지 않았습니다."
+      }));
+    });
+
+    return result;
   } catch (error: any) {
-    console.error("Gemini Paragraph Sentences Analysis Error:", error);
-    throw new Error(error.message || "문단 내 문장 분석 중 오류가 발생했습니다.");
+    console.error("Gemini Passage Sentences Analysis Error:", error);
+    throw new Error(error.message || "지문 내 문장 분석 중 오류가 발생했습니다.");
   }
 }
 

@@ -55,7 +55,7 @@ export interface AppStats {
 
 export interface SentenceAnalysis {
   sentence: string;
-  translation: string;
+  translation?: string;
   vocabulary: { word: string; meaning: string }[];
   expressions: { expression: string; meaning: string; contextNote: string }[];
   grammar: string;

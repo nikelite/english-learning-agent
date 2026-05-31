@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzeParagraphSentences } from '../geminiService';
-import { loadParagraphAnalysisFromCloud, saveParagraphAnalysisToCloud } from '../firebaseService';
+import { generateCustomVocabItem, analyzePassageSentences } from '../geminiService';
+import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -105,21 +105,18 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
     setAnalyzingParagraphId(paragraph.id);
     try {
-      // 1. Try fetching from Cloud Cache first
-      const cloudCached = await loadParagraphAnalysisFromCloud(lesson.id, paragraph.id);
-      if (cloudCached && cloudCached.length > 0) {
-        setAnalysisCache(prev => ({
-          ...prev,
-          [paragraph.id]: cloudCached
-        }));
+      // 1. Try fetching the entire passage analysis from Cloud Cache first (blazing fast!)
+      const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
+      if (cloudCached && Object.keys(cloudCached).length > 0) {
+        setAnalysisCache(cloudCached);
         setAnalyzingParagraphId(null);
         return;
       }
     } catch (err) {
-      console.warn("Failed to load paragraph analysis from cloud cache:", err);
+      console.warn("Failed to load passage analysis from cloud cache:", err);
     }
 
-    // 2. If not found in Cloud, generate using Gemini API (requires api key)
+    // 2. If not found in Cloud, generate the entire passage analysis at once via Gemini API
     if (!apiKey) {
       setAnalyzingParagraphId(null);
       setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시면 실시간 AI 문장 상세 과외 분석이 활성화됩니다.");
@@ -127,21 +124,23 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
 
     try {
-      const result = await analyzeParagraphSentences(paragraph.englishText, lesson.passageText, apiKey);
+      // Analyze all paragraphs in the entire passage in a single, highly efficient API call
+      const result = await analyzePassageSentences(
+        lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
+        lesson.passageText,
+        apiKey
+      );
       
-      // Save locally
-      setAnalysisCache(prev => ({
-        ...prev,
-        [paragraph.id]: result
-      }));
+      // Save locally (all paragraphs populated at once!)
+      setAnalysisCache(result);
       
-      // Save to Cloud Cache asynchronously so other users/sessions can load instantly
-      saveParagraphAnalysisToCloud(lesson.id, paragraph.id, result).catch(cloudErr => {
-        console.warn("Failed to save paragraph analysis to cloud cache:", cloudErr);
+      // Save the entire passage analysis to Cloud Cache asynchronously
+      savePassageAnalysisToCloud(lesson.id, result).catch(cloudErr => {
+        console.warn("Failed to save passage analysis to cloud cache:", cloudErr);
       });
 
     } catch (err: any) {
-      console.error("Failed to analyze paragraph sentences:", err);
+      console.error("Failed to analyze passage sentences:", err);
       setAnalysisError(err.message || "AI 문장 분석 중 오류가 발생했습니다.");
     } finally {
       setAnalyzingParagraphId(null);

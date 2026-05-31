@@ -442,39 +442,35 @@ export async function sendEmailReport(
 }
 
 /**
- * Saves dynamically generated paragraph sentence-level analyses to Cloud Firestore for sharing/caching
+ * Saves dynamically generated passage-level sentence analyses to Cloud Firestore under a single document for maximum efficiency
  */
-export async function saveParagraphAnalysisToCloud(
+export async function savePassageAnalysisToCloud(
   lessonId: string,
-  paragraphId: number,
-  analysis: SentenceAnalysis[]
+  analysis: Record<number, SentenceAnalysis[]>
 ): Promise<void> {
   try {
-    const docId = `${lessonId}_${paragraphId}`;
-    const analysisRef = doc(db, 'paragraph_analyses', docId);
+    const analysisRef = doc(db, 'passage_analyses', lessonId);
     await setDoc(analysisRef, { analysis, createdAt: Date.now() });
   } catch (error) {
-    console.error("Firebase save paragraph analysis failed:", error);
+    console.error("Firebase save passage analysis failed:", error);
   }
 }
 
 /**
- * Loads cached paragraph sentence-level analyses from Cloud Firestore
+ * Loads cached passage-level sentence analyses from Cloud Firestore
  */
-export async function loadParagraphAnalysisFromCloud(
-  lessonId: string,
-  paragraphId: number
-): Promise<SentenceAnalysis[] | null> {
+export async function loadPassageAnalysisFromCloud(
+  lessonId: string
+): Promise<Record<number, SentenceAnalysis[]> | null> {
   try {
-    const docId = `${lessonId}_${paragraphId}`;
-    const analysisRef = doc(db, 'paragraph_analyses', docId);
+    const analysisRef = doc(db, 'passage_analyses', lessonId);
     const docSnap = await getDoc(analysisRef);
     if (docSnap.exists()) {
-      return docSnap.data().analysis as SentenceAnalysis[];
+      return docSnap.data().analysis as Record<number, SentenceAnalysis[]>;
     }
     return null;
   } catch (error) {
-    console.error("Firebase load paragraph analysis failed:", error);
+    console.error("Firebase load passage analysis failed:", error);
     return null;
   }
 }
