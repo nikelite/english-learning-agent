@@ -9,6 +9,8 @@ interface HeaderProps {
   setActiveTab: (tab: string) => void;
   apiKey: string;
   onSaveApiKey: (key: string) => void;
+  userId: string;
+  onSaveUserId: (id: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,16 +19,20 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   apiKey,
-  onSaveApiKey
+  onSaveApiKey,
+  userId,
+  onSaveUserId
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
+  const [tempUserId, setTempUserId] = useState(userId);
   const [showKey, setShowKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveApiKey(tempKey.trim());
+    onSaveUserId(tempUserId.trim());
     setIsSavedAlert(true);
     setTimeout(() => {
       setIsSavedAlert(false);
@@ -92,14 +98,22 @@ export const Header: React.FC<HeaderProps> = ({
           <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>{stats.streak}일 연속</span>
         </div>
 
+        {/* User Account ID Badge if exists */}
+        {userId && (
+          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.1)', borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '700' }}>☁️ {userId}</span>
+          </div>
+        )}
+
         {/* API Settings */}
         <button 
           className="btn btn-secondary" 
           onClick={() => {
             setTempKey(apiKey);
+            setTempUserId(userId);
             setIsModalOpen(true);
           }}
-          title="Gemini API 설정"
+          title="서비스 설정"
         >
           <Settings size={18} />
         </button>
@@ -117,17 +131,14 @@ export const Header: React.FC<HeaderProps> = ({
               <X size={16} />
             </button>
 
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Settings size={20} style={{ color: 'var(--primary)' }} />
-              Gemini API Key 설정
+              서비스 설정
             </h3>
-            
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-              이 학습 도구는 실시간으로 입력된 영어 퀴즈를 심층 학습용 데이터로 변환합니다. Gemini API 키를 입력하시면 원하는 텍스트로 자유롭게 퀴즈를 무제한 생성할 수 있습니다.
-            </p>
 
-            <form onSubmit={handleSave}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Gemini API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
                   Gemini API Key
                 </label>
@@ -153,7 +164,24 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              {/* User ID Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                  사용자 ID (User ID) 설정
+                </label>
+                <input
+                  type="text"
+                  value={tempUserId}
+                  onChange={(e) => setTempUserId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                  placeholder="예: nikelite"
+                  className="input-glow"
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  * ID를 설정하면 로컬 학습 보관함이 클라우드와 자동으로 양방향 동기화(Sync)되며, 기기 변경이나 캐시 초기화 시에도 학습 기록을 보존할 수 있습니다. 또한, 이 ID를 통해 다른 사용자가 링크 없이 내 보관함으로 학습 자료를 다이렉트 전송할 수 있습니다. (영문/숫자/_/- 만 허용)
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
                 <button 
                   type="button" 
                   className="btn btn-secondary"

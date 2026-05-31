@@ -39,6 +39,8 @@ export interface Lesson {
   memoryTips: MemoryTipData;
   pronunciation: PronunciationData;
   quizzes: QuizItem[];
+  ownerId?: string | null;
+  sharedWith?: string[];
 }
 
 export interface WrongAnswer {

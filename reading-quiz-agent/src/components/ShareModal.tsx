@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Share2, Clipboard, Check, Sparkles, Globe, Cloud, Link, AlertCircle } from 'lucide-react';
+import { X, Share2, Clipboard, Check, Sparkles, Globe, Cloud, Link, AlertCircle, UserPlus } from 'lucide-react';
 import { ReadingLesson } from '../types';
 import { serializeLesson } from '../geminiService';
-import { saveLessonToCloud } from '../firebaseService';
+import { saveLessonToCloud, shareLessonWithUser } from '../firebaseService';
 
 interface ShareModalProps {
   lesson: ReadingLesson;
@@ -15,12 +15,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'cloud' | 'serverless'>('cloud');
+  const [activeTab, setActiveTab] = useState<'cloud' | 'direct' | 'serverless'>('cloud');
   const [cloudUrl, setCloudUrl] = useState<string>('');
   const [serverlessUrl, setServerlessUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Direct sharing state
+  const [recipientId, setRecipientId] = useState<string>('');
+  const [isDirectSharing, setIsDirectSharing] = useState<boolean>(false);
+  const [directShareSuccess, setDirectShareSuccess] = useState<boolean>(false);
+  const [directShareError, setDirectShareError] = useState<string | null>(null);
 
   // Generate the serverless GZIP Base64 link
   useEffect(() => {
@@ -29,10 +35,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         const url = `${window.location.origin}${window.location.pathname}?share=${base64Payload}`;
         setServerlessUrl(url);
       });
-      // Reset cloud sharing state when modal opens
+      // Reset states when modal opens
       setCloudUrl('');
       setUploadError(null);
       setIsUploading(false);
+      setRecipientId('');
+      setDirectShareSuccess(false);
+      setDirectShareError(null);
+      setIsDirectSharing(false);
     }
   }, [isOpen, lesson]);
 
@@ -41,13 +51,53 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     setIsUploading(true);
     setUploadError(null);
     try {
-      const docId = await saveLessonToCloud(lesson);
+      const currentUserId = localStorage.getItem('eng_user_id') || null;
+      const docId = await saveLessonToCloud(lesson, currentUserId);
       const url = `${window.location.origin}${window.location.pathname}?cloudShare=${docId}`;
       setCloudUrl(url);
     } catch (err: any) {
       setUploadError(err.message || "클라우드 퀴즈 서버 업로드에 실패했습니다.");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Direct sharing logic
+  const handleDirectShare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetId = recipientId.trim();
+    if (!targetId) {
+      setDirectShareError("전송받을 상대방의 User ID를 입력해 주세요.");
+      return;
+    }
+
+    setIsDirectSharing(true);
+    setDirectShareError(null);
+    setDirectShareSuccess(false);
+
+    try {
+      let docId = '';
+      if (cloudUrl) {
+        const urlParams = new URL(cloudUrl);
+        docId = urlParams.searchParams.get('cloudShare') || '';
+      }
+
+      if (!docId) {
+        // Upload first if not already uploaded
+        const currentUserId = localStorage.getItem('eng_user_id') || null;
+        docId = await saveLessonToCloud(lesson, currentUserId);
+        const url = `${window.location.origin}${window.location.pathname}?cloudShare=${docId}`;
+        setCloudUrl(url);
+      }
+
+      // Add recipient to the shared list
+      await shareLessonWithUser(docId, targetId);
+      setDirectShareSuccess(true);
+      setRecipientId('');
+    } catch (err: any) {
+      setDirectShareError(err.message || "다이렉트 공유에 실패했습니다.");
+    } finally {
+      setIsDirectSharing(false);
     }
   };
 
@@ -63,7 +113,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', padding: '2rem 1.75rem' }}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', padding: '2rem 1.75rem' }}>
         {/* Close Button */}
         <button 
           className="btn btn-secondary" 
@@ -80,13 +130,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         </h3>
 
         {/* Tab Navigation Controls */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '0.3rem', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', background: 'rgba(255,255,255,0.03)', padding: '0.3rem', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
           <button
             type="button"
             className="btn"
             style={{
-              padding: '0.55rem',
-              fontSize: '0.8rem',
+              padding: '0.55rem 0.25rem',
+              fontSize: '0.75rem',
               fontWeight: activeTab === 'cloud' ? '700' : '400',
               borderRadius: '7px',
               border: 'none',
@@ -97,21 +147,46 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.4rem',
+              gap: '0.3rem',
               transition: 'all 0.2s ease'
             }}
             onClick={() => setActiveTab('cloud')}
           >
-            <Cloud size={14} />
-            클라우드 공유 (단축 URL)
+            <Cloud size={13} />
+            단축 링크
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            style={{
+              padding: '0.55rem 0.25rem',
+              fontSize: '0.75rem',
+              fontWeight: activeTab === 'direct' ? '700' : '400',
+              borderRadius: '7px',
+              border: 'none',
+              background: activeTab === 'direct' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'direct' ? 'white' : 'var(--text-secondary)',
+              boxShadow: activeTab === 'direct' ? '0 4px 12px rgba(236,72,153,0.2)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.3rem',
+              transition: 'all 0.2s ease'
+            }}
+            onClick={() => setActiveTab('direct')}
+          >
+            <UserPlus size={13} />
+            사용자 ID 전송
           </button>
           
           <button
             type="button"
             className="btn"
             style={{
-              padding: '0.55rem',
-              fontSize: '0.8rem',
+              padding: '0.55rem 0.25rem',
+              fontSize: '0.75rem',
               fontWeight: activeTab === 'serverless' ? '700' : '400',
               borderRadius: '7px',
               border: 'none',
@@ -122,13 +197,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.4rem',
+              gap: '0.3rem',
               transition: 'all 0.2s ease'
             }}
             onClick={() => setActiveTab('serverless')}
           >
-            <Link size={14} />
-            압축 직접 공유 (서버리스)
+            <Link size={13} />
+            서버리스 압축
           </button>
         </div>
 
@@ -138,7 +213,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--secondary)', background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.02) 100%)', padding: '1.15rem', borderRadius: '0 12px 12px 0', fontSize: '0.8rem', lineHeight: '1.5' }}>
               <Sparkles size={14} style={{ color: 'var(--secondary)', marginRight: '0.25rem', display: 'inline' }} />
               <strong>개인 Cloud 데이터베이스 안전 보관!</strong><br />
-              현재 지문의 전체 해설, 단어장, 퀴즈가 구글 Firebase Cloud에 저장되어 **15자 내외의 초단축 고유 ID**가 발급됩니다. 카카오톡, 라인 등 메신저 공유 시 글자 수 초과 잘림 걱정 없이 완벽하게 전송됩니다.
+              현재 지문의 전체 해설, 단어장, 퀴즈가 구글 Firebase Cloud에 저장되어 **15자 내외의 초단축 고유 ID**가 발급됩니다. 메신저 글자수 잘림 걱정 없이 공유할 수 있습니다.
             </div>
 
             {!cloudUrl ? (
@@ -209,15 +284,71 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </div>
         )}
 
+        {/* Tab Contents: Direct User ID Share */}
+        {activeTab === 'direct' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--accent)', background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(139, 92, 246, 0.02) 100%)', padding: '1.15rem', borderRadius: '0 12px 12px 0', fontSize: '0.8rem', lineHeight: '1.5' }}>
+              <UserPlus size={14} style={{ color: 'var(--accent)', marginRight: '0.25rem', display: 'inline' }} />
+              <strong>아이디로 보관함에 즉시 배달!</strong><br />
+              지정하신 상대방의 **사용자 ID** 보관함으로 이 학습 세트를 직접 쏴줍니다! 상대방이 앱을 켜면 별도로 링크를 입력하지 않아도 보관함 리스트에 실시간으로 자동 노출됩니다.
+            </div>
+
+            <form onSubmit={handleDirectShare} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', fontWeight: '700' }}>
+                  상대방 User ID 입력
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={recipientId}
+                    onChange={(e) => setRecipientId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                    placeholder="예: user_friend"
+                    className="input-glow"
+                    disabled={isDirectSharing}
+                  />
+                  <button 
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, var(--accent) 0%, #db2777 100%)',
+                      boxShadow: '0 4px 12px rgba(236,72,153,0.15)',
+                      flexShrink: 0,
+                      padding: '0.65rem 1.15rem'
+                    }}
+                    disabled={isDirectSharing}
+                  >
+                    {isDirectSharing ? '전송 중...' : '보관함 전송'}
+                  </button>
+                </div>
+              </div>
+
+              {directShareSuccess && (
+                <div style={{ display: 'flex', gap: '0.4rem', color: 'var(--success)', background: 'rgba(16, 185, 129, 0.08)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.15)', alignItems: 'center' }}>
+                  <Check size={14} style={{ flexShrink: 0 }} />
+                  <span>상대방 보관함으로 학습 세트가 성공적으로 배송되었습니다!</span>
+                </div>
+              )}
+
+              {directShareError && (
+                <div style={{ display: 'flex', gap: '0.4rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.08)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.15)', alignItems: 'center' }}>
+                  <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                  <span>{directShareError}</span>
+                </div>
+              )}
+            </form>
+          </div>
+        )}
+
         {/* Tab Contents: Serverless Share */}
         {activeTab === 'serverless' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="eli5-analogy-box" style={{ borderLeftColor: 'var(--primary)', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(6, 182, 212, 0.01) 100%)', padding: '1.15rem', borderRadius: '0 12px 12px 0', fontSize: '0.8rem', lineHeight: '1.5' }}>
               <Sparkles size={14} style={{ color: 'var(--primary)', marginRight: '0.25rem', display: 'inline' }} />
               <strong>서버가 전혀 필요 없는 압축 URL 공유!</strong><br />
-              지문, 단어, 퀴즈 메타데이터 일체가 GZIP 알고리즘으로 압축되어 URL 주소 내부에 원형 그대로 보관됩니다. DB 서버 점검이나 유실 걱정 없이 100% 안전하게 작동합니다.<br />
+              지문, 단어, 퀴즈 메타데이터 일체가 GZIP 알고리즘으로 압축되어 URL 주소 내부에 원형 그대로 보관됩니다. DB 서버 점검이나 유실 걱정 없이 작동합니다.<br />
               <span style={{ color: 'var(--error)', fontSize: '0.75rem', display: 'block', marginTop: '0.5rem', fontWeight: '600' }}>
-                ※ 주의: 본문과 해설이 너무 길면 링크가 엄청 길어져 일부 앱(카카오톡 등)에서 메신저 자체 글자수 제한으로 잘릴 수 있습니다.
+                ※ 주의: 본문과 해설이 너무 길면 링크가 엄청 길어져 일부 앱(카카오톡 등)에서 잘릴 수 있습니다.
               </span>
             </div>
 

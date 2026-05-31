@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Flame, Settings, X, Eye, EyeOff, Check, AlertCircle } from 'lucide-react';
+import { BookOpen, Flame, Settings, X, Eye, EyeOff, Check } from 'lucide-react';
 import { AppStats } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
   setActiveTab: (tab: string) => void;
   apiKey: string;
   onSaveApiKey: (key: string) => void;
+  userId: string;
+  onSaveUserId: (id: string) => void;
   isSharedQuiz: boolean;
 }
 
@@ -19,16 +21,20 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   apiKey,
   onSaveApiKey,
+  userId,
+  onSaveUserId,
   isSharedQuiz
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
+  const [tempUserId, setTempUserId] = useState(userId);
   const [showKey, setShowKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveApiKey(tempKey.trim());
+    onSaveUserId(tempUserId.trim());
     setIsSavedAlert(true);
     setTimeout(() => {
       setIsSavedAlert(false);
@@ -107,14 +113,22 @@ export const Header: React.FC<HeaderProps> = ({
           <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>{stats.streak}일 스트릭</span>
         </div>
 
+        {/* User Account ID Badge if exists */}
+        {userId && (
+          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.1)', borderColor: 'rgba(6, 182, 212, 0.3)' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--secondary)', fontWeight: '700' }}>☁️ {userId}</span>
+          </div>
+        )}
+
         {/* API Settings */}
         <button 
           className="btn btn-secondary" 
           onClick={() => {
             setTempKey(apiKey);
+            setTempUserId(userId);
             setIsModalOpen(true);
           }}
-          title="Gemini API Key 설정"
+          title="서비스 설정"
         >
           <Settings size={18} />
         </button>
@@ -132,17 +146,14 @@ export const Header: React.FC<HeaderProps> = ({
               <X size={16} />
             </button>
 
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Settings size={20} style={{ color: 'var(--secondary)' }} />
-              Gemini API Key 설정
+              서비스 설정
             </h3>
-            
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-              독해 지문을 AI로 정밀 분석하기 위해 Gemini API Key가 필요합니다. 입력된 키는 오직 본인 웹 브라우저(`localStorage`)에만 안전하게 저장됩니다.
-            </p>
 
-            <form onSubmit={handleSave}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Gemini API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600' }}>
                   Gemini API Key
                 </label>
@@ -163,9 +174,29 @@ export const Header: React.FC<HeaderProps> = ({
                     {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  독해 지문을 AI로 정밀 분석하기 위해 Gemini API Key가 필요합니다. 입력된 키는 오직 브라우저 로컬 스토리지에만 저장됩니다.
+                </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              {/* User ID Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600' }}>
+                  사용자 ID (User ID) 설정
+                </label>
+                <input
+                  type="text"
+                  value={tempUserId}
+                  onChange={(e) => setTempUserId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                  placeholder="예: nikelite"
+                  className="input-glow"
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.4', margin: 0 }}>
+                  * ID를 설정하면 로컬 학습 보관함이 클라우드와 자동으로 양방향 동기화(Sync)되며, 기기 변경이나 캐시 초기화 시에도 학습 기록을 보존할 수 있습니다. 또한, 이 ID를 통해 다른 사용자가 링크 없이 내 보관함으로 학습 자료를 다이렉트 전송할 수 있습니다. (영문/숫자/_/- 만 허용)
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
                 <button 
                   type="button" 
                   className="btn btn-secondary"

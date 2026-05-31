@@ -31,6 +31,8 @@ export interface ReadingLesson {
   paragraphs: ReadingParagraph[];
   vocabulary: ReadingVocabulary[];
   quizzes: ReadingQuizItem[];
+  ownerId?: string | null;
+  sharedWith?: string[];
 }
 
 export interface WrongReadingAnswer {

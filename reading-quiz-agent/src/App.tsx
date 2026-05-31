@@ -7,7 +7,7 @@ import { ShareModal } from './components/ShareModal';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers } from 'lucide-react';
-import { loadLessonFromCloud } from './firebaseService';
+import { loadLessonFromCloud, saveLessonToCloud, syncUserLessons, removeLessonAssociation } from './firebaseService';
 
 export default function App() {
   // 1. Core API & Key Settings
@@ -59,6 +59,18 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // 7.1 Cloud Sync State
+  const [userId, setUserId] = useState<string>(() => {
+    return localStorage.getItem('eng_user_id') || '';
+  });
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const handleSaveUserId = (newId: string) => {
+    setUserId(newId);
+    localStorage.setItem('eng_user_id', newId);
+  };
 
   // Injected quizzes (includes standard ones + oldest past mistakes) calculated synchronously
   const injectedQuizzes = (() => {
@@ -130,25 +142,93 @@ export default function App() {
     }
   }, []);
 
-  // Save lesson to history library
-  const saveLessonToHistory = (lesson: ReadingLesson) => {
+  // Trigger cloud sync when userId changes or on mount
+  useEffect(() => {
+    if (!userId) {
+      setSyncStatus('idle');
+      return;
+    }
+    
+    let isMounted = true;
+    setSyncStatus('syncing');
+    setSyncError(null);
+    
+    // Fetch local history to merge
+    const localSaved = localStorage.getItem('eng_reading_lessons_history');
+    const localList: ReadingLesson[] = localSaved ? JSON.parse(localSaved) : [];
+    
+    syncUserLessons(userId, localList).then((syncedList) => {
+      if (isMounted) {
+        setLessonsHistory(syncedList);
+        localStorage.setItem('eng_reading_lessons_history', JSON.stringify(syncedList));
+        setSyncStatus('synced');
+      }
+    }).catch((err: any) => {
+      if (isMounted) {
+        console.error("Auto sync failed:", err);
+        setSyncStatus('error');
+        setSyncError(err.message || "동기화 오류");
+      }
+    });
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [userId]);
+
+  // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
+  const saveLessonToHistory = async (lesson: ReadingLesson) => {
     if (!lesson || lesson.id.startsWith('preset-')) return;
+    
+    let updatedLesson = { ...lesson };
+    
+    // If user is configured with an ID, save to Cloud
+    if (userId) {
+      try {
+        setSyncStatus('syncing');
+        const docId = await saveLessonToCloud(lesson, userId);
+        updatedLesson = {
+          ...lesson,
+          id: docId,
+          ownerId: userId,
+          sharedWith: lesson.sharedWith || []
+        };
+        setSyncStatus('synced');
+      } catch (err: any) {
+        console.error("Failed to upload lesson on save:", err);
+        setSyncStatus('error');
+      }
+    }
+    
     setLessonsHistory(prev => {
-      const filtered = prev.filter(item => item.id !== lesson.id && item.title !== lesson.title);
-      const updated = [lesson, ...filtered];
+      const filtered = prev.filter(item => item.id !== updatedLesson.id && item.title !== updatedLesson.title);
+      const updated = [updatedLesson, ...filtered];
       localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
   };
 
-  const handleDeleteHistory = (e: React.MouseEvent, lessonId: string) => {
+  const handleDeleteHistory = async (e: React.MouseEvent, lessonId: string) => {
     e.stopPropagation(); // Prevent loading the lesson
     if (window.confirm("이 학습 세트를 보관함에서 삭제하시겠습니까?")) {
+      // Remove locally immediately
       setLessonsHistory(prev => {
         const updated = prev.filter(item => item.id !== lessonId);
         localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
         return updated;
       });
+      
+      // If user ID is configured, delete/disassociate in cloud in the background
+      if (userId) {
+        try {
+          setSyncStatus('syncing');
+          await removeLessonAssociation(lessonId, userId);
+          setSyncStatus('synced');
+        } catch (err: any) {
+          console.error("Failed to remove cloud association on delete:", err);
+          setSyncStatus('error');
+        }
+      }
     }
   };
 
@@ -298,6 +378,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         apiKey={apiKey}
         onSaveApiKey={handleSaveApiKey}
+        userId={userId}
+        onSaveUserId={handleSaveUserId}
         isSharedQuiz={isSharedQuiz}
       />
 
@@ -436,12 +518,44 @@ export default function App() {
               <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px', padding: '1.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <div style={{ textAlign: 'left' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <BookOpen size={20} style={{ color: 'var(--secondary)' }} />
                       📚 나의 최근 학습 보관함
+                      {userId ? (
+                        <span style={{ 
+                          fontSize: '0.7rem', 
+                          background: syncStatus === 'syncing' ? 'rgba(234, 179, 8, 0.15)' : syncStatus === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                          color: syncStatus === 'syncing' ? '#eab308' : syncStatus === 'error' ? 'var(--error)' : 'var(--success)',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '6px',
+                          border: '1px solid currentColor',
+                          fontWeight: '600',
+                          marginLeft: '0.5rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}>
+                          {syncStatus === 'syncing' ? '🔄 동기화 중...' : syncStatus === 'error' ? '⚠️ 동기화 실패' : '☁️ 클라우드 동기화 완료'}
+                        </span>
+                      ) : (
+                        <span style={{ 
+                          fontSize: '0.7rem', 
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          color: 'var(--text-secondary)',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          fontWeight: '500',
+                          marginLeft: '0.5rem'
+                        }}>
+                          🔒 로컬 보관함 사용 중
+                        </span>
+                      )}
                     </h3>
                     <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                      사용자님이 생성하거나 공유받은 독해 지문들이 모두 안전하게 로컬에 보관되어 있습니다.
+                      {userId 
+                        ? `클라우드 계정 '${userId}'에 실시간 동기화되는 안전한 보관함입니다.`
+                        : "생성하거나 공유받은 독해 지문들이 안전하게 보관됩니다. 우측 상단 ⚙️ 설정을 눌러 User ID를 등록하시면 클라우드와 자동 동기화됩니다."}
                     </p>
                   </div>
                   
@@ -504,9 +618,19 @@ export default function App() {
                             <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                               📅 {new Date(item.createdAt).toLocaleDateString()}
                             </span>
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                             <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
                               📝 {item.quizzes.length} 문항
                             </span>
+                            {item.ownerId && item.ownerId !== userId && (
+                              <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(236,72,153,0.12)', color: 'var(--accent)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                                📥 {item.ownerId}님 공유
+                              </span>
+                            )}
+                            {item.ownerId && item.ownerId === userId && (
+                              <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                                ☁️ My 클라우드
+                              </span>
+                            )}
                           </div>
                           <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {item.title}
