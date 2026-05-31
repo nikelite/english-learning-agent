@@ -398,27 +398,38 @@ export default function App() {
   };
 
   // Update stats on quiz completion
-  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[]) => {
+  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>) => {
     const list = wrongQuestionsList || [];
 
-    setStats(prev => {
-      const newStats = {
-        ...prev,
-        totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
-        totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
+    if (totalCount > 0) {
+      setStats(prev => {
+        const newStats = {
+          ...prev,
+          totalQuizzesTaken: prev.totalQuizzesTaken + totalCount,
+          totalCorrectAnswers: prev.totalCorrectAnswers + correctCount
+        };
+
+        if (userId && activeLesson) {
+          logQuizAttempt(userId, activeLesson.id, activeLesson.title, correctCount, totalCount, list);
+          sendEmailReport(userId, activeLesson.title, correctCount, totalCount, list, newStats);
+
+          setTimeout(() => {
+            alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 리포트 메일이 발송 대기열에 추가되었습니다!`);
+          }, 500);
+        }
+
+        return newStats;
+      });
+    }
+
+    if (activeLesson) {
+      const updatedLesson = {
+        ...activeLesson,
+        userAnswers: userAnswers
       };
-
-      if (userId && activeLesson) {
-        logQuizAttempt(userId, activeLesson.id, activeLesson.title, correctCount, totalCount, list);
-        sendEmailReport(userId, activeLesson.title, correctCount, totalCount, list, newStats);
-
-        setTimeout(() => {
-          alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 리포트 메일이 발송 대기열에 추가되었습니다!`);
-        }, 500);
-      }
-
-      return newStats;
-    });
+      setActiveLesson(updatedLesson);
+      saveLessonToHistory(updatedLesson);
+    }
   };
 
   return (
@@ -636,13 +647,22 @@ export default function App() {
                       }}
                     >
                       <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                             📅 {new Date(item.createdAt).toLocaleDateString()}
                           </span>
                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
                             📝 {item.quizzes.length} 문항
                           </span>
+                          {item.userAnswers ? (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: 'bold' }}>
+                              ✅ 풀이 완료 ({item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / {item.quizzes.length})
+                            </span>
+                          ) : (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                              📖 미풀이
+                            </span>
+                          )}
                           {item.ownerId && item.ownerId !== userId && (
                             <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(236,72,153,0.12)', color: 'var(--accent)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
                               📥 {item.ownerId}님 공유
@@ -667,7 +687,7 @@ export default function App() {
                           className="btn btn-secondary"
                           style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
                         >
-                          학습 개시
+                          {item.userAnswers ? "📊 결과 분석" : "학습 개시"}
                         </button>
                         <button
                           onClick={(e) => handleDeleteHistory(e, item.id)}

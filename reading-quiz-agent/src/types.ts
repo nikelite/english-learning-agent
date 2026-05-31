@@ -33,6 +33,7 @@ export interface ReadingLesson {
   quizzes: ReadingQuizItem[];
   ownerId?: string | null;
   sharedWith?: string[];
+  userAnswers?: Record<string, number>;
 }
 
 export interface WrongReadingAnswer {

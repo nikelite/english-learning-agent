@@ -320,13 +320,29 @@ export async function generateLessonFromText(
         koreanPhonetic: parsedJson.pronunciation?.koreanPhonetic || "",
         stressGuide: parsedJson.pronunciation?.stressGuide || ""
       },
-      quizzes: (parsedJson.quizzes || []).map((q: any, index: number) => ({
-        id: q.id || `q-${Date.now()}-${index}`,
-        question: q.question || "문제가 생성되지 않았습니다.",
-        choices: q.choices || ["A", "B", "C", "D"],
-        correctIndex: typeof q.correctIndex === 'number' ? q.correctIndex : 0,
-        rationale: q.rationale || "상세 해설이 없습니다."
-      }))
+      quizzes: (parsedJson.quizzes || []).map((q: any, index: number) => {
+        const rawChoices = q.choices || ["A", "B", "C", "D"];
+        const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
+        const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+
+        // Shuffle choices using standard Fisher-Yates
+        const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
+        for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+        }
+
+        const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
+        const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+
+        return {
+          id: q.id || `q-${Date.now()}-${index}`,
+          question: q.question || "문제가 생성되지 않았습니다.",
+          choices: shuffledChoices,
+          correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
+          rationale: q.rationale || "상세 해설이 없습니다."
+        };
+      })
     };
 
     return lesson;

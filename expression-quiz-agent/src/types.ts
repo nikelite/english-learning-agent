@@ -41,6 +41,7 @@ export interface Lesson {
   quizzes: QuizItem[];
   ownerId?: string | null;
   sharedWith?: string[];
+  userAnswers?: Record<string, number>;
 }
 
 export interface WrongAnswer {

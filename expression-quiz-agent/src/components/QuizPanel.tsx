@@ -5,7 +5,7 @@ import { Lesson, QuizItem } from '../types';
 interface QuizPanelProps {
   lesson: Lesson;
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[]) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>) => void;
   onBackToStudy: () => void;
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
@@ -22,6 +22,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
+  const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
 
   useEffect(() => {
     setActiveQuizzes(injectedQuizzes);
@@ -30,10 +31,20 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
-    setScore(0);
-    setShowResult(false);
+    
+    if (lesson.userAnswers) {
+      const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
+      setScore(initialScore);
+      setShowResult(true);
+      setSubmittedAnswers(lesson.userAnswers);
+    } else {
+      setScore(0);
+      setShowResult(false);
+      setSubmittedAnswers({});
+    }
+    
     setSavedWrongId(null);
-  }, [lesson.id]);
+  }, [lesson.id, lesson.userAnswers]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
@@ -56,6 +67,11 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setIsSubmitted(true);
     const isCorrect = selectedAns === activeQuestion.correctIndex;
     
+    setSubmittedAnswers(prev => ({
+      ...prev,
+      [activeQuestion.id]: selectedAns
+    }));
+
     if (isCorrect) {
       setScore(prev => prev + 1);
       if (activeQuestion.isReview) {
@@ -106,7 +122,18 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           });
         }
       }
-      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs);
+
+      const finalAnswers: Record<string, number> = {};
+      Object.entries(submittedAnswers).forEach(([key, val]) => {
+        if (val !== null && val !== undefined) {
+          finalAnswers[key] = val;
+        }
+      });
+      if (selectedAns !== null) {
+        finalAnswers[activeQuestion.id] = selectedAns;
+      }
+
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
     }
   };
 
@@ -114,18 +141,24 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
     setAttemptWrongs([]);
+    setSubmittedAnswers({});
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
     setScore(0);
     setShowResult(false);
     setSavedWrongId(null);
+
+    // Reset completed state in parent
+    onQuizCompleted(0, 0, [], undefined);
   };
 
   const handleRetryIncorrect = () => {
     setActiveQuizzes([...sessionWrongs]);
     setSessionWrongs([]);
     setAttemptWrongs([]);
+    // Reset answers for retry
+    setSubmittedAnswers({});
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -192,6 +225,91 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             <RefreshCw size={16} />
             처음부터 다시 풀기
           </button>
+        </div>
+
+        {/* 문항별 상세 풀이 결과 분석 피드백 */}
+        <div style={{ marginTop: '2.5rem', textAlign: 'left', maxWidth: '640px', margin: '2.5rem auto 0 auto' }}>
+          <h4 style={{ fontSize: '1rem', fontWeight: '800', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.6rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
+            📖 실전 퀴즈 풀이 결과 분석
+          </h4>
+          
+          {activeQuizzes.map((quiz, qIdx) => {
+            const userAnswer = submittedAnswers[quiz.id];
+            const isCorrect = userAnswer === quiz.correctIndex;
+            
+            return (
+              <div key={quiz.id} style={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.015)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '1.25rem', 
+                marginBottom: '1rem',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}>
+                <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.5', display: 'flex', gap: '0.5rem' }}>
+                  <span style={{ 
+                    color: isCorrect ? 'var(--success)' : 'var(--accent)',
+                    fontWeight: '900'
+                  }}>
+                    {isCorrect ? '✓' : '✗'}
+                  </span>
+                  Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}
+                </h5>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                  {quiz.choices.map((choice, cIdx) => {
+                    const isThisCorrect = cIdx === quiz.correctIndex;
+                    const isThisUserSelection = cIdx === userAnswer;
+                    
+                    let style: React.CSSProperties = {
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.2s'
+                    };
+                    
+                    if (isThisCorrect) {
+                      style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+                      style.borderColor = 'var(--success)';
+                      style.color = 'var(--success)';
+                      style.fontWeight = '700';
+                    } else if (isThisUserSelection) {
+                      style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+                      style.borderColor = 'var(--accent)';
+                      style.color = 'var(--accent)';
+                      style.fontWeight = '700';
+                    }
+                    
+                    return (
+                      <div key={cIdx} style={style}>
+                        <span>{choice}</span>
+                        {isThisCorrect && (
+                          <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--success)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                            정답
+                          </span>
+                        )}
+                        {isThisUserSelection && !isThisCorrect && (
+                          <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--accent)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                            내가 선택한 오답
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                <div className="eli5-analogy-box" style={{ padding: '0.8rem 1rem', fontSize: '0.75rem', lineHeight: '1.5', color: 'var(--text-muted)', margin: 0, borderRadius: '8px', borderStyle: 'dashed' }}>
+                  <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>💡 AI 상세 해설:</strong>
+                  {quiz.rationale}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
