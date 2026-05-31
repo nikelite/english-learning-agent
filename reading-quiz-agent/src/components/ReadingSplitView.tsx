@@ -382,15 +382,6 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                 {/* 3. Detailed Sentence Analysis Display */}
                 {isActive && activeAnalysis && activeSentenceText && (
                   <div className="sentence-analysis-box animate-slide-down" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.03)', borderRadius: '8px', borderLeft: '3px solid var(--primary)' }}>
-                      <span style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.12)', color: 'var(--primary)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        한글 번역
-                      </span>
-                      <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.85rem', color: '#e2e8f0', fontWeight: '500', lineHeight: '1.6' }}>
-                        {activeAnalysis.translation}
-                      </p>
-                    </div>
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
                       {/* Vocabulary & Expressions */}
                       {((activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) || (activeAnalysis.expressions && activeAnalysis.expressions.length > 0)) && (
