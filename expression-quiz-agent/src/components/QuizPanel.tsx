@@ -109,7 +109,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       setCurrentIdx(prev => prev + 1);
     } else {
       setShowResult(true);
-      const finalScore = score + (selectedAns === activeQuestion.correctIndex ? 1 : 0);
+      const finalScore = score;
       let finalWrongs = [...attemptWrongs];
       if (selectedAns !== null && selectedAns !== activeQuestion.correctIndex) {
         if (!finalWrongs.some(w => w.question === activeQuestion.question)) {
@@ -133,7 +133,10 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         finalAnswers[activeQuestion.id] = selectedAns;
       }
 
-      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+      // Only complete quiz in parent state if we are playing the full lesson (not a local incorrect retry)
+      if (activeQuizzes.length === injectedQuizzes.length) {
+        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+      }
     }
   };
 
@@ -154,7 +157,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleRetryIncorrect = () => {
-    setActiveQuizzes([...sessionWrongs]);
+    const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
+    setActiveQuizzes(wrongs);
     setSessionWrongs([]);
     setAttemptWrongs([]);
     // Reset answers for retry
@@ -211,13 +215,13 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             학습자료 다시보기
           </button>
           
-          {sessionWrongs.length > 0 && (
+          {activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length > 0 && (
             <button 
               className="btn btn-accent" 
               onClick={handleRetryIncorrect}
               style={{ background: 'linear-gradient(135deg, var(--accent) 0%, #f43f5e 100%)', boxShadow: '0 4px 15px rgba(244,63,94,0.2)' }}
             >
-              ✍️ 틀린 문제만 다시 풀기 ({sessionWrongs.length})
+              ✍️ 틀린 문제만 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})
             </button>
           )}
 
