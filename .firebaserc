@@ -1,0 +1,13 @@
+{
+  "projects": {},
+  "targets": {},
+  "etags": {
+    "english-agent-4e447": {
+      "extensionInstances": {
+        "firestore-send-email": "c72dd13d1c549fee95e4775f06f7473af0195350fa08331955b73bc64a8aa58d",
+        "firestore-send-email-41z1": "868f3a8a9851d9be6a192fddac3c64b21c6e5576375c994db778b9f8b8f7339c",
+        "firestore-send-email-d59m": "2bb5f7efd12e2342e69a34faf79483368a568c1656ec84c26cf2d71d87d99569"
+      }
+    }
+  }
+}

@@ -426,14 +426,29 @@ export async function sendEmailReport(
       </html>
     `;
 
-    const mailCollection = collection(db, 'mail');
-    await addDoc(mailCollection, {
-      to: 'nikelite@gmail.com',
-      message: {
-        subject: `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
-        html: emailHtml
-      }
-    });
+    const webhookUrl = localStorage.getItem('email_webhook_url');
+    if (webhookUrl) {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({
+          subject: `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
+          htmlBody: emailHtml
+        })
+      });
+      console.log("Email sent successfully via Google Apps Script Webhook!");
+    } else {
+      const mailCollection = collection(db, 'mail');
+      await addDoc(mailCollection, {
+        to: 'nikelite@gmail.com',
+        message: {
+          subject: `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
+          html: emailHtml
+        }
+      });
+    }
   } catch (error: any) {
     console.error("Firebase sendEmailReport failed:", error);
   }
