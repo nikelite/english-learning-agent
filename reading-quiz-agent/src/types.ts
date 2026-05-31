@@ -52,3 +52,12 @@ export interface AppStats {
   totalCorrectAnswers: number;
   masteredCount: number;
 }
+
+export interface SentenceAnalysis {
+  sentence: string;
+  translation: string;
+  vocabulary: { word: string; meaning: string }[];
+  expressions: { expression: string; meaning: string; contextNote: string }[];
+  grammar: string;
+  context: string;
+}

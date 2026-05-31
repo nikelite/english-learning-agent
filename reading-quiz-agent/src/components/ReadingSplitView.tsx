@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
-import { ReadingLesson, ReadingQuizItem, ReadingVocabulary } from '../types';
-import { generateCustomVocabItem } from '../geminiService';
+import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
+import { generateCustomVocabItem, analyzeParagraphSentences } from '../geminiService';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -36,6 +36,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [isCustomVocabLoading, setIsCustomVocabLoading] = useState<boolean>(false);
   const [customVocabError, setCustomVocabError] = useState<string | null>(null);
 
+  // Sentence click states
+  const [activeSentenceText, setActiveSentenceText] = useState<string | null>(null);
+  const [analysisCache, setAnalysisCache] = useState<Record<number, SentenceAnalysis[]>>({});
+  const [analyzingParagraphId, setAnalyzingParagraphId] = useState<number | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   // Quiz States
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<ReadingQuizItem[]>([]);
@@ -49,6 +55,13 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
+    
+    // Clear sentence states on lesson change
+    setActiveSentenceText(null);
+    setAnalysisCache({});
+    setAnalyzingParagraphId(null);
+    setAnalysisError(null);
+    setActiveParagraphId(null);
     
     if (lesson.userAnswers) {
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
@@ -70,6 +83,44 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
+
+  const handleSentenceClick = async (paragraph: any, sentence: string) => {
+    if (analyzingParagraphId !== null) return;
+    setAnalysisError(null);
+
+    // If clicking already active sentence, close it
+    if (activeSentenceText === sentence && activeParagraphId === paragraph.id) {
+      setActiveSentenceText(null);
+      setActiveParagraphId(null);
+      return;
+    }
+
+    setActiveParagraphId(paragraph.id);
+    setActiveSentenceText(sentence);
+
+    if (analysisCache[paragraph.id]) {
+      return;
+    }
+
+    if (!apiKey) {
+      setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시면 실시간 AI 문장 상세 과외 분석이 활성화됩니다.");
+      return;
+    }
+
+    setAnalyzingParagraphId(paragraph.id);
+    try {
+      const result = await analyzeParagraphSentences(paragraph.englishText, lesson.passageText, apiKey);
+      setAnalysisCache(prev => ({
+        ...prev,
+        [paragraph.id]: result
+      }));
+    } catch (err: any) {
+      console.error("Failed to analyze paragraph sentences:", err);
+      setAnalysisError(err.message || "AI 문장 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAnalyzingParagraphId(null);
+    }
+  };
 
   const activeQuestion = activeQuizzes[currentIdx];
   const progressPercent = activeQuizzes.length > 0 ? ((currentIdx) / activeQuizzes.length) * 100 : 0;
@@ -247,26 +298,146 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         {/* The Passage text content */}
         <div className="scroll-content" style={{ fontSize: `${fontSize}px` }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>
-            💡 문단을 마우스로 클릭하면 한글 해석과 구문 분석이 바로 아래 표시됩니다.
+            💡 공부하고 싶은 문장을 마우스로 클릭하면 해당 문장의 한글 번역, 구문 분석(문법), 핵심 어휘 및 문맥 설명을 실시간 AI 과외 서비스로 볼 수 있습니다.
           </p>
 
           {lesson.paragraphs.map((p) => {
             const isActive = activeParagraphId === p.id;
+            // Split paragraph englishText into complete sentences
+            const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+            
+            // Fuzzy match the cached sentence analysis
+            const paragraphAnalyses = analysisCache[p.id];
+            const activeAnalysis = paragraphAnalyses?.find(
+              a => a.sentence.trim().toLowerCase() === activeSentenceText?.trim().toLowerCase() ||
+                   a.sentence.includes(activeSentenceText || '') ||
+                   (activeSentenceText || '').includes(a.sentence)
+            ) || paragraphAnalyses?.[0]; // Fallback to first
+
             return (
               <div 
                 key={p.id} 
                 className={`paragraph-block ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveParagraphId(isActive ? null : p.id)}
+                style={{ padding: '1rem', margin: '0.5rem 0', borderRadius: '12px' }}
               >
-                <div style={{ color: 'white', lineHeight: '1.75' }}>
-                  {p.englishText}
+                <div style={{ color: 'white', lineHeight: '1.8' }}>
+                  {sentences.map((sentence, sIdx) => {
+                    const isSentenceActive = activeSentenceText === sentence && activeParagraphId === p.id;
+                    return (
+                      <span 
+                        key={sIdx}
+                        className={`interactive-sentence ${isSentenceActive ? 'active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSentenceClick(p, sentence);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          display: 'inline',
+                          backgroundColor: isSentenceActive ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
+                          color: isSentenceActive ? 'var(--primary)' : 'inherit',
+                          borderBottom: isSentenceActive ? '2px solid var(--primary)' : 'none',
+                          fontWeight: isSentenceActive ? '600' : 'normal'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSentenceActive) {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                            e.currentTarget.style.color = '#fff';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSentenceActive) {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.color = 'inherit';
+                          }
+                        }}
+                      >
+                        {sentence}{' '}
+                      </span>
+                    );
+                  })}
                 </div>
-                {isActive && (
-                  <div className="translation-text">
-                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '0.2rem' }}>
-                      문단 번역 및 핵심 해석
-                    </span>
-                    {p.koreanTranslation}
+
+                {/* 1. Loading state */}
+                {analyzingParagraphId === p.id && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(6, 182, 212, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
+                    <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
+                    <span>AI가 이 문단의 모든 문장 정밀 분석 중... (첫 1회만 수행)</span>
+                  </div>
+                )}
+
+                {/* 2. Error state */}
+                {isActive && analysisError && activeSentenceText && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                    <span>⚠️ {analysisError}</span>
+                    <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }} onClick={() => handleSentenceClick(p, activeSentenceText)}>
+                      다시 시도
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. Detailed Sentence Analysis Display */}
+                {isActive && activeAnalysis && activeSentenceText && (
+                  <div className="sentence-analysis-box animate-slide-down" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.03)', borderRadius: '8px', borderLeft: '3px solid var(--primary)' }}>
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.12)', color: 'var(--primary)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        한글 번역
+                      </span>
+                      <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.85rem', color: '#e2e8f0', fontWeight: '500', lineHeight: '1.6' }}>
+                        {activeAnalysis.translation}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                      {/* Vocabulary & Expressions */}
+                      {((activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) || (activeAnalysis.expressions && activeAnalysis.expressions.length > 0)) && (
+                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
+                            🔤 주요 어휘 &amp; 표현
+                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            {activeAnalysis.vocabulary?.map((v: any, vIdx: number) => (
+                              <div key={vIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
+                                <strong style={{ color: 'var(--secondary)' }}>{v.word}</strong>: {v.meaning}
+                              </div>
+                            ))}
+                            {activeAnalysis.expressions?.map((e: any, eIdx: number) => (
+                              <div key={eIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.25rem' }}>
+                                <strong style={{ color: 'var(--success)' }}>{e.expression}</strong>: {e.meaning}
+                                {e.contextNote && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>({e.contextNote})</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Grammar structure */}
+                      {activeAnalysis.grammar && (
+                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
+                            ⚖️ 구문 &amp; 문법 구조
+                          </span>
+                          <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                            {activeAnalysis.grammar}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Context Analysis */}
+                      {activeAnalysis.context && (
+                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
+                            🌐 문맥 &amp; 흐름 분석
+                          </span>
+                          <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                            {activeAnalysis.context}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

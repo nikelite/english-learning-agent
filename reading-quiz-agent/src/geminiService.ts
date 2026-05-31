@@ -1,4 +1,4 @@
-import { ReadingLesson, ReadingVocabulary } from './types';
+import { ReadingLesson, ReadingVocabulary, SentenceAnalysis } from './types';
 
 // Preloaded Premium Reading Lessons (Upgraded to TOEFL 7th Grade Style with English Questions and Citing Korean Rationales)
 export const PRESET_READING_LESSONS: ReadingLesson[] = [
@@ -509,3 +509,120 @@ Ensure the response is a single, valid JSON object and nothing else. Do not wrap
     throw new Error(error.message || "단어 분석 중 오류가 발생했습니다.");
   }
 }
+
+// Dynamically analyze a paragraph sentence by sentence using Gemini
+export async function analyzeParagraphSentences(
+  paragraphText: string,
+  passageText: string,
+  apiKey: string
+): Promise<SentenceAnalysis[]> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+  }
+
+  const cleanPara = paragraphText.trim();
+  if (!cleanPara) {
+    throw new Error("분석할 문단 텍스트가 비어 있습니다.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an elite academic English linguist and ESL curriculum developer.
+Analyze the sentences in the following English paragraph:
+"""
+${cleanPara}
+"""
+which is part of this larger reading passage:
+"""
+${passageText}
+"""
+
+Split the paragraph into its individual, complete English sentences. For each sentence, generate a highly detailed linguistic analysis in the following strict JSON format:
+[
+  {
+    "sentence": "The original complete English sentence",
+    "translation": "High-fidelity, natural Korean translation of this sentence",
+    "vocabulary": [
+      {
+        "word": "important word",
+        "meaning": "contextual meaning in Korean"
+      }
+    ],
+    "expressions": [
+      {
+        "expression": "idiom or phrase",
+        "meaning": "meaning in Korean",
+        "contextNote": "why/how it is used in this context"
+      }
+    ],
+    "grammar": "Detailed explanation of key grammatical structures, clauses, syntax, or structural elements in this sentence, in Korean.",
+    "context": "Contextual explanation of this sentence's role inside the paragraph (e.g. introduces the topic, provides supporting evidence, transitions, wraps up), in Korean."
+  }
+]
+
+Ensure the response is a single, valid JSON array of objects and nothing else. Do not wrap in markdown code blocks.`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1
+    }
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+      throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error("Gemini가 유효한 분석결과를 반환하지 않았습니다.");
+    }
+
+    const parsed = JSON.parse(responseText);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Gemini가 문장 분석 결과를 배열 형식으로 반환하지 않았습니다.");
+    }
+
+    return parsed.map((item: any) => ({
+      sentence: item.sentence || "",
+      translation: item.translation || "",
+      vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
+        word: v.word || "",
+        meaning: v.meaning || ""
+      })) : [],
+      expressions: Array.isArray(item.expressions) ? item.expressions.map((e: any) => ({
+        expression: e.expression || "",
+        meaning: e.meaning || "",
+        contextNote: e.contextNote || ""
+      })) : [],
+      grammar: item.grammar || "문법 분석이 제공되지 않았습니다.",
+      context: item.context || "문맥 분석이 제공되지 않았습니다."
+    }));
+  } catch (error: any) {
+    console.error("Gemini Paragraph Sentences Analysis Error:", error);
+    throw new Error(error.message || "문단 내 문장 분석 중 오류가 발생했습니다.");
+  }
+}
+
