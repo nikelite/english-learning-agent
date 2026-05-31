@@ -436,13 +436,12 @@ export default function App() {
 
   const handleAddCustomVocabulary = (newVocab: ReadingVocabulary) => {
     if (!activeLesson) return;
-    setActiveLesson(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        vocabulary: [newVocab, ...prev.vocabulary]
-      };
-    });
+    const updatedLesson = {
+      ...activeLesson,
+      vocabulary: [newVocab, ...activeLesson.vocabulary]
+    };
+    setActiveLesson(updatedLesson);
+    saveLessonToHistory(updatedLesson);
   };
 
   return (
