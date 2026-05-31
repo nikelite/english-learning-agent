@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzeParagraphSentences } from '../geminiService';
+import { loadParagraphAnalysisFromCloud, saveParagraphAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -102,18 +103,43 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       return;
     }
 
+    setAnalyzingParagraphId(paragraph.id);
+    try {
+      // 1. Try fetching from Cloud Cache first
+      const cloudCached = await loadParagraphAnalysisFromCloud(lesson.id, paragraph.id);
+      if (cloudCached && cloudCached.length > 0) {
+        setAnalysisCache(prev => ({
+          ...prev,
+          [paragraph.id]: cloudCached
+        }));
+        setAnalyzingParagraphId(null);
+        return;
+      }
+    } catch (err) {
+      console.warn("Failed to load paragraph analysis from cloud cache:", err);
+    }
+
+    // 2. If not found in Cloud, generate using Gemini API (requires api key)
     if (!apiKey) {
+      setAnalyzingParagraphId(null);
       setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시면 실시간 AI 문장 상세 과외 분석이 활성화됩니다.");
       return;
     }
 
-    setAnalyzingParagraphId(paragraph.id);
     try {
       const result = await analyzeParagraphSentences(paragraph.englishText, lesson.passageText, apiKey);
+      
+      // Save locally
       setAnalysisCache(prev => ({
         ...prev,
         [paragraph.id]: result
       }));
+      
+      // Save to Cloud Cache asynchronously so other users/sessions can load instantly
+      saveParagraphAnalysisToCloud(lesson.id, paragraph.id, result).catch(cloudErr => {
+        console.warn("Failed to save paragraph analysis to cloud cache:", cloudErr);
+      });
+
     } catch (err: any) {
       console.error("Failed to analyze paragraph sentences:", err);
       setAnalysisError(err.message || "AI 문장 분석 중 오류가 발생했습니다.");

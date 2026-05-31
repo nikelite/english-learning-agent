@@ -14,7 +14,7 @@ import {
   deleteDoc,
   addDoc
 } from 'firebase/firestore';
-import { ReadingLesson, AppStats, WrongReadingAnswer } from './types';
+import { ReadingLesson, AppStats, WrongReadingAnswer, SentenceAnalysis } from './types';
 
 // Embedded Firebase Configuration for User's english-agent project
 const firebaseConfig = {
@@ -440,3 +440,42 @@ export async function sendEmailReport(
     console.error("Firebase sendEmailReport failed:", error);
   }
 }
+
+/**
+ * Saves dynamically generated paragraph sentence-level analyses to Cloud Firestore for sharing/caching
+ */
+export async function saveParagraphAnalysisToCloud(
+  lessonId: string,
+  paragraphId: number,
+  analysis: SentenceAnalysis[]
+): Promise<void> {
+  try {
+    const docId = `${lessonId}_${paragraphId}`;
+    const analysisRef = doc(db, 'paragraph_analyses', docId);
+    await setDoc(analysisRef, { analysis, createdAt: Date.now() });
+  } catch (error) {
+    console.error("Firebase save paragraph analysis failed:", error);
+  }
+}
+
+/**
+ * Loads cached paragraph sentence-level analyses from Cloud Firestore
+ */
+export async function loadParagraphAnalysisFromCloud(
+  lessonId: string,
+  paragraphId: number
+): Promise<SentenceAnalysis[] | null> {
+  try {
+    const docId = `${lessonId}_${paragraphId}`;
+    const analysisRef = doc(db, 'paragraph_analyses', docId);
+    const docSnap = await getDoc(analysisRef);
+    if (docSnap.exists()) {
+      return docSnap.data().analysis as SentenceAnalysis[];
+    }
+    return null;
+  } catch (error) {
+    console.error("Firebase load paragraph analysis failed:", error);
+    return null;
+  }
+}
+
