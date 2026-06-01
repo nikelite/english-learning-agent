@@ -5,7 +5,7 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
-import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson } from './geminiService';
+import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -53,6 +53,7 @@ export default function App() {
   const [titleInput, setTitleInput] = useState('');
   const [comprehensionCount, setComprehensionCount] = useState<number>(3);
   const [vocabCount, setVocabCount] = useState<number>(2);
+  const [sentenceLimit, setSentenceLimit] = useState<number>(75);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -336,19 +337,108 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const generated = await generateReadingLesson(text, apiKey, comprehensionCount, vocabCount);
-      if (titleInput.trim()) {
-        generated.title = titleInput.trim();
+      // 1. Semantic split using AI determineSemanticChapters + sentence limit
+      const splitLessons = await splitPassageIntoLessons(text, titleInput, sentenceLimit, apiKey);
+      
+      if (splitLessons.length === 0) {
+        throw new Error("지문 분석 결과 단원을 분할하지 못했습니다.");
       }
-      setActiveLesson(generated);
-      setViewMode('split');
-      setInputText('');
-      setTitleInput('');
-      saveLessonToHistory(generated);
+
+      if (splitLessons.length === 1) {
+        // Single part: generate immediately (classic experience)
+        const singlePlaceholder = splitLessons[0];
+        const generated = await generateReadingLesson(singlePlaceholder.passageText, apiKey, comprehensionCount, vocabCount);
+        generated.title = singlePlaceholder.title; // Keep semantic title
+        
+        setActiveLesson(generated);
+        setViewMode('split');
+        setInputText('');
+        setTitleInput('');
+        await saveLessonToHistory(generated);
+      } else {
+        // Multiple parts: add all as placeholders to history and notify the user
+        const generatedLessons: ReadingLesson[] = [];
+        for (const lesson of splitLessons) {
+          let updatedLesson = { ...lesson };
+          if (userId) {
+            try {
+              setSyncStatus('syncing');
+              const docId = await saveLessonToCloud(lesson, userId);
+              updatedLesson = {
+                ...lesson,
+                id: docId,
+                ownerId: userId,
+                sharedWith: lesson.sharedWith || []
+              };
+            } catch (err) {
+              console.error("Failed to upload placeholder lesson to cloud:", err);
+            }
+          }
+          generatedLessons.push(updatedLesson);
+        }
+
+        // Single batch update for local storage state to avoid race conditions
+        setLessonsHistory(prev => {
+          const generatedIds = new Set(generatedLessons.map(l => l.id));
+          const generatedTitles = new Set(generatedLessons.map(l => l.title));
+          const filtered = prev.filter(item => !generatedIds.has(item.id) && !generatedTitles.has(item.title));
+          const updated = [...generatedLessons, ...filtered];
+          localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+          return updated;
+        });
+
+        setSyncStatus(userId ? 'synced' : 'idle');
+        setInputText('');
+        setTitleInput('');
+        
+        alert(`📚 [지문 분량 초과 분할 분석]\n\n입력하신 긴 본문이 주제별/길이별로 총 ${splitLessons.length}개의 학습 단원(Part)으로 자동 분할되어 아래 보관함에 대기 상태로 등록되었습니다.\n\n원하시는 단원의 [학습 개시] 버튼을 누르면 해당 파트만 즉시 AI 정밀 분석이 실행됩니다!`);
+      }
     } catch (err: any) {
       setError(err.message || "지문 분석에 실패했습니다.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // On-demand Lazy Loading trigger
+  const handleStartLesson = async (item: ReadingLesson) => {
+    setIsSharedQuiz(false); // Reset shared banner when playing own history
+
+    if (item.isPending) {
+      if (!apiKey) {
+        setError("지문을 마저 분석하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        // 1. Generate lesson details on-demand using the saved passageText
+        const generated = await generateReadingLesson(item.passageText, apiKey, comprehensionCount, vocabCount);
+        
+        // 2. Merge into the placeholder (keeping same ID, title, createdAt, ownerId, and setting isPending to false)
+        const completedLesson: ReadingLesson = {
+          ...item,
+          paragraphs: generated.paragraphs,
+          vocabulary: generated.vocabulary,
+          quizzes: generated.quizzes,
+          isPending: false
+        };
+
+        // 3. Save/sync the completed lesson back to lessonsHistory & Cloud
+        await saveLessonToHistory(completedLesson);
+
+        // 4. Set as active lesson and open split-view
+        setActiveLesson(completedLesson);
+        setViewMode('split');
+      } catch (err: any) {
+        setError(err.message || "지문 실시간 대기 학습 생성 중 오류가 발생했습니다.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Classic instant open
+      setActiveLesson(item);
+      setViewMode('split');
     }
   };
 
@@ -555,6 +645,23 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Text Chunking Sentence Limit Selector */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>지문 분할 기준 (문장 수)</label>
+                  <select
+                    value={sentenceLimit}
+                    onChange={(e) => setSentenceLimit(Number(e.target.value))}
+                    className="select-glow"
+                    disabled={isLoading}
+                  >
+                    <option value={30}>30 문장 (짧은 단원 - 빠른 훈련)</option>
+                    <option value={50}>50 문장 (일반 단원)</option>
+                    <option value={75}>75 문장 (기본값 - 표준 학습)</option>
+                    <option value={100}>100 문장 (심층 학습 - 긴 본문)</option>
+                    <option value={150}>150 문장 (초장문 학습 - 고난도)</option>
+                  </select>
+                </div>
+
                 {error && (
                   <div style={{ display: 'flex', gap: '0.4rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.08)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.15)', alignItems: 'flex-start' }}>
                     <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -687,11 +794,7 @@ export default function App() {
                   }).map((item) => (
                     <div
                       key={item.id}
-                      onClick={() => {
-                        setActiveLesson(item);
-                        setIsSharedQuiz(false); // Reset shared banner when playing own history
-                        setViewMode('split');
-                      }}
+                      onClick={() => handleStartLesson(item)}
                       className="eli5-analogy-box"
                       style={{
                         margin: 0,
@@ -702,9 +805,10 @@ export default function App() {
                         padding: '1rem',
                         background: 'rgba(255,255,255,0.02)',
                         borderLeftWidth: '4px',
-                        borderLeftColor: 'var(--secondary)',
+                        borderLeftColor: item.isPending ? 'var(--text-muted)' : 'var(--secondary)',
                         transition: 'transform 0.15s ease, background 0.15s ease',
-                        borderRadius: '0 8px 8px 0'
+                        borderRadius: '0 8px 8px 0',
+                        opacity: item.isPending ? 0.85 : 1
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
@@ -720,10 +824,16 @@ export default function App() {
                           <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                             📅 {new Date(item.createdAt).toLocaleDateString()}
                           </span>
-                           <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
-                            📝 {item.quizzes.length} 문항
-                          </span>
-                          {item.userAnswers ? (
+                          {!item.isPending && (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                              📝 {item.quizzes.length} 문항
+                            </span>
+                          )}
+                          {item.isPending ? (
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'none', padding: '0.1rem 0.4rem', fontWeight: 'bold' }}>
+                              ⏳ 분석 대기중
+                            </span>
+                          ) : item.userAnswers ? (
                             <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: 'bold' }}>
                               ✅ 풀이 완료 ({item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / {item.quizzes.length})
                             </span>
@@ -753,10 +863,14 @@ export default function App() {
 
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartLesson(item);
+                          }}
                           className="btn btn-secondary"
                           style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
                         >
-                          {item.userAnswers ? "📊 결과 분석" : "학습 개시"}
+                          {item.isPending ? "학습 개시" : item.userAnswers ? "📊 결과 분석" : "학습 개시"}
                         </button>
                         <button
                           onClick={(e) => handleDeleteHistory(e, item.id)}

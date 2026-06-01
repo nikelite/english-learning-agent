@@ -631,3 +631,217 @@ Ensure the response is a single, valid JSON object where keys are the Paragraph 
   }
 }
 
+interface SemanticChapter {
+  title: string;
+  startParagraphIndex: number;
+  endParagraphIndex: number;
+}
+
+/**
+ * Uses Gemini API to semantically analyze the passage paragraph structure 
+ * and group them into natural chapters/sections with engaging titles.
+ */
+export async function determineSemanticChapters(
+  passageText: string,
+  apiKey: string
+): Promise<SemanticChapter[]> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+  }
+
+  const cleanText = passageText.trim();
+  if (!cleanText) {
+    throw new Error("지문 내용이 비어 있습니다.");
+  }
+
+  // Split into raw paragraphs (by double newlines)
+  const paragraphs = cleanText
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length <= 1) {
+    // Single paragraph or less, no split needed
+    return [{
+      title: "기본 단원",
+      startParagraphIndex: 0,
+      endParagraphIndex: 0
+    }];
+  }
+
+  // Create lightweight outline: index + first 100 characters of each paragraph
+  const outline = paragraphs.map((p, idx) => {
+    const snippet = p.length > 100 ? `${p.substring(0, 100)}...` : p;
+    return `[Paragraph ${idx}]: "${snippet}"`;
+  }).join('\n\n');
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an elite academic textbook editor and ESL curriculum architect.
+Your task is to analyze the outline of a long English passage and group its paragraphs semantically into coherent, natural thematic chapters/sections.
+
+Here is the paragraph outline with corresponding index numbers:
+${outline}
+
+Group these paragraphs logically by topic, narrative progression, or subject shift.
+You must return the grouping in the following strict JSON array format. Every paragraph index MUST be assigned to exactly one chapter, sequentially:
+[
+  {
+    "title": "A highly engaging thematic title in Korean for this section (e.g. 우주 탐사의 역사)",
+    "startParagraphIndex": 0,
+    "endParagraphIndex": 4
+  }
+]
+
+Ensure the JSON is fully valid. Do not omit any paragraph index. Start with index 0 and end with the last index (${paragraphs.length - 1}).
+Do not wrap the output in markdown code blocks. Output strictly valid JSON.`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1
+    }
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+      throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error("Gemini가 유효한 분석결과를 반환하지 않았습니다.");
+    }
+
+    const parsed = JSON.parse(responseText);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Gemini가 단원 분할 결과를 배열 형식으로 반환하지 않았습니다.");
+    }
+
+    return parsed.map((item: any) => ({
+      title: item.title || "새로운 단원",
+      startParagraphIndex: typeof item.startParagraphIndex === 'number' ? item.startParagraphIndex : 0,
+      endParagraphIndex: typeof item.endParagraphIndex === 'number' ? item.endParagraphIndex : 0
+    }));
+  } catch (error: any) {
+    console.error("Gemini determineSemanticChapters error:", error);
+    // Fallback: entire passage as a single chapter
+    return [{
+      title: "전체 지문",
+      startParagraphIndex: 0,
+      endParagraphIndex: paragraphs.length - 1
+    }];
+  }
+}
+
+/**
+ * Splits a long text passage semantically by chapters, and then sequentially by sentence thresholds,
+ * returning an array of placeholder lessons awaiting lazy on-demand generation.
+ */
+export async function splitPassageIntoLessons(
+  passageText: string,
+  titleInput: string,
+  sentenceLimit: number,
+  apiKey: string
+): Promise<ReadingLesson[]> {
+  const cleanText = passageText.trim();
+  if (!cleanText) {
+    throw new Error("지문 내용이 비어 있습니다.");
+  }
+
+  // 1. Split into paragraphs
+  const paragraphs = cleanText
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) return [];
+
+  // 2. Fetch semantic chapters via lightweight outline Gemini check
+  const semanticChapters = await determineSemanticChapters(cleanText, apiKey);
+  
+  const baseTitle = titleInput.trim() || cleanText.substring(0, 20).replace(/\n/g, ' ') + '...';
+  const lessons: ReadingLesson[] = [];
+
+  // 3. Process each semantic chapter
+  for (let chIdx = 0; chIdx < semanticChapters.length; chIdx++) {
+    const chapter = semanticChapters[chIdx];
+    
+    // Safety check indices
+    const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
+    const endIdx = Math.max(startIdx, Math.min(chapter.endParagraphIndex, paragraphs.length - 1));
+    
+    // Reconstruct chapter text
+    const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
+    const chapterText = chapterParagraphs.join('\n\n');
+    
+    // Split chapter text into sentences
+    const sentences = chapterText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [chapterText];
+    
+    if (sentences.length <= sentenceLimit) {
+      // Create a single placeholder lesson for this chapter
+      const lessonTitle = semanticChapters.length > 1
+        ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title}`
+        : baseTitle;
+
+      lessons.push({
+        id: `reading-pending-${Date.now()}-${chIdx}-${Math.random().toString(36).substring(2, 6)}`,
+        title: lessonTitle,
+        passageText: chapterText,
+        createdAt: Date.now() - chIdx * 1000,
+        paragraphs: [],
+        vocabulary: [],
+        quizzes: [],
+        isPending: true
+      });
+    } else {
+      // Exceeds threshold: split chapter locally into parts
+      const totalParts = Math.ceil(sentences.length / sentenceLimit);
+      for (let pIdx = 0; pIdx < totalParts; pIdx++) {
+        const startSentenceIdx = pIdx * sentenceLimit;
+        const endSentenceIdx = Math.min(startSentenceIdx + sentenceLimit, sentences.length);
+        const partSentences = sentences.slice(startSentenceIdx, endSentenceIdx);
+        const partText = partSentences.join(' ');
+
+        const lessonTitle = semanticChapters.length > 1
+          ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title} (Part ${pIdx + 1}/${totalParts})`
+          : `${baseTitle} - Part ${pIdx + 1}/${totalParts}`;
+
+        lessons.push({
+          id: `reading-pending-${Date.now()}-${chIdx}-${pIdx}-${Math.random().toString(36).substring(2, 6)}`,
+          title: lessonTitle,
+          passageText: partText,
+          createdAt: Date.now() - (chIdx * 1000 + pIdx * 100),
+          paragraphs: [],
+          vocabulary: [],
+          quizzes: [],
+          isPending: true
+        });
+      }
+    }
+  }
+
+  return lessons;
+}
+
