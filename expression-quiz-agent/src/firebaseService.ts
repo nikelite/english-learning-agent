@@ -453,3 +453,25 @@ export async function sendEmailReport(
     console.error("Firebase sendEmailReport failed:", error);
   }
 }
+
+/**
+ * Queries and loads all quiz attempts of another target User ID from the cloud
+ */
+export async function loadUserQuizAttemptsFromCloud(targetUserId: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, 'expression_quiz_attempts'), 
+      where('userId', '==', targetUserId.trim())
+    );
+    const querySnap = await getDocs(q);
+    const attempts: any[] = [];
+    querySnap.forEach((docSnap) => {
+      attempts.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    // Sort by timestamp descending (newest first)
+    return attempts.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  } catch (error: any) {
+    console.error("Firebase load user attempts failed:", error);
+    throw new Error(`사용자 퀴즈 기록 조회 실패: ${error.message || "알 수 없는 오류"}`);
+  }
+}
