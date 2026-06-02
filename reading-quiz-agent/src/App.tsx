@@ -57,6 +57,13 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [splitConfirm, setSplitConfirm] = useState<{
+    show: boolean;
+    detectedCount: number;
+    text: string;
+    title: string;
+  }>({ show: false, detectedCount: 0, text: '', title: '' });
+
   // 5. Active Lesson State (default to wood wide web preset)
   const [activeLesson, setActiveLesson] = useState<ReadingLesson | null>(() => {
     return PRESET_READING_LESSONS[0] || null;
@@ -315,40 +322,50 @@ export default function App() {
     }
   }, []);
 
-  const handleSaveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('eng_reading_api_key', key);
+  // English sentence counter matching geminiService split algorithm
+  const countEnglishSentences = (txt: string): number => {
+    const sentences: string[] = [];
+    const rawLines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of rawLines) {
+      const matches = line.match(/[^.!?]+[.!?]+(?:\s+|$)/g);
+      if (matches && matches.length > 0) {
+        sentences.push(...matches.map(m => m.trim()));
+        const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);
+        const remaining = line.substring(lastMatchIdx + matches[matches.length - 1].length).trim();
+        if (remaining) {
+          sentences.push(remaining);
+        }
+      } else {
+        sentences.push(line);
+      }
+    }
+    
+    const isEnglishSentence = (s: string): boolean => {
+      const latinChars = (s.match(/[a-zA-Z]/g) || []).length;
+      return latinChars >= 5;
+    };
+    return sentences.filter(isEnglishSentence).length;
   };
 
-  // AI custom generation trigger
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const text = inputText.trim();
-
-    if (!text) {
-      setError("분석할 독해 지문을 입력해 주세요.");
-      return;
-    }
-    if (!apiKey) {
-      setError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시거나, 아래 추천 프리셋 지문을 체험해 보세요!");
-      return;
-    }
-
+  const executeAnalysis = async (text: string, title: string, shouldSplit: boolean) => {
+    setSplitConfirm(prev => ({ ...prev, show: false }));
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // 1. Semantic split using AI determineSemanticChapters + sentence limit
-      const splitLessons = await splitPassageIntoLessons(text, titleInput, sentenceLimit, apiKey);
+      // If user chooses NOT to split, bypass by setting an extremely large limit
+      const limitToUse = shouldSplit ? sentenceLimit : 999999;
+      const splitLessons = await splitPassageIntoLessons(text, title, limitToUse, apiKey);
       
       if (splitLessons.length === 0) {
         throw new Error("지문 분석 결과 단원을 분할하지 못했습니다.");
       }
 
       if (splitLessons.length === 1) {
-        // Single part: generate immediately (classic experience)
+        // Single part: generate immediately
         const singlePlaceholder = splitLessons[0];
         const generated = await generateReadingLesson(singlePlaceholder.passageText, apiKey, comprehensionCount, vocabCount);
-        generated.title = singlePlaceholder.title; // Keep semantic title
+        generated.title = singlePlaceholder.title;
         
         setActiveLesson(generated);
         setViewMode('split');
@@ -356,7 +373,7 @@ export default function App() {
         setTitleInput('');
         await saveLessonToHistory(generated);
       } else {
-        // Multiple parts: add all as placeholders to history and notify the user
+        // Multiple parts
         const generatedLessons: ReadingLesson[] = [];
         for (const lesson of splitLessons) {
           let updatedLesson = { ...lesson };
@@ -377,7 +394,6 @@ export default function App() {
           generatedLessons.push(updatedLesson);
         }
 
-        // Single batch update for local storage state to avoid race conditions
         setLessonsHistory(prev => {
           const generatedIds = new Set(generatedLessons.map(l => l.id));
           const generatedTitles = new Set(generatedLessons.map(l => l.title));
@@ -391,12 +407,47 @@ export default function App() {
         setInputText('');
         setTitleInput('');
         
-        alert(`📚 [지문 분량 초과 분할 분석]\n\n입력하신 긴 본문이 주제별/길이별로 총 ${splitLessons.length}개의 학습 단원(Part)으로 자동 분할되어 아래 보관함에 대기 상태로 등록되었습니다.\n\n원하시는 단원의 [학습 개시] 버튼을 누르면 해당 파트만 즉시 AI 정밀 분석이 실행됩니다!`);
+        alert(`📚 [지문 분량 초과 분할 분석]\n\n입력하신 긴 본문이 주제별/길이별로 총 ${splitLessons.length}개의 학습 단원(Part)으로 자동 분할되어 아래 보관함에 대기 상태로 등록되었습니다.`);
       }
     } catch (err: any) {
-      setError(err.message || "지문 분석에 실패했습니다.");
+      setError(err.message || "지문 생성 중 알 수 없는 에러가 발생했습니다.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('eng_reading_api_key', key);
+  };
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const text = inputText.trim();
+
+    if (!text) {
+      setError("분석할 독해 지문을 입력해 주세요.");
+      return;
+    }
+    if (!apiKey) {
+      setError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시거나, 아래 추천 프리셋 지문을 체험해 보세요!");
+      return;
+    }
+
+    const engCount = countEnglishSentences(text);
+    
+    // Ask user if they want to split when the sentence count exceeds the configured limit
+    if (engCount > sentenceLimit) {
+      setSplitConfirm({
+        show: true,
+        detectedCount: engCount,
+        text: text,
+        title: titleInput
+      });
+    } else {
+      // Trigger execution directly without confirmation if it fits in 1 single part anyway
+      await executeAnalysis(text, titleInput, false);
     }
   };
 
@@ -950,6 +1001,53 @@ export default function App() {
           isOpen={isShareOpen}
           onClose={() => setIsShareOpen(false)}
         />
+      )}
+
+      {/* Smart Split Confirmation Modal */}
+      {splitConfirm.show && (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+          <div className="modal-content" style={{ maxWidth: '480px', padding: '2rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🤖</div>
+            <h3 style={{ fontSize: '1.25rem', color: 'white', marginBottom: '0.75rem', fontWeight: 'bold' }}>
+              지문 스마트 분석 검출
+            </h3>
+            
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+              이 지문에서 총 <strong style={{ color: 'var(--secondary)' }}>{splitConfirm.detectedCount}개</strong>의 영어 문장이 감지되었습니다.<br />
+              설정하신 분할 기준(<strong style={{ color: 'var(--primary)' }}>{sentenceLimit}문장</strong>)을 초과합니다.
+            </p>
+            
+            <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', fontSize: '0.775rem', color: 'var(--text-muted)', borderStyle: 'dashed' }}>
+              💡 여러 단원으로 분할하면 보관함에 <strong>Part 1, Part 2...</strong> 형태로 대기 세트가 생성되며, 하나씩 순차 학습이 가능합니다.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <button
+                onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, true)}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '0.85rem' }}
+              >
+                ✂️ {Math.ceil(splitConfirm.detectedCount / sentenceLimit)}개 단원으로 분할하여 저장
+              </button>
+              
+              <button
+                onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, false)}
+                className="btn btn-accent"
+                style={{ width: '100%', padding: '0.85rem' }}
+              >
+                📖 분할 없이 전체 한 번에 즉시 학습
+              </button>
+              
+              <button
+                onClick={() => setSplitConfirm(prev => ({ ...prev, show: false }))}
+                className="btn btn-secondary"
+                style={{ width: '100%', padding: '0.85rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)' }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
