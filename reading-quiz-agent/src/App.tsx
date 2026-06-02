@@ -826,30 +826,30 @@ export default function App() {
                             📅 {new Date(item.createdAt).toLocaleDateString()}
                           </span>
                           {!item.isPending && (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.15)', color: 'var(--secondary)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
                               📝 {item.quizzes.length} 문항
                             </span>
                           )}
                           {item.isPending ? (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'none', padding: '0.1rem 0.4rem', fontWeight: 'bold' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
                               ⏳ 분석 대기중
                             </span>
                           ) : item.userAnswers ? (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: 'bold' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
                               ✅ 풀이 완료 ({item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / {item.quizzes.length})
                             </span>
                           ) : (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: 'none', padding: '0.1rem 0.4rem' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
                               📖 미풀이
                             </span>
                           )}
                           {item.ownerId && item.ownerId !== userId && (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(236,72,153,0.12)', color: 'var(--accent)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
                               📥 {item.ownerId}님 공유
                             </span>
                           )}
                           {item.ownerId && item.ownerId === userId && (
-                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: 'none', padding: '0.1rem 0.4rem', fontWeight: '700' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
                               ☁️ My 클라우드
                             </span>
                           )}
