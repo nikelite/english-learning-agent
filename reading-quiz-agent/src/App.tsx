@@ -808,7 +808,8 @@ export default function App() {
                         borderLeftColor: item.isPending ? 'var(--text-muted)' : 'var(--secondary)',
                         transition: 'transform 0.15s ease, background 0.15s ease',
                         borderRadius: '0 8px 8px 0',
-                        opacity: item.isPending ? 0.85 : 1
+                        opacity: item.isPending ? 0.85 : 1,
+                        overflow: 'hidden'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
@@ -861,7 +862,7 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

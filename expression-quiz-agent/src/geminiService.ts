@@ -38,7 +38,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "Though"
         ],
         correctIndex: 1,
-        rationale: "빈칸 뒤에 'the loud noise'(시끄러운 소음)라는 명사 덩어리만 존재하므로, 명사를 이끄는 전치사인 'Despite'가 정답입니다. Although, Even though, Though는 모두 뒤에 주어+동사를 동반하는 접속사이므로 이 자리에 올 수 없습니다."
+        rationale: "빈칸 뒤에 'the loud noise'(시끄러운 소음)라는 명사 덩어리만 존재하므로, 명사를 이끄는 전치사인 'Despite'(B번)가 정답입니다. A번 Although, C번 Even though, D번 Though는 모두 뒤에 주어+동사를 동반하는 접속사이므로 이 자리에 올 수 없습니다."
       },
       {
         id: "q-da-2",
@@ -50,7 +50,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "Even though the bad weather, they went out."
         ],
         correctIndex: 2,
-        rationale: "'In spite of'는 'Despite'와 마찬가지로 전치사이며, 뒤에 명사구인 'the bad weather'를 취했으므로 올바른 문장입니다. 1, 4번은 명사구 앞에 접속사 Although/Even though를 써서 틀렸고, 2번은 주어+동사 문장 앞에 전치사 Despite를 써서 틀렸습니다."
+        rationale: "'In spite of'는 'Despite'와 마찬가지로 전치사이며, 뒤에 명사구인 'the bad weather'를 취했으므로 올바른 문장입니다(C번). A, D번은 명사구 앞에 접속사 Although/Even though를 써서 틀렸고, B번은 주어+동사 문장 앞에 전치사 Despite를 써서 틀렸습니다."
       },
       {
         id: "q-da-3",
@@ -62,7 +62,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "despite of"
         ],
         correctIndex: 2,
-        rationale: "합쳐진 문장 빈칸 뒤에 'she(주어) was(동사) very tired'가 오고 있습니다. 주어와 동사를 이끄는 것은 양보의 접속사 'although'입니다. despite와 in spite of는 전치사라서 안 되며, 'despite of'는 존재하지 않는 엉터리 표현입니다."
+        rationale: "합쳐진 문장 빈칸 뒤에 'she(주어) was(동사) very tired'가 오고 있습니다. 주어와 동사를 이끄는 것은 양보의 접속사 'although'(C번)입니다. A번 despite와 B번 in spite of는 전치사라서 안 되며, D번 'despite of'는 존재하지 않는 엉터리 표현입니다."
       },
       {
         id: "q-da-4",
@@ -74,7 +74,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "Despite - In spite of"
         ],
         correctIndex: 0,
-        rationale: "1번 문장은 'we(주어) ran(동사) fast'이므로 접속사 'Although'가 적절하고, 2번 문장은 'our fast running'(우리의 빠른 달리기)이라는 동명사/명사구이므로 전치사 'Despite'가 적합합니다."
+        rationale: "A번이 정답입니다. 1) 문장은 'we(주어) ran(동사) fast'이므로 접속사 'Although'가 적절하고, 2) 문장은 'our fast running'(우리의 빠른 달리기)이라는 동명사/명사구이므로 전치사 'Despite'가 적합합니다. B번은 순서가 반대이고, C번 'In spite'는 단독으로 쓸 수 없으며, D번은 둘 다 전치사라 절을 이끌 수 없습니다."
       },
       {
         id: "q-da-5",
@@ -86,7 +86,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "notwithstanding"
         ],
         correctIndex: 2,
-        rationale: "빈칸 뒤의 'feeling extremely unwell'은 동명사(-ing) 덩어리입니다. 따라서 명사/동명사를 목적어로 취하는 전치사 Despite, In spite of, Notwithstanding(격식체 전치사)은 모두 사용 가능합니다. 반면 접속사인 Although는 뒤에 주어+동사(Although I felt~) 형태로 와야 하므로 들어갈 수 없습니다."
+        rationale: "빈칸 뒤의 'feeling extremely unwell'은 동명사(-ing) 덩어리입니다. 따라서 명사/동명사를 목적어로 취하는 전치사 A번 Despite, B번 In spite of, D번 Notwithstanding(격식체 전치사)은 모두 사용 가능합니다. 반면 접속사인 C번 Although는 뒤에 주어+동사(Although I felt~) 형태로 와야 하므로 들어갈 수 없습니다."
       }
     ]
   },
@@ -126,7 +126,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "frightened - frightened"
         ],
         correctIndex: 1,
-        rationale: "영화(It)는 무서움을 뿜어내는 '원인'이므로 현재분사인 'frightening'이 알맞고, 나(I)는 그 영화 때문에 무서움을 당해 느낀 '피해자(체험자)'이므로 과거분사 'frightened'가 들어맞습니다."
+        rationale: "B번이 정답입니다. 영화(It)는 무서움을 뿜어내는 '원인'이므로 현재분사인 'frightening'이 알맞고, 나(I)는 그 영화 때문에 무서움을 당해 느낀 '피해자(체험자)'이므로 과거분사 'frightened'가 들어맞습니다. A번은 순서가 반대이고, C번과 D번은 두 빈칸에 같은 분사를 넣어 의미가 맞지 않습니다."
       },
       {
         id: "q-bb-2",
@@ -138,7 +138,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "We felt confusing during the class."
         ],
         correctIndex: 2,
-        rationale: "선생님의 설명(Explanation)이 혼란을 유발하는 원인이므로 'confusing'이 맞습니다. 1번은 설명 자체가 감정을 느끼고 혼란스러워한다는 황당한 소리가 되며, 2, 4번은 혼란을 느낀 주체(We)이므로 'confused'를 써야 맞습니다."
+        rationale: "선생님의 설명(Explanation)이 혼란을 유발하는 원인이므로 C번 'confusing'이 맞습니다. A번은 설명 자체가 감정을 느끼고 혼란스러워한다는 황당한 소리가 되며, B, D번은 혼란을 느낀 주체(We)이므로 'confused'를 써야 맞습니다."
       },
       {
         id: "q-bb-3",
@@ -150,7 +150,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "excitedly"
         ],
         correctIndex: 1,
-        rationale: "복권에 당첨된 제레미(Jeremy)가 엄청난 신남을 느끼는 '상태'이므로 과거분사 형용사인 'excited'가 들어와야 합니다. exciting은 제레미가 남들을 엄청 흥분시키는 존재라는 뜻이 됩니다."
+        rationale: "복권에 당첨된 제레미(Jeremy)가 엄청난 신남을 느끼는 '상태'이므로 과거분사 형용사인 B번 'excited'가 들어와야 합니다. A번 exciting은 제레미가 남들을 엄청 흥분시키는 존재라는 뜻이 되며, C번 excite는 동사 원형이라 be동사 뒤에 올 수 없고, D번 excitedly는 부사라 보어 자리에 부적합합니다."
       },
       {
         id: "q-bb-4",
@@ -162,7 +162,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "love -> loving"
         ],
         correctIndex: 1,
-        rationale: "새로운 도시를 방문하는 것(Visiting new cities)은 집돌이인 나에게 따분함을 주는 '원인'입니다. 사물 성격의 동명사 구가 주어이므로 bored(지루함을 느끼는)를 boring(지루함을 유발하는)으로 고쳐야 올바릅니다."
+        rationale: "B번이 정답입니다. 새로운 도시를 방문하는 것(Visiting new cities)은 집돌이인 나에게 따분함을 주는 '원인'입니다. 사물 성격의 동명사 구가 주어이므로 bored(지루함을 느끼는)를 boring(지루함을 유발하는)으로 고쳐야 올바릅니다. A번 Visiting→Visit은 동명사 주어 변경과 무관하고, C번과 D번은 문법적으로 문제가 없는 부분을 고치려는 오류입니다."
       },
       {
         id: "q-bb-5",
@@ -174,7 +174,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "amused - amused"
         ],
         correctIndex: 2,
-        rationale: "첫 번째 빈칸은 쇼(show)가 즐거움을 주는 원인이므로 현재분사 'amusing', 두 번째 빈칸은 마술에 의해 아이들(children)이 즐거움을 느꼈으므로 과거분사 'amused'가 올바른 조합입니다."
+        rationale: "C번이 정답입니다. 첫 번째 빈칸은 쇼(show)가 즐거움을 주는 원인이므로 현재분사 'amusing', 두 번째 빈칸은 마술에 의해 아이들(children)이 즐거움을 느꼈으므로 과거분사 'amused'가 올바른 조합입니다. A번은 순서가 반대이고, B번과 D번은 두 빈칸에 같은 분사를 넣어 부적절합니다."
       }
     ]
   }
@@ -218,7 +218,7 @@ Strict Schema Requirements:
         "Four plausible multiple-choice options. Make them highly deceptive based on the wrong answers mentioned in the prompt."
       ],
       "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
-      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect or grammatically invalid in this context."
+      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect or grammatically invalid in this context. CRITICAL: Use letter labels A번, B번, C번, D번 (NOT numbers like 1번, 2번, 3번, 4번) to reference choices. choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번."
     }
   ]
 }
@@ -335,12 +335,40 @@ export async function generateLessonFromText(
         const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
         const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
 
+        // Remap A/B/C/D labels in rationale to match shuffled order
+        const LABELS = ['A', 'B', 'C', 'D'];
+        const oldToNewIdx: Record<number, number> = {};
+        choicesWithIndex.forEach((item: any, newIdx: number) => {
+          oldToNewIdx[item.cIdx] = newIdx;
+        });
+        let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+        // Phase 1: Replace old labels → temp placeholders (avoid collision)
+        const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
+        LABELS.forEach((label, oldIdx) => {
+          if (oldToNewIdx[oldIdx] !== undefined) {
+            const temp = TEMP[oldToNewIdx[oldIdx]];
+            remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+          }
+        });
+        // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
+        for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
+          if (oldToNewIdx[oldIdx] !== undefined) {
+            const numStr = `${oldIdx + 1}번`;
+            const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
+            remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
+          }
+        }
+        // Phase 2: Replace temp placeholders → final labels
+        TEMP.forEach((temp, idx) => {
+          remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
+        });
+
         return {
           id: q.id || `q-${Date.now()}-${index}`,
           question: q.question || "문제가 생성되지 않았습니다.",
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
-          rationale: q.rationale || "상세 해설이 없습니다."
+          rationale: remappedRationale
         };
       })
     };

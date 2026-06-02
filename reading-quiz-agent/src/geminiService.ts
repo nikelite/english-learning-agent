@@ -82,7 +82,7 @@ export const PRESET_READING_LESSONS: ReadingLesson[] = [
           "They communicate primarily through their leaves waving in the wind."
         ],
         correctIndex: 1,
-        rationale: "정답은 2번입니다.\n\n본문의 첫 번째 문장을 인용하면: \"Trees are not isolated individuals... but are instead members of a complex, highly connected subterranean community.\" (나무들은 고립된 개체들이 아니라 지하에서 서로 긴밀하게 연결된 공동체의 구성원이다)라고 명시되어 있습니다.\n\n오답 설명:\n- 1번: \"isolated individuals(고립된 개체)\"가 아니라고 원문에서 명확히 부인하고 있으므로 오답입니다.\n- 3번: 단순한 햇빛 경쟁(\"competing for sunlight\")을 넘어서는 관계라고 설명했으므로 오답입니다.\n- 4번: 지하 균사체망으로 연결된다고 하였으므로 나뭇잎 흔들림으로 대화한다는 것은 전혀 어울리지 않습니다.",
+        rationale: "정답은 B번입니다.\n\n본문의 첫 번째 문장을 인용하면: \"Trees are not isolated individuals... but are instead members of a complex, highly connected subterranean community.\" (나무들은 고립된 개체들이 아니라 지하에서 서로 긴밀하게 연결된 공동체의 구성원이다)라고 명시되어 있습니다.\n\n오답 설명:\n- A번: \"isolated individuals(고립된 개체)\"가 아니라고 원문에서 명확히 부인하고 있으므로 오답입니다.\n- C번: 단순한 햇빛 경쟁(\"competing for sunlight\")을 넘어서는 관계라고 설명했으므로 오답입니다.\n- D번: 지하 균사체망으로 연결된다고 하였으므로 나뭇잎 흔들림으로 대화한다는 것은 전혀 어울리지 않습니다.",
         type: "comprehension"
       },
       {
@@ -95,7 +95,7 @@ export const PRESET_READING_LESSONS: ReadingLesson[] = [
           "They send predatory insects to attack the neighboring tree."
         ],
         correctIndex: 1,
-        rationale: "정답은 2번입니다.\n\n원문의 4-5번째 문장을 인용하면: \"When an individual tree is attacked... it can transmit warning chemical signals... neighboring trees immediately synthesize defensive chemicals... to deter the impending invasion.\" (한 나무가 해충의 공격을 받으면 경보 화학 신호를 보내고, 이웃 나무들은 침입을 막기 위해 방어용 화학물질을 합성한다)라고 설명합니다. 따라서 침입에 대비해 자신을 보호할 생물학적 방어를 수립한다는 2번이 확실한 추론입니다.\n\n오답 설명:\n- 1번: 물 흡수를 멈춘다는 언급은 전혀 나타나 있지 않습니다.\n- 3번: 나무는 스스로 뿌리 위치를 이동(\"relocate their root systems\")할 수 없으므로 비현실적인 설명입니다.\n- 4번: 이웃 나무들이 해충을 보내어 원래 나무를 공격하게 한다는 것은 지문의 흐름과 완전히 어긋납니다.",
+        rationale: "정답은 B번입니다.\n\n원문의 4-5번째 문장을 인용하면: \"When an individual tree is attacked... it can transmit warning chemical signals... neighboring trees immediately synthesize defensive chemicals... to deter the impending invasion.\" (한 나무가 해충의 공격을 받으면 경보 화학 신호를 보내고, 이웃 나무들은 침입을 막기 위해 방어용 화학물질을 합성한다)라고 설명합니다. 따라서 침입에 대비해 자신을 보호할 생물학적 방어를 수립한다는 B번이 확실한 추론입니다.\n\n오답 설명:\n- A번: 물 흡수를 멈춘다는 언급은 전혀 나타나 있지 않습니다.\n- C번: 나무는 스스로 뿌리 위치를 이동(\"relocate their root systems\")할 수 없으므로 비현실적인 설명입니다.\n- D번: 이웃 나무들이 해충을 보내어 원래 나무를 공격하게 한다는 것은 지문의 흐름과 완전히 어긋납니다.",
         type: "comprehension"
       },
       {
@@ -108,7 +108,7 @@ export const PRESET_READING_LESSONS: ReadingLesson[] = [
           "observe (관찰하다)"
         ],
         correctIndex: 2,
-        rationale: "정답은 3번입니다.\n\n본문의 다섯 번째 문장을 인용하면: \"Upon receiving the signal, neighboring trees immediately synthesize defensive chemicals... to deter the impending invasion.\" (신호를 받으면 이웃 나무들은 다가올 침입을 'deter'하기 위해 방어 물질을 합성한다)라고 되어 있습니다. 닥쳐올 외침을 저지하고 단념시키기 위한 행동이므로 'deter'의 유의어는 'prevent(막다, 방지하다)'가 가장 적합합니다.\n\n오답 설명:\n- 1번 encourage(격려하다)와 2번 accelerate(가속하다)는 침입을 도와주는 꼴이 되므로 문맥상 맞지 않는 반대말입니다.\n- 4번 observe(관찰하다)는 방어 화학물질을 합성해 능동적으로 대항하는 본문의 어조를 담아내지 못합니다.",
+        rationale: "정답은 C번입니다.\n\n본문의 다섯 번째 문장을 인용하면: \"Upon receiving the signal, neighboring trees immediately synthesize defensive chemicals... to deter the impending invasion.\" (신호를 받으면 이웃 나무들은 다가올 침입을 'deter'하기 위해 방어 물질을 합성한다)라고 되어 있습니다. 닥쳐올 외침을 저지하고 단념시키기 위한 행동이므로 'deter'의 유의어는 'prevent(막다, 방지하다)'가 가장 적합합니다.\n\n오답 설명:\n- A번 encourage(격려하다)와 B번 accelerate(가속하다)는 침입을 도와주는 꼴이 되므로 문맥상 맞지 않는 반대말입니다.\n- D번 observe(관찰하다)는 방어 화학물질을 합성해 능동적으로 대항하는 본문의 어조를 담아내지 못합니다.",
         type: "vocab"
       },
       {
@@ -121,7 +121,7 @@ export const PRESET_READING_LESSONS: ReadingLesson[] = [
           "Through bird species that carry mineral deposits between tree hollows."
         ],
         correctIndex: 1,
-        rationale: "정답은 2번입니다.\n\n본문의 세 번째 문장을 인용하면: \"Through this network, which scientists affectionately call the 'Wood Wide Web,' trees can share vital nutrients...\" (과학자들이 '우드 와이드 웹'이라고 부르는 이 네트워크를 통해 영양소를 공유한다)라고 구체적으로 밝히고 있습니다.\n\n오답 설명:\n- 1번: 구름 속으로 수분을 뿜어 비를 내리게 한다는 공상적인 설명은 본문에 없습니다.\n- 3번: 썩은 가지가 거름이 된다는 일반 지식은 본문에서 언급하는 지하 통신망의 설명이 아닙니다.\n- 4번: 새가 미네랄을 옮겨준다는 주장은 지문에 전혀 존재하지 않는 엉뚱한 정보입니다.",
+        rationale: "정답은 B번입니다.\n\n본문의 세 번째 문장을 인용하면: \"Through this network, which scientists affectionately call the 'Wood Wide Web,' trees can share vital nutrients...\" (과학자들이 '우드 와이드 웹'이라고 부르는 이 네트워크를 통해 영양소를 공유한다)라고 구체적으로 밝히고 있습니다.\n\n오답 설명:\n- A번: 구름 속으로 수분을 뿜어 비를 내리게 한다는 공상적인 설명은 본문에 없습니다.\n- C번: 썩은 가지가 거름이 된다는 일반 지식은 본문에서 언급하는 지하 통신망의 설명이 아닙니다.\n- D번: 새가 미네랄을 옮겨준다는 주장은 지문에 전혀 존재하지 않는 엉뚱한 정보입니다.",
         type: "comprehension"
       },
       {
@@ -134,7 +134,7 @@ export const PRESET_READING_LESSONS: ReadingLesson[] = [
           "dangerous (위험한)"
         ],
         correctIndex: 1,
-        rationale: "정답은 2번입니다.\n\n본문의 두 번째 문장을 인용하면: \"Beneath the forest floor lies a vast, intricate network of fungal threads...\" (숲 바닥 아래에는 균사체로 이루어진 거대하고 'intricate'한 통신망이 놓여 있다)라고 나옵니다. 거미줄이나 인터넷처럼 얽히고설킨 정교하고 복잡한 네트워크를 묘사하므로 'complex'가 문맥상 유의어입니다.\n\n오답 설명:\n- 1번 simple(단순한)은 복잡하고 광대한 균사체 망의 설명과 반대되는 단어입니다.\n- 3번 temporary(임시의)는 본문에서 묘사하는 거대한 생태학적 상시 망과 조화를 이루지 못합니다.\n- 4번 dangerous(위험한)는 이 망이 나무들에게 생명선이자 도움을 주는 순기능을 하므로 문맥상 어색합니다.",
+        rationale: "정답은 B번입니다.\n\n본문의 두 번째 문장을 인용하면: \"Beneath the forest floor lies a vast, intricate network of fungal threads...\" (숲 바닥 아래에는 균사체로 이루어진 거대하고 'intricate'한 통신망이 놓여 있다)라고 나옵니다. 거미줄이나 인터넷처럼 얽히고설킨 정교하고 복잡한 네트워크를 묘사하므로 'complex'가 문맥상 유의어입니다.\n\n오답 설명:\n- A번 simple(단순한)은 복잡하고 광대한 균사체 망의 설명과 반대되는 단어입니다.\n- C번 temporary(임시의)는 본문에서 묘사하는 거대한 생태학적 상시 망과 조화를 이루지 못합니다.\n- D번 dangerous(위험한)는 이 망이 나무들에게 생명선이자 도움을 주는 순기능을 하므로 문맥상 어색합니다.",
         type: "vocab"
       }
     ]
@@ -254,8 +254,9 @@ Strict Target & Formatting Rules:
 3. EASY & DETAILED KOREAN RATIONALES (오답 해설):
    - The 'rationale' (해설) for each quiz MUST be written in simple, clear, and highly encouraging KOREAN.
    - IMPORTANT: To prove the correct/incorrect answers, you MUST DIRECTLY CITE AND QUOTE the exact original English sentence(s) from the passage in your Korean rationale, translating and explaining them step-by-step.
-    - Format: "정답은 X번입니다. [원문 인용 문장]에 의하면... 따라서 ~의 의미가 되므로 X가 적절합니다."
-    - Dissect why each of the other three wrong choices is incorrect or misleading by referencing the passage details.
+    - CRITICAL LABEL RULE: You MUST use letter labels A, B, C, D (NOT numbers like 1번, 2번, 3번, 4번) to refer to each choice. choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번.
+    - Format: "정답은 A번입니다. [원문 인용 문장]에 의하면... 따라서 ~의 의미가 되므로 A가 적절합니다."
+    - Dissect why each of the other three wrong choices (e.g. B번, C번, D번) is incorrect or misleading by referencing the passage details.
 4. CORE STUDY ITEMS (VIBRANT VOCABULARY & ANALYSIS LIST):
    - The 'vocabulary' array MUST contain at least 6 key items extracted from the passage, representing a balanced mix of:
      - 'vocabulary': Key academic/TOEFL vocabulary words.
@@ -403,12 +404,40 @@ export async function generateReadingLesson(
         const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
         const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
 
+        // Remap A/B/C/D labels in rationale to match shuffled order
+        const LABELS = ['A', 'B', 'C', 'D'];
+        const oldToNewIdx: Record<number, number> = {};
+        choicesWithIndex.forEach((item: any, newIdx: number) => {
+          oldToNewIdx[item.cIdx] = newIdx;
+        });
+        let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+        // Phase 1: Replace old labels → temp placeholders (avoid collision)
+        const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
+        LABELS.forEach((label, oldIdx) => {
+          if (oldToNewIdx[oldIdx] !== undefined) {
+            const temp = TEMP[oldToNewIdx[oldIdx]];
+            remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+          }
+        });
+        // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
+        for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
+          if (oldToNewIdx[oldIdx] !== undefined) {
+            const numStr = `${oldIdx + 1}번`;
+            const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
+            remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
+          }
+        }
+        // Phase 2: Replace temp placeholders → final labels
+        TEMP.forEach((temp, idx) => {
+          remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
+        });
+
         return {
           id: q.id || `q-${Date.now()}-${idx}`,
           question: q.question || "문제가 생성되지 않았습니다.",
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
-          rationale: q.rationale || "상세 해설이 없습니다.",
+          rationale: remappedRationale,
           type: q.type === 'vocab' ? 'vocab' : 'comprehension'
         };
       })
@@ -799,7 +828,14 @@ export async function splitPassageIntoLessons(
     // Split chapter text into sentences
     const sentences = chapterText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [chapterText];
     
-    if (sentences.length <= sentenceLimit) {
+    // Count only English sentences for splitting threshold (Korean annotations don't count toward limit)
+    const isEnglishSentence = (s: string): boolean => {
+      const latinChars = (s.match(/[a-zA-Z]/g) || []).length;
+      return latinChars >= 5;
+    };
+    const englishSentenceCount = sentences.filter(isEnglishSentence).length;
+    
+    if (englishSentenceCount <= sentenceLimit) {
       // Create a single placeholder lesson for this chapter
       const lessonTitle = semanticChapters.length > 1
         ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title}`
@@ -816,13 +852,30 @@ export async function splitPassageIntoLessons(
         isPending: true
       });
     } else {
-      // Exceeds threshold: split chapter locally into parts
-      const totalParts = Math.ceil(sentences.length / sentenceLimit);
+      // Exceeds threshold: split chapter locally by English sentence count
+      const parts: string[][] = [];
+      let currentPart: string[] = [];
+      let engCount = 0;
+      
+      for (const sentence of sentences) {
+        currentPart.push(sentence);
+        if (isEnglishSentence(sentence)) {
+          engCount++;
+        }
+        // Cut when English sentence limit is reached (but not for the last part)
+        if (engCount >= sentenceLimit && parts.length < Math.ceil(englishSentenceCount / sentenceLimit) - 1) {
+          parts.push(currentPart);
+          currentPart = [];
+          engCount = 0;
+        }
+      }
+      if (currentPart.length > 0) {
+        parts.push(currentPart);
+      }
+
+      const totalParts = parts.length;
       for (let pIdx = 0; pIdx < totalParts; pIdx++) {
-        const startSentenceIdx = pIdx * sentenceLimit;
-        const endSentenceIdx = Math.min(startSentenceIdx + sentenceLimit, sentences.length);
-        const partSentences = sentences.slice(startSentenceIdx, endSentenceIdx);
-        const partText = partSentences.join(' ');
+        const partText = parts[pIdx].join(' ');
 
         const lessonTitle = semanticChapters.length > 1
           ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title} (Part ${pIdx + 1}/${totalParts})`
