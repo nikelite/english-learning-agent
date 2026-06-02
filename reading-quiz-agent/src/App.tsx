@@ -353,19 +353,11 @@ export default function App() {
     setError(null);
     
     try {
-      // If user chooses NOT to split, bypass by setting an extremely large limit
-      const limitToUse = shouldSplit ? sentenceLimit : 999999;
-      const splitLessons = await splitPassageIntoLessons(text, title, limitToUse, apiKey);
-      
-      if (splitLessons.length === 0) {
-        throw new Error("지문 분석 결과 단원을 분할하지 못했습니다.");
-      }
-
-      if (splitLessons.length === 1) {
-        // Single part: generate immediately
-        const singlePlaceholder = splitLessons[0];
-        const generated = await generateReadingLesson(singlePlaceholder.passageText, apiKey, comprehensionCount, vocabCount);
-        generated.title = singlePlaceholder.title;
+      if (!shouldSplit) {
+        // [Bypass splitting entirely] Generate the lesson immediately using the whole raw text
+        const baseTitle = title.trim() || text.substring(0, 20).replace(/\n/g, ' ') + '...';
+        const generated = await generateReadingLesson(text, apiKey, comprehensionCount, vocabCount);
+        generated.title = baseTitle;
         
         setActiveLesson(generated);
         setViewMode('split');
@@ -373,41 +365,61 @@ export default function App() {
         setTitleInput('');
         await saveLessonToHistory(generated);
       } else {
-        // Multiple parts
-        const generatedLessons: ReadingLesson[] = [];
-        for (const lesson of splitLessons) {
-          let updatedLesson = { ...lesson };
-          if (userId) {
-            try {
-              setSyncStatus('syncing');
-              const docId = await saveLessonToCloud(lesson, userId);
-              updatedLesson = {
-                ...lesson,
-                id: docId,
-                ownerId: userId,
-                sharedWith: lesson.sharedWith || []
-              };
-            } catch (err) {
-              console.error("Failed to upload placeholder lesson to cloud:", err);
-            }
-          }
-          generatedLessons.push(updatedLesson);
-        }
-
-        setLessonsHistory(prev => {
-          const generatedIds = new Set(generatedLessons.map(l => l.id));
-          const generatedTitles = new Set(generatedLessons.map(l => l.title));
-          const filtered = prev.filter(item => !generatedIds.has(item.id) && !generatedTitles.has(item.title));
-          const updated = [...generatedLessons, ...filtered];
-          localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
-          return updated;
-        });
-
-        setSyncStatus(userId ? 'synced' : 'idle');
-        setInputText('');
-        setTitleInput('');
+        // Only run splitting logic if the user explicitly wants to split
+        const splitLessons = await splitPassageIntoLessons(text, title, sentenceLimit, apiKey);
         
-        alert(`📚 [지문 분량 초과 분할 분석]\n\n입력하신 긴 본문이 주제별/길이별로 총 ${splitLessons.length}개의 학습 단원(Part)으로 자동 분할되어 아래 보관함에 대기 상태로 등록되었습니다.`);
+        if (splitLessons.length === 0) {
+          throw new Error("지문 분석 결과 단원을 분할하지 못했습니다.");
+        }
+  
+        if (splitLessons.length === 1) {
+          // Single part: generate immediately
+          const singlePlaceholder = splitLessons[0];
+          const generated = await generateReadingLesson(singlePlaceholder.passageText, apiKey, comprehensionCount, vocabCount);
+          generated.title = singlePlaceholder.title;
+          
+          setActiveLesson(generated);
+          setViewMode('split');
+          setInputText('');
+          setTitleInput('');
+          await saveLessonToHistory(generated);
+        } else {
+          // Multiple parts: save placeholders to history
+          const generatedLessons: ReadingLesson[] = [];
+          for (const lesson of splitLessons) {
+            let updatedLesson = { ...lesson };
+            if (userId) {
+              try {
+                setSyncStatus('syncing');
+                const docId = await saveLessonToCloud(lesson, userId);
+                updatedLesson = {
+                  ...lesson,
+                  id: docId,
+                  ownerId: userId,
+                  sharedWith: lesson.sharedWith || []
+                };
+              } catch (err) {
+                console.error("Failed to upload placeholder lesson to cloud:", err);
+              }
+            }
+            generatedLessons.push(updatedLesson);
+          }
+  
+          setLessonsHistory(prev => {
+            const generatedIds = new Set(generatedLessons.map(l => l.id));
+            const generatedTitles = new Set(generatedLessons.map(l => l.title));
+            const filtered = prev.filter(item => !generatedIds.has(item.id) && !generatedTitles.has(item.title));
+            const updated = [...generatedLessons, ...filtered];
+            localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+            return updated;
+          });
+  
+          setSyncStatus(userId ? 'synced' : 'idle');
+          setInputText('');
+          setTitleInput('');
+          
+          alert(`📚 [지문 분량 초과 분할 분석]\n\n입력하신 긴 본문이 주제별/길이별로 총 ${splitLessons.length}개의 학습 단원(Part)으로 자동 분할되어 아래 보관함에 대기 상태로 등록되었습니다.`);
+        }
       }
     } catch (err: any) {
       setError(err.message || "지문 생성 중 알 수 없는 에러가 발생했습니다.");
