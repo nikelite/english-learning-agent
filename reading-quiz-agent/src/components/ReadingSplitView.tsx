@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences } from '../geminiService';
@@ -42,6 +42,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [analysisCache, setAnalysisCache] = useState<Record<number, SentenceAnalysis[]>>({});
   const [analyzingParagraphId, setAnalyzingParagraphId] = useState<number | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const bgFetchTriggeredRef = useRef<boolean>(false);
 
   // Quiz States
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -63,6 +64,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setAnalyzingParagraphId(null);
     setAnalysisError(null);
     setActiveParagraphId(null);
+    bgFetchTriggeredRef.current = false;
     
     if (lesson.userAnswers) {
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
@@ -109,6 +111,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
       if (cloudCached && Object.keys(cloudCached).length > 0) {
         setAnalysisCache(cloudCached);
+        bgFetchTriggeredRef.current = true;
         setAnalyzingParagraphId(null);
         return;
       }
@@ -116,7 +119,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       console.warn("Failed to load passage analysis from cloud cache:", err);
     }
 
-    // 2. If not found in Cloud, generate the entire passage analysis at once via Gemini API
+    // 2. If not found in Cloud, generate the analysis in 2 phases (Fast paragraph first + silent background fetch)
     if (!apiKey) {
       setAnalyzingParagraphId(null);
       setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시면 실시간 AI 문장 상세 과외 분석이 활성화됩니다.");
@@ -124,25 +127,45 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
 
     try {
-      // Analyze all paragraphs in the entire passage in a single, highly efficient API call
-      const result = await analyzePassageSentences(
-        lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
-        lesson.passageText,
+      // PHASE 1: Analyze only the CURRENT clicked paragraph immediately for blazing fast feedback! (Takes ~1-2s)
+      const currentResult = await analyzePassageSentences(
+        [{ id: paragraph.id, englishText: paragraph.englishText }],
+        paragraph.englishText,
         apiKey
       );
       
-      // Save locally (all paragraphs populated at once!)
-      setAnalysisCache(result);
-      
-      // Save the entire passage analysis to Cloud Cache asynchronously
-      savePassageAnalysisToCloud(lesson.id, result).catch(cloudErr => {
-        console.warn("Failed to save passage analysis to cloud cache:", cloudErr);
-      });
+      // Instantly inject the current paragraph result and hide spinner to reveal details!
+      setAnalysisCache(prev => ({ ...prev, ...currentResult }));
+      setAnalyzingParagraphId(null); 
+
+      // PHASE 2: Trigger silent background async fetch for the rest of the passage to populate cache!
+      if (!bgFetchTriggeredRef.current) {
+        bgFetchTriggeredRef.current = true;
+        (async () => {
+          try {
+            console.log("Starting background silence analysis for the rest of the passage...");
+            const fullResult = await analyzePassageSentences(
+              lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
+              lesson.passageText,
+              apiKey
+            );
+            
+            // Merge full results into cache silently
+            setAnalysisCache(prev => ({ ...prev, ...fullResult }));
+            
+            // Cache the entire analysis to Cloud Firestore
+            await savePassageAnalysisToCloud(lesson.id, fullResult);
+            console.log("Background silence passage analysis cached successfully!");
+          } catch (bgErr) {
+            console.warn("Background silence passage analysis failed:", bgErr);
+            bgFetchTriggeredRef.current = false;
+          }
+        })();
+      }
 
     } catch (err: any) {
-      console.error("Failed to analyze passage sentences:", err);
+      console.error("Failed to analyze current sentence:", err);
       setAnalysisError(err.message || "AI 문장 분석 중 오류가 발생했습니다.");
-    } finally {
       setAnalyzingParagraphId(null);
     }
   };
