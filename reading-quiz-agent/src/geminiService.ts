@@ -825,8 +825,22 @@ export async function splitPassageIntoLessons(
     const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
     const chapterText = chapterParagraphs.join('\n\n');
     
-    // Split chapter text into sentences
-    const sentences = chapterText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [chapterText];
+    // Robust sentence splitter supporting mixed English/Korean layout and varied punctuation
+    const sentences: string[] = [];
+    const rawLines = chapterText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of rawLines) {
+      const matches = line.match(/[^.!?]+[.!?]+(?:\s+|$)/g);
+      if (matches && matches.length > 0) {
+        sentences.push(...matches.map(m => m.trim()));
+        const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);
+        const remaining = line.substring(lastMatchIdx + matches[matches.length - 1].length).trim();
+        if (remaining) {
+          sentences.push(remaining);
+        }
+      } else {
+        sentences.push(line);
+      }
+    }
     
     // Count only English sentences for splitting threshold (Korean annotations don't count toward limit)
     const isEnglishSentence = (s: string): boolean => {
