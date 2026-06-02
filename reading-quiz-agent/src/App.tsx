@@ -1061,6 +1061,35 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Full-screen Cyber Loading Overlay */}
+      {isLoading && (
+        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 10, 0.85)', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: '20px', boxShadow: 'var(--shadow-glow)', maxWidth: '400px', width: '90%', textAlign: 'center' }}>
+            <div className="pulse-glow" style={{ width: '64px', height: '64px', background: 'rgba(6, 182, 212, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--secondary)', animation: 'spin 4s linear infinite' }}>
+              <Sparkles size={28} style={{ color: 'var(--secondary)' }} />
+            </div>
+            
+            <div>
+              <h3 style={{ fontSize: '1.15rem', color: 'white', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                AI 정밀 분석 및 출제 중
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                Gemini AI가 영어 지문을 다각도로 분석하고<br />
+                맞춤형 실전 퀴즈를 출제하는 중입니다.<br />
+                <span style={{ color: 'var(--secondary)', fontWeight: '600' }}>약 10 ~ 15초 정도 소요됩니다.</span>
+              </p>
+            </div>
+            
+            {/* Loading dots */}
+            <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.5rem' }}>
+              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--secondary)', borderRadius: '50%' }}></span>
+              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
+              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--accent)', borderRadius: '50%' }}></span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
