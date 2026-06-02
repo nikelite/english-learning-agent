@@ -98,7 +98,7 @@ h1, h2, h3, h4, h5 {
 
 .dashboard-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 380px minmax(0, 1fr);
   gap: 1.5rem;
   padding: 1.5rem 0 3rem 0;
   align-items: start;
