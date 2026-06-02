@@ -635,7 +635,9 @@ export default function App() {
                         borderLeftWidth: '4px',
                         borderLeftColor: 'var(--secondary)',
                         transition: 'transform 0.15s ease, background 0.15s ease',
-                        borderRadius: '0 8px 8px 0'
+                        borderRadius: '0 8px 8px 0',
+                        overflow: 'hidden',
+                        flexShrink: 0
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(255,255,255,0.04)';

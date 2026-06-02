@@ -809,7 +809,8 @@ export default function App() {
                         transition: 'transform 0.15s ease, background 0.15s ease',
                         borderRadius: '0 8px 8px 0',
                         opacity: item.isPending ? 0.85 : 1,
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flexShrink: 0
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
