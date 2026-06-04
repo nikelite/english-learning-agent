@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck } from 'lucide-react';
 import { Lesson, QuizItem } from '../types';
 
@@ -26,7 +26,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
 
+  const lastLessonIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    // Only run initialization if switching to a different lesson
+    if (lastLessonIdRef.current === lesson.id) {
+      return;
+    }
+    lastLessonIdRef.current = lesson.id;
+
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
     setAttemptWrongs([]);
