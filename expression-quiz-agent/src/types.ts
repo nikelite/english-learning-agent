@@ -42,6 +42,7 @@ export interface Lesson {
   ownerId?: string | null;
   sharedWith?: string[];
   userAnswers?: Record<string, number>;
+  solvedAt?: number;
 }
 
 export interface WrongAnswer {

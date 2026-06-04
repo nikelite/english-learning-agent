@@ -70,9 +70,11 @@ export default function App() {
     if (defaultPreset) {
       const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
       const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
-      const userAnswers = presetsProgress[defaultPreset.id];
-      if (userAnswers) {
-        return { ...defaultPreset, userAnswers };
+      const progress = presetsProgress[defaultPreset.id];
+      if (progress) {
+        const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
+        const solvedAt = progress.solvedAt;
+        return { ...defaultPreset, userAnswers, solvedAt };
       }
     }
     return defaultPreset;
@@ -518,8 +520,13 @@ export default function App() {
   const handleLoadPreset = (preset: ReadingLesson) => {
     const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
     const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
-    const userAnswers = presetsProgress[preset.id];
-    const presetWithProgress = userAnswers ? { ...preset, userAnswers } : preset;
+    const progress = presetsProgress[preset.id];
+    let presetWithProgress = preset;
+    if (progress) {
+      const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
+      const solvedAt = progress.solvedAt;
+      presetWithProgress = { ...preset, userAnswers, solvedAt };
+    }
     
     setActiveLesson(presetWithProgress);
     setViewMode('split');
@@ -594,7 +601,8 @@ export default function App() {
     if (activeLesson) {
       const updatedLesson = {
         ...activeLesson,
-        userAnswers: userAnswers
+        userAnswers: userAnswers,
+        solvedAt: Date.now()
       };
       setActiveLesson(updatedLesson);
       saveLessonToHistory(updatedLesson);
@@ -606,14 +614,15 @@ export default function App() {
     
     const updatedLesson = {
       ...activeLesson,
-      userAnswers: userAnswers
+      userAnswers: userAnswers,
+      solvedAt: Date.now()
     };
     setActiveLesson(updatedLesson);
     
     if (activeLesson.id.startsWith('preset-')) {
       const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
       const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
-      presetsProgress[activeLesson.id] = userAnswers;
+      presetsProgress[activeLesson.id] = { userAnswers, solvedAt: Date.now() };
       localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
     } else {
       saveLessonToHistory(updatedLesson);
@@ -934,6 +943,7 @@ export default function App() {
                           ) : item.userAnswers ? (
                             <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
                               ✅ 풀이 완료 ({item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / {item.quizzes.length})
+                              {item.solvedAt && ` | 📅 ${new Date(item.solvedAt).toLocaleDateString()} ${new Date(item.solvedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
                             </span>
                           ) : (
                             <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>

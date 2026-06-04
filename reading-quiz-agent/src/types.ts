@@ -35,6 +35,7 @@ export interface ReadingLesson {
   sharedWith?: string[];
   userAnswers?: Record<string, number>;
   isPending?: boolean;
+  solvedAt?: number;
 }
 
 export interface WrongReadingAnswer {
