@@ -1,5 +1,5 @@
 {
   "extensions": {
-    "firestore-send-email-active": "firebase/firestore-send-email@0.2.9"
+    "firestore-send-email": "firebase/firestore-send-email@0.2.9"
   }
 }

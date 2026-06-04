@@ -347,7 +347,12 @@ export default function App() {
 
   // Preset lesson load trigger
   const handleLoadPreset = (preset: Lesson) => {
-    setActiveLesson(preset);
+    const savedPresetsProgress = localStorage.getItem('eng_expression_presets_progress');
+    const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+    const userAnswers = presetsProgress[preset.id];
+    const presetWithProgress = userAnswers ? { ...preset, userAnswers } : preset;
+    
+    setActiveLesson(presetWithProgress);
     setViewMode('study');
     setActiveStudyTab('eli5');
   };
@@ -428,6 +433,25 @@ export default function App() {
         userAnswers: userAnswers
       };
       setActiveLesson(updatedLesson);
+      saveLessonToHistory(updatedLesson);
+    }
+  };
+
+  const handleProgressUpdate = (userAnswers: Record<string, number>) => {
+    if (!activeLesson) return;
+    
+    const updatedLesson = {
+      ...activeLesson,
+      userAnswers: userAnswers
+    };
+    setActiveLesson(updatedLesson);
+    
+    if (activeLesson.id.startsWith('preset-')) {
+      const savedPresetsProgress = localStorage.getItem('eng_expression_presets_progress');
+      const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+      presetsProgress[activeLesson.id] = userAnswers;
+      localStorage.setItem('eng_expression_presets_progress', JSON.stringify(presetsProgress));
+    } else {
       saveLessonToHistory(updatedLesson);
     }
   };
@@ -527,6 +551,7 @@ export default function App() {
                   lesson={activeLesson}
                   onAddWrongAnswer={handleAddWrongAnswer}
                   onQuizCompleted={handleQuizCompleted}
+                  onProgressUpdate={handleProgressUpdate}
                   onBackToStudy={() => setViewMode('study')}
                   injectedQuizzes={injectedQuizzes}
                   onGraduateReview={handleGraduateReview}

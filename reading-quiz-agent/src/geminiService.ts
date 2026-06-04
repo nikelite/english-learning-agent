@@ -251,6 +251,7 @@ Strict Target & Formatting Rules:
    - All quiz questions MUST be written in academic ENGLISH.
    - All answer options (choices) MUST be written in academic ENGLISH.
    - Follow formal TOEFL/TOEIC reading formats: "According to paragraph X, which of the following is true...", "It can be inferred from paragraph Y...", "The word 'Z' in paragraph W is closest in meaning to...".
+   - CRITICAL STABILITY RULE: DO NOT mention specific sentence numbers (e.g. "sentence 3", "3번째 문장", "the second sentence", "2번 문장") anywhere in the quiz questions, choices, or rationales, as sentence numbers can be unstable. Instead, refer to paragraph numbers (e.g., "paragraph 2"), quote the text directly, or refer to the content semantically.
 3. EASY & DETAILED KOREAN RATIONALES (오답 해설):
    - The 'rationale' (해설) for each quiz MUST be written in simple, clear, and highly encouraging KOREAN.
    - IMPORTANT: To prove the correct/incorrect answers, you MUST DIRECTLY CITE AND QUOTE the exact original English sentence(s) from the passage in your Korean rationale, translating and explaining them step-by-step.

@@ -3,7 +3,9 @@
   "targets": {},
   "etags": {
     "english-agent-4e447": {
-      "extensionInstances": {}
+      "extensionInstances": {
+        "firestore-send-email": "8b3428b78e219cd443fc03b12f5fd1908c2d94a291b585bad989480ae19efd54"
+      }
     }
   }
 }

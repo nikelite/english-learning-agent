@@ -66,7 +66,16 @@ export default function App() {
 
   // 5. Active Lesson State (default to wood wide web preset)
   const [activeLesson, setActiveLesson] = useState<ReadingLesson | null>(() => {
-    return PRESET_READING_LESSONS[0] || null;
+    const defaultPreset = PRESET_READING_LESSONS[0] || null;
+    if (defaultPreset) {
+      const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
+      const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+      const userAnswers = presetsProgress[defaultPreset.id];
+      if (userAnswers) {
+        return { ...defaultPreset, userAnswers };
+      }
+    }
+    return defaultPreset;
   });
 
   // 6. Sharing mechanisms
@@ -507,7 +516,12 @@ export default function App() {
 
   // Preset load trigger
   const handleLoadPreset = (preset: ReadingLesson) => {
-    setActiveLesson(preset);
+    const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
+    const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+    const userAnswers = presetsProgress[preset.id];
+    const presetWithProgress = userAnswers ? { ...preset, userAnswers } : preset;
+    
+    setActiveLesson(presetWithProgress);
     setViewMode('split');
   };
 
@@ -583,6 +597,25 @@ export default function App() {
         userAnswers: userAnswers
       };
       setActiveLesson(updatedLesson);
+      saveLessonToHistory(updatedLesson);
+    }
+  };
+
+  const handleProgressUpdate = (userAnswers: Record<string, number>) => {
+    if (!activeLesson) return;
+    
+    const updatedLesson = {
+      ...activeLesson,
+      userAnswers: userAnswers
+    };
+    setActiveLesson(updatedLesson);
+    
+    if (activeLesson.id.startsWith('preset-')) {
+      const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
+      const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+      presetsProgress[activeLesson.id] = userAnswers;
+      localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
+    } else {
       saveLessonToHistory(updatedLesson);
     }
   };
@@ -973,6 +1006,7 @@ export default function App() {
                 lesson={activeLesson}
                 onAddWrongAnswer={handleAddWrongAnswer}
                 onQuizCompleted={handleQuizCompleted}
+                onProgressUpdate={handleProgressUpdate}
                 onOpenShare={() => setIsShareOpen(true)}
                 onBackToCreator={!isSharedQuiz ? () => setViewMode('creator') : undefined}
                 injectedQuizzes={injectedQuizzes}

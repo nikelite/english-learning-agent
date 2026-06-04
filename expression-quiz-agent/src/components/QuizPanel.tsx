@@ -6,6 +6,7 @@ interface QuizPanelProps {
   lesson: Lesson;
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
   onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>) => void;
+  onProgressUpdate: (userAnswers: Record<string, number>) => void;
   onBackToStudy: () => void;
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
@@ -15,6 +16,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   lesson,
   onAddWrongAnswer,
   onQuizCompleted,
+  onProgressUpdate,
   onBackToStudy,
   injectedQuizzes,
   onGraduateReview
@@ -28,23 +30,32 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setActiveQuizzes(injectedQuizzes);
     setSessionWrongs([]);
     setAttemptWrongs([]);
-    setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
     
     if (lesson.userAnswers) {
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
       setScore(initialScore);
-      setShowResult(true);
+      
+      const allSolved = injectedQuizzes.length > 0 && injectedQuizzes.every(q => lesson.userAnswers?.[q.id] !== undefined);
+      setShowResult(allSolved);
       setSubmittedAnswers(lesson.userAnswers);
+      
+      if (!allSolved) {
+        const startIdx = injectedQuizzes.findIndex(q => lesson.userAnswers?.[q.id] === undefined);
+        setCurrentIdx(startIdx !== -1 ? startIdx : 0);
+      } else {
+        setCurrentIdx(0);
+      }
     } else {
       setScore(0);
       setShowResult(false);
       setSubmittedAnswers({});
+      setCurrentIdx(0);
     }
     
     setSavedWrongId(null);
-  }, [lesson.id, lesson.userAnswers]);
+  }, [lesson.id, lesson.userAnswers, injectedQuizzes]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
@@ -67,10 +78,16 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setIsSubmitted(true);
     const isCorrect = selectedAns === activeQuestion.correctIndex;
     
-    setSubmittedAnswers(prev => ({
-      ...prev,
+    const newAnswers = {
+      ...submittedAnswers,
       [activeQuestion.id]: selectedAns
-    }));
+    };
+    setSubmittedAnswers(newAnswers);
+
+    // Call progress update callback if solving the main quiz
+    if (activeQuizzes.length === injectedQuizzes.length) {
+      onProgressUpdate(newAnswers);
+    }
 
     if (isCorrect) {
       setScore(prev => prev + 1);
@@ -152,7 +169,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setShowResult(false);
     setSavedWrongId(null);
 
-    // Reset completed state in parent
+    // Reset completed/progress state in parent
+    onProgressUpdate({});
     onQuizCompleted(0, 0, [], undefined);
   };
 
