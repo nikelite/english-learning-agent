@@ -343,10 +343,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       {/* LEFT PANEL: The English Reading Passage Reader */}
       <div className="glass-panel passage-panel">
         {/* Panel controls header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.1)' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--secondary)', fontWeight: '700', letterSpacing: '1px' }}>
-            ENGLISH PASSAGE
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.1)', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--secondary)', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              ENGLISH PASSAGE
+            </span>
+            <span style={{ fontSize: '0.95rem', color: 'white', fontWeight: '800', fontFamily: 'var(--font-display)' }}>
+              {lesson.title}
+            </span>
+          </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button 
@@ -371,7 +376,10 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
         {/* The Passage text content */}
         <div className="scroll-content" style={{ fontSize: `${fontSize}px` }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'white', marginBottom: '0.75rem', fontFamily: 'var(--font-display)', lineHeight: '1.4' }}>
+            {lesson.title}
+          </h1>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.5rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>
             💡 공부하고 싶은 문장을 마우스로 클릭하면 해당 문장의 한글 번역, 구문 분석(문법), 핵심 어휘 및 문맥 설명을 실시간 AI 과외 서비스로 볼 수 있습니다.
           </p>
 
