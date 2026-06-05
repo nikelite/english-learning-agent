@@ -5,7 +5,7 @@ import { Lesson, QuizItem } from '../types';
 interface QuizPanelProps {
   lesson: Lesson;
   onAddWrongAnswer: (quizItem: QuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => void;
   onProgressUpdate: (userAnswers: Record<string, number>) => void;
   onBackToStudy: () => void;
   injectedQuizzes: QuizItem[];
@@ -73,7 +73,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
 
   const activeQuestion = activeQuizzes[currentIdx];
-  const progressPercent = activeQuizzes.length > 0 ? ((currentIdx) / activeQuizzes.length) * 100 : 0;
+  const progressPercent = activeQuizzes.length > 0 ? (currentIdx / activeQuizzes.length) * 100 : 0;
 
   const handleSelect = (idx: number) => {
     if (isSubmitted) return;
@@ -92,9 +92,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     };
     setSubmittedAnswers(newAnswers);
 
-    // Call progress update callback if solving the main quiz
+    // Call progress update callback (merge with previous lesson answers if retry)
     if (activeQuizzes.length === injectedQuizzes.length) {
       onProgressUpdate(newAnswers);
+    } else {
+      const mergedAnswers = {
+        ...(lesson.userAnswers || {}),
+        ...newAnswers
+      };
+      onProgressUpdate(mergedAnswers);
     }
 
     if (isCorrect) {
@@ -158,9 +164,11 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         finalAnswers[activeQuestion.id] = selectedAns;
       }
 
-      // Only complete quiz in parent state if we are playing the full lesson (not a local incorrect retry)
+      // Complete quiz in parent state
       if (activeQuizzes.length === injectedQuizzes.length) {
         onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+      } else {
+        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
       }
     }
   };

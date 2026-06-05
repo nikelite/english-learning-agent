@@ -43,6 +43,8 @@ export interface Lesson {
   sharedWith?: string[];
   userAnswers?: Record<string, number>;
   solvedAt?: number;
+  firstAttemptScore?: { score: number; total: number };
+  retryHistory?: Array<{ score: number; total: number; solvedAt: number }>;
 }
 
 export interface WrongAnswer {

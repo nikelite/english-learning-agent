@@ -7,7 +7,7 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
 import { PRESET_LESSONS, generateLessonFromText, deserializeLesson } from './geminiService';
-import { GraduationCap, Info, BookOpen, Share2, Sparkles } from 'lucide-react';
+import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2 } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
   saveLessonToCloud, 
@@ -187,6 +187,42 @@ export default function App() {
       localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [editTitleInput, setEditTitleInput] = useState<string>('');
+
+  const handleUpdateLessonTitle = async (lessonId: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    
+    // Update active lesson title if matches
+    if (activeLesson && activeLesson.id === lessonId) {
+      setActiveLesson(prev => prev ? { ...prev, title: newTitle } : null);
+    }
+
+    let updatedLesson: Lesson | null = null;
+    setLessonsHistory(prev => {
+      const updated = prev.map(item => {
+        if (item.id === lessonId) {
+          updatedLesson = { ...item, title: newTitle };
+          return updatedLesson;
+        }
+        return item;
+      });
+      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (userId && updatedLesson) {
+      try {
+        setSyncStatus('syncing');
+        await saveLessonToCloud(updatedLesson, userId);
+        setSyncStatus('synced');
+      } catch (err: any) {
+        console.error("Failed to update lesson title in cloud:", err);
+        setSyncStatus('error');
+      }
+    }
   };
 
   const handleDeleteHistory = async (e: React.MouseEvent, lessonId: string) => {
@@ -408,7 +444,7 @@ export default function App() {
   };
 
   // Update stats on quiz completion
-  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>) => {
+  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
     const list = wrongQuestionsList || [];
 
     if (totalCount > 0) {
@@ -420,8 +456,9 @@ export default function App() {
         };
 
         if (userId && activeLesson) {
-          logQuizAttempt(userId, activeLesson.id, activeLesson.title, correctCount, totalCount, list);
-          sendEmailReport(userId, activeLesson.title, correctCount, totalCount, list, newStats);
+          const loggedTitle = isRetry ? `🔄 [재시도] ${activeLesson.title}` : activeLesson.title;
+          logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
+          sendEmailReport(userId, loggedTitle, correctCount, totalCount, list, newStats);
 
           setTimeout(() => {
             alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 리포트 메일이 발송 대기열에 추가되었습니다!`);
@@ -433,11 +470,42 @@ export default function App() {
     }
 
     if (activeLesson) {
-      const updatedLesson = {
-        ...activeLesson,
-        userAnswers: userAnswers,
-        solvedAt: Date.now()
-      };
+      let updatedLesson: Lesson;
+      if (totalCount === 0) {
+        // Reset/Restart
+        updatedLesson = {
+          ...activeLesson,
+          userAnswers: undefined,
+          firstAttemptScore: undefined,
+          retryHistory: undefined,
+          solvedAt: undefined
+        };
+      } else if (isRetry) {
+        const mergedAnswers = {
+          ...(activeLesson.userAnswers || {}),
+          ...userAnswers
+        };
+        const newRetry = {
+          score: correctCount,
+          total: totalCount,
+          solvedAt: Date.now()
+        };
+        const retryHistory = activeLesson.retryHistory ? [...activeLesson.retryHistory, newRetry] : [newRetry];
+        
+        updatedLesson = {
+          ...activeLesson,
+          userAnswers: mergedAnswers,
+          retryHistory,
+          solvedAt: Date.now()
+        };
+      } else {
+        updatedLesson = {
+          ...activeLesson,
+          userAnswers: userAnswers,
+          firstAttemptScore: { score: correctCount, total: totalCount },
+          solvedAt: Date.now()
+        };
+      }
       setActiveLesson(updatedLesson);
       saveLessonToHistory(updatedLesson);
     }
@@ -688,12 +756,22 @@ export default function App() {
                            <span style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
                             📝 {item.quizzes.length} 문항
                           </span>
-                          {item.userAnswers ? (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
-                              ✅ 풀이 완료 ({item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / {item.quizzes.length})
-                              {item.solvedAt && ` | 📅 ${new Date(item.solvedAt).toLocaleDateString()} ${new Date(item.solvedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                            </span>
-                          ) : (
+                          {item.userAnswers ? (() => {
+                            const firstScore = item.firstAttemptScore 
+                              ? `${item.firstAttemptScore.score} / ${item.firstAttemptScore.total}`
+                              : `${item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / ${item.quizzes.length}`;
+                            
+                            const retryStr = item.retryHistory && item.retryHistory.length > 0
+                              ? `, 재시도: ` + item.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
+                              : '';
+
+                            return (
+                              <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
+                                ✅ 풀이 완료 ({firstScore}{retryStr})
+                                {item.solvedAt && ` | 📅 ${new Date(item.solvedAt).toLocaleDateString()} ${new Date(item.solvedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                              </span>
+                            );
+                          })() : (
                             <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
                               📖 미풀이
                             </span>
@@ -709,9 +787,63 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.title}
-                        </h4>
+                        {editingLessonId === item.id ? (
+                          <div 
+                            style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem', marginBottom: '0.25rem' }} 
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={editTitleInput}
+                              onChange={(e) => setEditTitleInput(e.target.value)}
+                              className="input-glow"
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.8rem',
+                                borderRadius: '6px',
+                                border: '1px solid var(--primary)',
+                                background: 'rgba(0,0,0,0.4)',
+                                color: 'white',
+                                width: '100%',
+                                maxWidth: '240px'
+                              }}
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleUpdateLessonTitle(item.id, editTitleInput);
+                                  setEditingLessonId(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingLessonId(null);
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateLessonTitle(item.id, editTitleInput);
+                                setEditingLessonId(null);
+                              }}
+                              className="btn btn-primary"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              저장
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingLessonId(null);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              취소
+                            </button>
+                          </div>
+                        ) : (
+                          <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.title}
+                          </h4>
+                        )}
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
                           {item.sourceText}
                         </p>
@@ -723,6 +855,28 @@ export default function App() {
                           style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
                         >
                           {item.userAnswers ? "📊 결과 분석" : "학습 개시"}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingLessonId(item.id);
+                            setEditTitleInput(item.title);
+                          }}
+                          className="btn"
+                          style={{
+                            padding: '0.45rem',
+                            borderRadius: '6px',
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            color: 'var(--primary)',
+                            border: '1px solid rgba(139, 92, 246, 0.15)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="제목 수정"
+                        >
+                          <Edit2 size={14} />
                         </button>
                         <button
                           onClick={(e) => handleDeleteHistory(e, item.id)}

@@ -36,6 +36,8 @@ export interface ReadingLesson {
   userAnswers?: Record<string, number>;
   isPending?: boolean;
   solvedAt?: number;
+  firstAttemptScore?: { score: number; total: number };
+  retryHistory?: Array<{ score: number; total: number; solvedAt: number }>;
 }
 
 export interface WrongReadingAnswer {

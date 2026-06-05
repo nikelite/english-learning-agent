@@ -7,7 +7,7 @@ import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../fir
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
   onAddWrongAnswer: (quizItem: ReadingQuizItem, selectedAnswerIndex: number) => void;
-  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>) => void;
+  onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => void;
   onProgressUpdate: (userAnswers: Record<string, number>) => void;
   onOpenShare: () => void;
   onBackToCreator?: () => void;
@@ -209,9 +209,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     };
     setSubmittedAnswers(newAnswers);
 
-    // Call progress update callback if solving the main quiz
+    // Call progress update callback (merge with previous lesson answers if retry)
     if (activeQuizzes.length === injectedQuizzes.length) {
       onProgressUpdate(newAnswers);
+    } else {
+      const mergedAnswers = {
+        ...(lesson.userAnswers || {}),
+        ...newAnswers
+      };
+      onProgressUpdate(mergedAnswers);
     }
 
     if (isCorrect) {
@@ -277,9 +283,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         finalAnswers[activeQuestion.id] = selectedAns;
       }
 
-      // Only complete quiz in parent state if we are playing the full lesson (not a local incorrect retry)
+      // Complete quiz in parent state
       if (activeQuizzes.length === injectedQuizzes.length) {
         onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+      } else {
+        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
       }
     }
   };
