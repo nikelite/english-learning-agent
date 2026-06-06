@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences } from '../geminiService';
@@ -29,14 +29,20 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   apiKey,
   onAddCustomVocabulary
 }) => {
-  // UI preferences
-  const [fontSize, setFontSize] = useState<number>(16);
-  const [activeParagraphId, setActiveParagraphId] = useState<number | null>(null);
-  const [rightActiveTab, setRightActiveTab] = useState<'quiz' | 'vocab'>('quiz');
+  // Active questions under play (changes if user filters to 'retry incorrect')
+  const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
+  const [sessionWrongs, setSessionWrongs] = useState<ReadingQuizItem[]>([]);
+  const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
+  const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
 
-  // Custom Vocab Addition States
-  const [customInput, setCustomInput] = useState<string>('');
-  const [isCustomVocabLoading, setIsCustomVocabLoading] = useState<boolean>(false);
+  const lastLessonIdRef = useRef<string | null>(null);
+  
+  // Font scaling sizes for readability
+  const [fontSize, setFontSize] = useState(16);
+  const [rightActiveTab, setRightActiveTab] = useState<'quiz' | 'vocab'>('quiz');
+  const [activeParagraphId, setActiveParagraphId] = useState<number | null>(null);
+  const [customInput, setCustomInput] = useState('');
+  const [isCustomVocabLoading, setIsCustomVocabLoading] = useState(false);
   const [customVocabError, setCustomVocabError] = useState<string | null>(null);
 
   // Sentence click states
@@ -45,14 +51,10 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [analyzingParagraphId, setAnalyzingParagraphId] = useState<number | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const bgFetchTriggeredRef = useRef<boolean>(false);
+  const [isAnalyzingBg, setIsAnalyzingBg] = useState<boolean>(false);
 
   // Quiz States
-  const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
-  const [sessionWrongs, setSessionWrongs] = useState<ReadingQuizItem[]>([]);
-  const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
-  const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
-
-  const lastLessonIdRef = useRef<string | null>(null);
+  const [activeQuizzesState, setActiveQuizzesState] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
 
   useEffect(() => {
     // Only run initialization if switching to a different lesson
@@ -74,6 +76,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setAnalysisError(null);
     setActiveParagraphId(null);
     bgFetchTriggeredRef.current = false;
+    setIsAnalyzingBg(false);
     
     if (lesson.userAnswers) {
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
@@ -99,6 +102,67 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setSavedWrongId(null);
   }, [lesson.id, lesson.userAnswers, injectedQuizzes]);
 
+  // Background auto-fetching and analysis effect
+  useEffect(() => {
+    if (!lesson.id || lesson.id.startsWith('reading-pending-')) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    const runAutoAnalysis = async () => {
+      // 1. Try cloud cache
+      try {
+        const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
+        if (cloudCached && Object.keys(cloudCached).length > 0) {
+          if (isCurrent) {
+            setAnalysisCache(cloudCached);
+            bgFetchTriggeredRef.current = true;
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("Failed to check cloud analysis cache:", err);
+      }
+
+      // 2. If not cached, trigger silent background fetch
+      if (!bgFetchTriggeredRef.current && apiKey && lesson.paragraphs && lesson.paragraphs.length > 0) {
+        bgFetchTriggeredRef.current = true;
+        if (isCurrent) {
+          setIsAnalyzingBg(true);
+        }
+        console.log("Auto-starting background analysis for the passage...");
+        try {
+          const fullResult = await analyzePassageSentences(
+            lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
+            lesson.passageText,
+            apiKey
+          );
+          if (isCurrent) {
+            setAnalysisCache(fullResult);
+            await savePassageAnalysisToCloud(lesson.id, fullResult);
+            console.log("Auto-started passage analysis successfully cached!");
+          }
+        } catch (bgErr) {
+          console.warn("Auto background passage analysis failed:", bgErr);
+          if (isCurrent) {
+            bgFetchTriggeredRef.current = false;
+          }
+        } finally {
+          if (isCurrent) {
+            setIsAnalyzingBg(false);
+          }
+        }
+      }
+    };
+
+    runAutoAnalysis();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [lesson.id, apiKey]);
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -106,10 +170,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
 
-  const handleSentenceClick = async (paragraph: any, sentence: string) => {
-    if (analyzingParagraphId !== null) return;
-    setAnalysisError(null);
-
+  const handleSentenceClick = (paragraph: any, sentence: string) => {
     // If clicking already active sentence, close it
     if (activeSentenceText === sentence && activeParagraphId === paragraph.id) {
       setActiveSentenceText(null);
@@ -119,73 +180,30 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
     setActiveParagraphId(paragraph.id);
     setActiveSentenceText(sentence);
+    setAnalysisError(null);
+  };
 
-    if (analysisCache[paragraph.id]) {
-      return;
-    }
-
-    setAnalyzingParagraphId(paragraph.id);
-    try {
-      // 1. Try fetching the entire passage analysis from Cloud Cache first (blazing fast!)
-      const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
-      if (cloudCached && Object.keys(cloudCached).length > 0) {
-        setAnalysisCache(cloudCached);
-        bgFetchTriggeredRef.current = true;
-        setAnalyzingParagraphId(null);
-        return;
-      }
-    } catch (err) {
-      console.warn("Failed to load passage analysis from cloud cache:", err);
-    }
-
-    // 2. If not found in Cloud, generate the analysis in 2 phases (Fast paragraph first + silent background fetch)
+  const handleManualRetry = async () => {
     if (!apiKey) {
-      setAnalyzingParagraphId(null);
-      setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록하시면 실시간 AI 문장 상세 과외 분석이 활성화됩니다.");
+      setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록해 주세요.");
       return;
     }
-
+    setIsAnalyzingBg(true);
+    bgFetchTriggeredRef.current = true;
+    setAnalysisError(null);
     try {
-      // PHASE 1: Analyze only the CURRENT clicked paragraph immediately for blazing fast feedback! (Takes ~1-2s)
-      const currentResult = await analyzePassageSentences(
-        [{ id: paragraph.id, englishText: paragraph.englishText }],
-        paragraph.englishText,
+      const fullResult = await analyzePassageSentences(
+        lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
+        lesson.passageText,
         apiKey
       );
-      
-      // Instantly inject the current paragraph result and hide spinner to reveal details!
-      setAnalysisCache(prev => ({ ...prev, ...currentResult }));
-      setAnalyzingParagraphId(null); 
-
-      // PHASE 2: Trigger silent background async fetch for the rest of the passage to populate cache!
-      if (!bgFetchTriggeredRef.current) {
-        bgFetchTriggeredRef.current = true;
-        (async () => {
-          try {
-            console.log("Starting background silence analysis for the rest of the passage...");
-            const fullResult = await analyzePassageSentences(
-              lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
-              lesson.passageText,
-              apiKey
-            );
-            
-            // Merge full results into cache silently
-            setAnalysisCache(prev => ({ ...prev, ...fullResult }));
-            
-            // Cache the entire analysis to Cloud Firestore
-            await savePassageAnalysisToCloud(lesson.id, fullResult);
-            console.log("Background silence passage analysis cached successfully!");
-          } catch (bgErr) {
-            console.warn("Background silence passage analysis failed:", bgErr);
-            bgFetchTriggeredRef.current = false;
-          }
-        })();
-      }
-
+      setAnalysisCache(fullResult);
+      await savePassageAnalysisToCloud(lesson.id, fullResult);
     } catch (err: any) {
-      console.error("Failed to analyze current sentence:", err);
-      setAnalysisError(err.message || "AI 문장 분석 중 오류가 발생했습니다.");
-      setAnalyzingParagraphId(null);
+      setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
+      bgFetchTriggeredRef.current = false;
+    } finally {
+      setIsAnalyzingBg(false);
     }
   };
 
@@ -345,6 +363,199 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
   };
 
+  const handleExportPDF = () => {
+    if (isAnalyzingBg) {
+      alert("AI가 전체 지문을 분석하는 중입니다. 분석이 완료되면 PDF 저장이 가능합니다. 잠시만 대기해 주세요!");
+      return;
+    }
+
+    const hasAnyCache = Object.keys(analysisCache).length > 0;
+    if (!hasAnyCache) {
+      alert("분석된 내용이 없습니다. Gemini API Key를 등록하여 문장 분석이 완료된 후 다운로드해 주세요.");
+      return;
+    }
+
+    let contentHtml = '';
+    lesson.paragraphs.forEach((p, pIdx) => {
+      const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+      const paragraphAnalyses = analysisCache[p.id] || [];
+
+      contentHtml += `<div class="paragraph-header">Paragraph ${pIdx + 1}</div>`;
+
+      sentences.forEach((sentence, sIdx) => {
+        const activeAnalysis = paragraphAnalyses.find(
+          a => a.sentence.trim().toLowerCase() === sentence.trim().toLowerCase() ||
+               a.sentence.includes(sentence) ||
+               sentence.includes(a.sentence)
+        );
+
+        if (activeAnalysis) {
+          let vocabHtml = '';
+          if (activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) {
+            vocabHtml += `<div class="analysis-section"><div class="section-title">🔤 주요 어휘</div><ul class="vocab-list">`;
+            activeAnalysis.vocabulary.forEach(v => {
+              vocabHtml += `<li class="vocab-item"><strong>${v.word}</strong>: ${v.meaning}</li>`;
+            });
+            vocabHtml += `</ul></div>`;
+          }
+
+          let exprHtml = '';
+          if (activeAnalysis.expressions && activeAnalysis.expressions.length > 0) {
+            exprHtml += `<div class="analysis-section"><div class="section-title">✨ 주요 표현</div><ul class="vocab-list">`;
+            activeAnalysis.expressions.forEach(e => {
+              exprHtml += `<li class="vocab-item"><strong>${e.expression}</strong>: ${e.meaning} ${e.contextNote ? `(${e.contextNote})` : ''}</li>`;
+            });
+            exprHtml += `</ul></div>`;
+          }
+
+          let grammarHtml = '';
+          if (activeAnalysis.grammar) {
+            grammarHtml += `<div class="analysis-section"><div class="section-title">⚖️ 구문 & 문법 구조</div><p class="grammar-text">${activeAnalysis.grammar}</p></div>`;
+          }
+
+          let contextHtmlSec = '';
+          if (activeAnalysis.context) {
+            contextHtmlSec += `<div class="analysis-section"><div class="section-title">🌐 문맥 & 흐름 분석</div><p class="context-text">${activeAnalysis.context}</p></div>`;
+          }
+
+          contentHtml += `
+            <div class="sentence-block">
+              <div class="english-text">S${sIdx + 1}. ${sentence}</div>
+              ${activeAnalysis.translation ? `<div class="translation">📝 번역: ${activeAnalysis.translation}</div>` : ''}
+              ${vocabHtml}
+              ${exprHtml}
+              ${grammarHtml}
+              ${contextHtmlSec}
+            </div>
+          `;
+        } else {
+          contentHtml += `
+            <div class="sentence-block">
+              <div class="english-text">S${sIdx + 1}. ${sentence}</div>
+              <div class="translation" style="color: #ef4444;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
+            </div>
+          `;
+        }
+      });
+    });
+
+    const printHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>[READ.AGENT] ${lesson.title} - 전체 문장 구문 분석</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
+          body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            color: #1e293b;
+            line-height: 1.6;
+            margin: 40px;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #06b6d4;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #0f172a;
+          }
+          .header p {
+            margin: 5px 0 0 0;
+            font-size: 13px;
+            color: #64748b;
+          }
+          .paragraph-header {
+            font-size: 16px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 30px 0 15px 0;
+            background-color: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 6px;
+            page-break-after: avoid;
+          }
+          .sentence-block {
+            page-break-inside: avoid;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #06b6d4;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            background-color: #f8fafc;
+          }
+          .english-text {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 8px;
+          }
+          .translation {
+            font-size: 13.5px;
+            color: #0284c7;
+            margin-bottom: 12px;
+            font-weight: 600;
+          }
+          .analysis-section {
+            margin-top: 10px;
+            font-size: 12.5px;
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 8px;
+          }
+          .section-title {
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 4px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .vocab-list {
+            margin: 0;
+            padding-left: 18px;
+          }
+          .vocab-item {
+            margin-bottom: 3px;
+          }
+          .grammar-text, .context-text {
+            margin: 0;
+            color: #334155;
+          }
+          @media print {
+            body {
+              margin: 20px;
+            }
+            .sentence-block {
+              box-shadow: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트</h1>
+          <p>지문 제목: "${lesson.title}" | 출력 시간: ${new Date().toLocaleString()}</p>
+        </div>
+        ${contentHtml}
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
+  };
+
   return (
     <div className="split-view-container animate-fade-in">
       
@@ -379,6 +590,26 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             >
               <ZoomIn size={15} />
             </button>
+
+            <button 
+              className="btn btn-primary" 
+              style={{ 
+                padding: '0.35rem 0.75rem', 
+                fontSize: '0.725rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.25rem', 
+                background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)',
+                color: 'white',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }} 
+              onClick={handleExportPDF}
+              title="전체 분석 PDF 저장"
+            >
+              📄 PDF 인쇄/저장
+            </button>
           </div>
         </div>
 
@@ -395,14 +626,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             const isActive = activeParagraphId === p.id;
             // Split paragraph englishText into complete sentences
             const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
-            
-            // Fuzzy match the cached sentence analysis
             const paragraphAnalyses = analysisCache[p.id];
-            const activeAnalysis = paragraphAnalyses?.find(
-              a => a.sentence.trim().toLowerCase() === activeSentenceText?.trim().toLowerCase() ||
-                   a.sentence.includes(activeSentenceText || '') ||
-                   (activeSentenceText || '').includes(a.sentence)
-            ) || paragraphAnalyses?.[0]; // Fallback to first
 
             return (
               <div 
@@ -413,114 +637,140 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                 <div style={{ color: 'white', lineHeight: '1.8' }}>
                   {sentences.map((sentence, sIdx) => {
                     const isSentenceActive = activeSentenceText === sentence && activeParagraphId === p.id;
+                    const sentenceAnalysis = paragraphAnalyses?.find(
+                      a => a.sentence.trim().toLowerCase() === sentence.trim().toLowerCase() ||
+                           a.sentence.includes(sentence) ||
+                           sentence.includes(a.sentence)
+                    );
+
                     return (
-                      <span 
-                        key={sIdx}
-                        className={`interactive-sentence ${isSentenceActive ? 'active' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSentenceClick(p, sentence);
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          display: 'inline',
-                          backgroundColor: isSentenceActive ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
-                          color: isSentenceActive ? 'var(--primary)' : 'inherit',
-                          borderBottom: isSentenceActive ? '2px solid var(--primary)' : 'none',
-                          fontWeight: isSentenceActive ? '600' : 'normal'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSentenceActive) {
-                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                            e.currentTarget.style.color = '#fff';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSentenceActive) {
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                            e.currentTarget.style.color = 'inherit';
-                          }
-                        }}
-                      >
-                        {sentence}{' '}
-                      </span>
+                      <Fragment key={sIdx}>
+                        <span 
+                          className={`interactive-sentence ${isSentenceActive ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSentenceClick(p, sentence);
+                          }}
+                          style={{
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            padding: '2px 4px',
+                            borderRadius: '4px',
+                            display: 'inline',
+                            backgroundColor: isSentenceActive ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
+                            color: isSentenceActive ? 'var(--primary)' : 'inherit',
+                            borderBottom: isSentenceActive ? '2px solid var(--primary)' : 'none',
+                            fontWeight: isSentenceActive ? '600' : 'normal'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSentenceActive) {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                              e.currentTarget.style.color = '#fff';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSentenceActive) {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = 'inherit';
+                            }
+                          }}
+                        >
+                          {sentence}{' '}
+                        </span>
+
+                        {isSentenceActive && (
+                          <div 
+                            style={{ display: 'block', width: '100%', margin: '0.75rem 0', cursor: 'default' }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {/* 1. Loading state */}
+                            {!sentenceAnalysis && isAnalyzingBg && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(6, 182, 212, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
+                                <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
+                                <span>AI가 이 문장을 포함한 전체 지문을 정밀 분석 중입니다... 잠시만 기다려 주세요.</span>
+                              </div>
+                            )}
+
+                            {/* 2. Error state */}
+                            {!sentenceAnalysis && !isAnalyzingBg && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                                <span>⚠️ {analysisError || "이 문장의 분석 정보를 가져오지 못했거나 분석되지 않은 문장입니다. API 키를 등록하고 다시 시도해 보세요."}</span>
+                                <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }} onClick={(e) => { e.stopPropagation(); handleManualRetry(); }}>
+                                  다시 시도
+                                </button>
+                              </div>
+                            )}
+
+                            {/* 3. Detailed Sentence Analysis Display */}
+                            {sentenceAnalysis && (
+                              <div className="sentence-analysis-box animate-slide-down" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                                  {/* Sentence Translation */}
+                                  {sentenceAnalysis.translation && (
+                                    <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.08)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
+                                        📝 문장 번역
+                                      </span>
+                                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#f1f5f9', fontWeight: '600', lineHeight: '1.6' }}>
+                                        {sentenceAnalysis.translation}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Vocabulary & Expressions */}
+                                  {((sentenceAnalysis.vocabulary && sentenceAnalysis.vocabulary.length > 0) || (sentenceAnalysis.expressions && sentenceAnalysis.expressions.length > 0)) && (
+                                    <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
+                                        🔤 주요 어휘 &amp; 표현
+                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        {sentenceAnalysis.vocabulary?.map((v: any, vIdx: number) => (
+                                          <div key={vIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
+                                            <strong style={{ color: 'var(--secondary)' }}>{v.word}</strong>: {v.meaning}
+                                          </div>
+                                        ))}
+                                        {sentenceAnalysis.expressions?.map((e: any, eIdx: number) => (
+                                          <div key={eIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.25rem' }}>
+                                            <strong style={{ color: 'var(--success)' }}>{e.expression}</strong>: {e.meaning}
+                                            {e.contextNote && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>({e.contextNote})</span>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Grammar structure */}
+                                  {sentenceAnalysis.grammar && (
+                                    <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
+                                        ⚖️ 구문 &amp; 문법 구조
+                                      </span>
+                                      <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                                        {sentenceAnalysis.grammar}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Context Analysis */}
+                                  {sentenceAnalysis.context && (
+                                    <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
+                                        🌐 문맥 &amp; 흐름 분석
+                                      </span>
+                                      <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                                        {sentenceAnalysis.context}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </div>
-
-                {/* 1. Loading state */}
-                {analyzingParagraphId === p.id && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(6, 182, 212, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
-                    <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
-                    <span>AI가 이 문단의 모든 문장 정밀 분석 중... (첫 1회만 수행)</span>
-                  </div>
-                )}
-
-                {/* 2. Error state */}
-                {isActive && analysisError && activeSentenceText && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                    <span>⚠️ {analysisError}</span>
-                    <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }} onClick={() => handleSentenceClick(p, activeSentenceText)}>
-                      다시 시도
-                    </button>
-                  </div>
-                )}
-
-                {/* 3. Detailed Sentence Analysis Display */}
-                {isActive && activeAnalysis && activeSentenceText && (
-                  <div className="sentence-analysis-box animate-slide-down" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-                      {/* Vocabulary & Expressions */}
-                      {((activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) || (activeAnalysis.expressions && activeAnalysis.expressions.length > 0)) && (
-                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
-                            🔤 주요 어휘 &amp; 표현
-                          </span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            {activeAnalysis.vocabulary?.map((v: any, vIdx: number) => (
-                              <div key={vIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
-                                <strong style={{ color: 'var(--secondary)' }}>{v.word}</strong>: {v.meaning}
-                              </div>
-                            ))}
-                            {activeAnalysis.expressions?.map((e: any, eIdx: number) => (
-                              <div key={eIdx} style={{ fontSize: '0.8rem', color: '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.25rem' }}>
-                                <strong style={{ color: 'var(--success)' }}>{e.expression}</strong>: {e.meaning}
-                                {e.contextNote && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>({e.contextNote})</span>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Grammar structure */}
-                      {activeAnalysis.grammar && (
-                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
-                            ⚖️ 구문 &amp; 문법 구조
-                          </span>
-                          <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
-                            {activeAnalysis.grammar}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Context Analysis */}
-                      {activeAnalysis.context && (
-                        <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.25rem' }}>
-                            🌐 문맥 &amp; 흐름 분석
-                          </span>
-                          <p style={{ margin: 0, fontSize: '0.775rem', color: '#cbd5e1', lineHeight: '1.6' }}>
-                            {activeAnalysis.context}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
