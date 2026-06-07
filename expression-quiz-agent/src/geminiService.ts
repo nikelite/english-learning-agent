@@ -1,5 +1,43 @@
 import { Lesson } from './types';
 
+// Helper function to call fetch with exponential backoff retry for network errors/transient API limits
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 5,
+  initialDelay = 1000
+): Promise<Response> {
+  let delay = initialDelay;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+      
+      // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
+      if (response.status === 429 || response.status >= 500) {
+        console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        delay += Math.floor(Math.random() * 200); // add jitter
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      console.warn(`Network error during Gemini API request: ${error}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+      if (attempt === maxRetries - 1) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+      delay += Math.floor(Math.random() * 200); // add jitter
+    }
+  }
+  throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
+}
+
 // Preloaded Premium Lessons for immediate offline exploration
 export const PRESET_LESSONS: Lesson[] = [
   {
@@ -271,7 +309,7 @@ export async function generateLessonFromText(
   };
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetchWithRetry(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
