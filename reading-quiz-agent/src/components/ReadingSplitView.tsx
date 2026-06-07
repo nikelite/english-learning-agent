@@ -112,13 +112,32 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
     let isCurrent = true;
 
+    const isAnalysisCacheValid = (cache: any): boolean => {
+      if (!cache || typeof cache !== 'object') return false;
+      const paragraphIds = Object.keys(cache);
+      if (paragraphIds.length === 0) return false;
+      for (const pId of paragraphIds) {
+        const list = cache[pId];
+        if (!Array.isArray(list) || list.length === 0) return false;
+        for (const item of list) {
+          if (!item || typeof item !== 'object') return false;
+          const grammar = item.grammar || '';
+          const context = item.context || '';
+          if (grammar.includes('생성하지 못했습니다') || context.includes('생성하지 못했습니다')) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
     const runAutoAnalysis = async () => {
       // 1. Try LocalStorage cache first (instantaneous & offline friendly!)
       try {
         const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
         if (localCached) {
           const parsed = JSON.parse(localCached);
-          if (parsed && Object.keys(parsed).length > 0) {
+          if (parsed && Object.keys(parsed).length > 0 && isAnalysisCacheValid(parsed)) {
             if (isCurrent) {
               setAnalysisCache(parsed);
               bgFetchTriggeredRef.current = true;
@@ -133,7 +152,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       // 2. Try cloud cache second
       try {
         const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
-        if (cloudCached && Object.keys(cloudCached).length > 0) {
+        if (cloudCached && Object.keys(cloudCached).length > 0 && isAnalysisCacheValid(cloudCached)) {
           if (isCurrent) {
             setAnalysisCache(cloudCached);
             bgFetchTriggeredRef.current = true;
