@@ -540,27 +540,30 @@ Ensure the response is a single, valid JSON object and nothing else. Do not wrap
   }
 }
 
-// Helper to analyze a single paragraph's sentences in parallel with Gemini
-async function analyzeSingleParagraphSentences(
+// Helper to analyze a small group of English sentences in parallel with Gemini
+async function analyzeParagraphChunkSentences(
   paragraphId: number,
-  englishText: string,
+  chunkIdx: number,
+  sentences: string[],
   passageText: string,
   apiKey: string
 ): Promise<SentenceAnalysis[]> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
+  const targetText = sentences.join(' ');
+
   const prompt = `You are an elite academic English linguist and ESL curriculum developer.
-Analyze the sentences in the following target paragraph from the English reading passage.
+Analyze the sentences in the following sentence group from paragraph ID ${paragraphId} of the English reading passage.
 
 Passage Context (for background reference):
 """
 ${passageText}
 """
 
-Target Paragraph to analyze (Paragraph ID: ${paragraphId}):
-"${englishText}"
+Target sentences to analyze:
+"${targetText}"
 
-Split this target paragraph into its individual, complete English sentences. For each sentence, generate a highly detailed linguistic analysis in the following strict JSON format:
+For each of the English sentences listed below, generate a highly detailed linguistic analysis in the following strict JSON format:
 [
   {
     "sentence": "The original complete English sentence",
@@ -582,6 +585,9 @@ Split this target paragraph into its individual, complete English sentences. For
     "context": "Contextual explanation of this sentence's role inside the paragraph (e.g. introduces the topic, provides supporting evidence, transitions, wraps up), in Korean."
   }
 ]
+
+Analyze exactly these sentences:
+${sentences.map((s, idx) => `${idx + 1}. ${s}`).join('\n')}
 
 Ensure the response is a single, valid JSON array of objects. Do not wrap in markdown code blocks.`;
 
@@ -613,7 +619,7 @@ Ensure the response is a single, valid JSON array of objects. Do not wrap in mar
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
-    throw new Error(`Paragraph ${paragraphId} 분석 실패: ${errorMessage}`);
+    throw new Error(`Paragraph ${paragraphId} Chunk ${chunkIdx} 분석 실패: ${errorMessage}`);
   }
 
   const data = await response.json();
@@ -644,7 +650,7 @@ Ensure the response is a single, valid JSON array of objects. Do not wrap in mar
   }));
 }
 
-// Dynamically analyze the entire passage paragraph by paragraph in parallel
+// Dynamically analyze the entire passage by chunking sentences and executing in parallel
 export async function analyzePassageSentences(
   paragraphs: { id: number; englishText: string }[],
   passageText: string,
@@ -660,42 +666,75 @@ export async function analyzePassageSentences(
     throw new Error("분석할 문단 목록이 비어 있습니다.");
   }
 
-  const total = paragraphs.length;
-  let completed = 0;
+  const CHUNK_SIZE = 3;
   const result: Record<number, SentenceAnalysis[]> = {};
 
-  const promises = paragraphs.map(async (p) => {
-    try {
-      const pResult = await analyzeSingleParagraphSentences(p.id, p.englishText, passageText, apiKey);
-      result[p.id] = pResult;
-      if (onParagraphAnalyzed) {
-        onParagraphAnalyzed(p.id, pResult);
-      }
-    } catch (err) {
-      console.error(`Error analyzing paragraph ${p.id}:`, err);
-      // Fallback: split paragraph by sentences manually
-      const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
-      const fallbackResult = sentences.map(s => ({
-        sentence: s,
-        translation: "",
-        vocabulary: [],
-        expressions: [],
-        grammar: "문법 분석을 생성하지 못했습니다. (네트워크/API 일시적 오류)",
-        context: "문맥 분석을 생성하지 못했습니다."
-      }));
-      result[p.id] = fallbackResult;
-      if (onParagraphAnalyzed) {
-        onParagraphAnalyzed(p.id, fallbackResult);
-      }
-    } finally {
-      completed++;
-      if (onProgress) {
-        onProgress(completed, total);
-      }
+  // 1. Prepare paragraph chunking tasks
+  const paragraphTasks = paragraphs.map(p => {
+    const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+    const chunks: string[][] = [];
+    for (let i = 0; i < sentences.length; i += CHUNK_SIZE) {
+      chunks.push(sentences.slice(i, i + CHUNK_SIZE));
     }
+    return {
+      paragraph: p,
+      chunks,
+      sentences
+    };
   });
 
-  await Promise.all(promises);
+  // 2. Compute total chunks for progress tracking
+  const totalChunks = paragraphTasks.reduce((acc, t) => acc + t.chunks.length, 0);
+  let completedChunks = 0;
+
+  // 3. Process each paragraph's chunks in parallel
+  const runParagraphAnalysis = async (task: typeof paragraphTasks[0]) => {
+    const { paragraph, chunks, sentences } = task;
+    const chunkResults: SentenceAnalysis[][] = new Array(chunks.length);
+
+    const chunkPromises = chunks.map(async (chunk, chunkIdx) => {
+      try {
+        const cResult = await analyzeParagraphChunkSentences(
+          paragraph.id,
+          chunkIdx,
+          chunk,
+          passageText,
+          apiKey
+        );
+        chunkResults[chunkIdx] = cResult;
+      } catch (err) {
+        console.error(`Error analyzing paragraph ${paragraph.id} chunk ${chunkIdx}:`, err);
+        // Fallback for this chunk
+        chunkResults[chunkIdx] = chunk.map(s => ({
+          sentence: s,
+          translation: "",
+          vocabulary: [],
+          expressions: [],
+          grammar: "문법 분석을 생성하지 못했습니다. (네트워크/API 오류)",
+          context: "문맥 분석을 생성하지 못했습니다."
+        }));
+      } finally {
+        completedChunks++;
+        if (onProgress) {
+          onProgress(completedChunks, totalChunks);
+        }
+      }
+    });
+
+    await Promise.all(chunkPromises);
+
+    // Flatten chunk results in order and map to paragraph
+    const pResult = chunkResults.flat();
+    result[paragraph.id] = pResult;
+
+    if (onParagraphAnalyzed) {
+      onParagraphAnalyzed(paragraph.id, pResult);
+    }
+  };
+
+  // Run all paragraph analyses concurrently
+  await Promise.all(paragraphTasks.map(runParagraphAnalysis));
+
   return result;
 }
 

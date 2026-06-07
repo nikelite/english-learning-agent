@@ -151,7 +151,13 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         bgFetchTriggeredRef.current = true;
         if (isCurrent) {
           setIsAnalyzingBg(true);
-          setBgProgress({ completed: 0, total: lesson.paragraphs.length });
+          const CHUNK_SIZE = 3;
+          let totalChunksCount = 0;
+          lesson.paragraphs.forEach(p => {
+            const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+            totalChunksCount += Math.ceil(sentences.length / CHUNK_SIZE);
+          });
+          setBgProgress({ completed: 0, total: totalChunksCount });
         }
         console.log("Auto-starting background analysis for the passage...");
         try {
@@ -231,7 +237,13 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       return;
     }
     setIsAnalyzingBg(true);
-    setBgProgress({ completed: 0, total: lesson.paragraphs.length });
+    const CHUNK_SIZE = 3;
+    let totalChunksCount = 0;
+    lesson.paragraphs.forEach(p => {
+      const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+      totalChunksCount += Math.ceil(sentences.length / CHUNK_SIZE);
+    });
+    setBgProgress({ completed: 0, total: totalChunksCount });
     bgFetchTriggeredRef.current = true;
     setAnalysisError(null);
     try {
@@ -761,7 +773,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                   AI 지문 전체 문장 분석 중 (백그라운드)
                 </span>
                 <span style={{ color: 'var(--text-secondary)', fontWeight: '700' }}>
-                  {bgProgress.completed} / {bgProgress.total} 문단 완료 ({bgProgress.total > 0 ? Math.round((bgProgress.completed / bgProgress.total) * 100) : 0}%)
+                  {bgProgress.completed} / {bgProgress.total} 단계 완료 ({bgProgress.total > 0 ? Math.round((bgProgress.completed / bgProgress.total) * 100) : 0}%)
                 </span>
               </div>
               <div className="quiz-progress-bar" style={{ height: '6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -843,7 +855,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             {!sentenceAnalysis && isAnalyzingBg && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(6, 182, 212, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
                                 <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
-                                <span>AI가 이 문장을 포함한 전체 지문을 정밀 분석 중입니다... ({bgProgress.completed} / {bgProgress.total} 문단 완료)</span>
+                                <span>AI가 이 문장을 포함한 전체 지문을 정밀 분석 중입니다... ({bgProgress.completed} / {bgProgress.total} 단계 완료)</span>
                               </div>
                             )}
 
