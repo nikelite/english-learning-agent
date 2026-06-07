@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Reading Quiz Agent Collections
+    match /lessons/{document} {
+      allow read, write: if true;
+    }
+    match /quiz_attempts/{document} {
+      allow read, write: if true;
+    }
+    
+    // Expression Quiz Agent Collections
+    match /expression_lessons/{document} {
+      allow read, write: if true;
+    }
+    match /expression_quiz_attempts/{document} {
+      allow read, write: if true;
+    }
+    
+    // English Lab Agent Collections (New)
+    match /lab_lessons/{document} {
+      allow read, write: if true;
+    }
+    match /lab_quiz_attempts/{document} {
+      allow read, write: if true;
+    }
+    match /lab_wrong_answers/{document} {
+      allow read, write: if true;
+    }
+    
+    // Trigger Email Extension Collection
+    match /mail/{document} {
+      allow read, write: if true;
+    }
+  }
+}
