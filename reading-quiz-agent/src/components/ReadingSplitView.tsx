@@ -17,6 +17,31 @@ interface ReadingSplitViewProps {
   onAddCustomVocabulary: (newVocab: ReadingVocabulary) => void;
 }
 
+// Helper to match sentence text against SentenceAnalysis objects using exact, substring, and normalized comparisons
+const matchSentenceAnalysis = (analyses: SentenceAnalysis[] | undefined, sentence: string): SentenceAnalysis | undefined => {
+  if (!analyses || !sentence) return undefined;
+  
+  const cleanS = sentence.trim().toLowerCase();
+  
+  // 1. Exact or simple substring match first
+  let match = analyses.find(
+    a => a.sentence.trim().toLowerCase() === cleanS ||
+         a.sentence.toLowerCase().includes(cleanS) ||
+         cleanS.includes(a.sentence.toLowerCase())
+  );
+  if (match) return match;
+  
+  // 2. Normalized alphanumeric match
+  const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9가-힣]/g, '');
+  const normS = normalize(sentence);
+  if (!normS) return undefined;
+  
+  return analyses.find(a => {
+    const normA = normalize(a.sentence);
+    return normA === normS || normA.includes(normS) || normS.includes(normA);
+  });
+};
+
 export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   lesson,
   onAddWrongAnswer,
@@ -471,11 +496,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       contentHtml += `<div class="paragraph-header">Paragraph ${pIdx + 1}</div>`;
 
       sentences.forEach((sentence, sIdx) => {
-        const activeAnalysis = paragraphAnalyses.find(
-          a => a.sentence.trim().toLowerCase() === sentence.trim().toLowerCase() ||
-               a.sentence.includes(sentence) ||
-               sentence.includes(a.sentence)
-        );
+        const activeAnalysis = matchSentenceAnalysis(paragraphAnalyses, sentence);
 
         if (activeAnalysis) {
           let vocabHtml = '';
@@ -849,11 +870,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                 <div style={{ color: 'white', lineHeight: '1.8' }}>
                   {sentences.map((sentence, sIdx) => {
                     const isSentenceActive = activeSentenceText === sentence && activeParagraphId === p.id;
-                    const sentenceAnalysis = paragraphAnalyses?.find(
-                      a => a.sentence.trim().toLowerCase() === sentence.trim().toLowerCase() ||
-                           a.sentence.includes(sentence) ||
-                           sentence.includes(a.sentence)
-                    );
+                    const sentenceAnalysis = matchSentenceAnalysis(paragraphAnalyses, sentence);
 
                     return (
                       <Fragment key={sIdx}>

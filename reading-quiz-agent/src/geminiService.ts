@@ -686,21 +686,38 @@ Ensure the response is a single, valid JSON array of objects. Do not wrap in mar
     throw new Error("결과가 올바른 배열 형식이 아닙니다.");
   }
 
-  return parsed.map((item: any) => ({
-    sentence: item.sentence || "",
-    translation: "",
-    vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
-      word: v.word || "",
-      meaning: v.meaning || ""
-    })) : [],
-    expressions: Array.isArray(item.expressions) ? item.expressions.map((e: any) => ({
-      expression: e.expression || "",
-      meaning: e.meaning || "",
-      contextNote: e.contextNote || ""
-    })) : [],
-    grammar: item.grammar || "문법 분석이 제공되지 않았습니다.",
-    context: item.context || "문맥 분석이 제공되지 않았습니다."
-  }));
+  const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
+
+  return parsed.map((item: any, idx: number) => {
+    // Find matching original sentence in the input chunk
+    let bestSentence = sentences[idx] || "";
+    if (item.sentence) {
+      const normItem = normalize(item.sentence);
+      const match = sentences.find(s => {
+        const normS = normalize(s);
+        return normS === normItem || normS.includes(normItem) || normItem.includes(normS);
+      });
+      if (match) {
+        bestSentence = match;
+      }
+    }
+
+    return {
+      sentence: bestSentence,
+      translation: "",
+      vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
+        word: v.word || "",
+        meaning: v.meaning || ""
+      })) : [],
+      expressions: Array.isArray(item.expressions) ? item.expressions.map((e: any) => ({
+        expression: e.expression || "",
+        meaning: e.meaning || "",
+        contextNote: e.contextNote || ""
+      })) : [],
+      grammar: item.grammar || "문법 분석이 제공되지 않았습니다.",
+      context: item.context || "문맥 분석이 제공되지 않았습니다."
+    };
+  });
 }
 
 // Dynamically analyze the entire passage by chunking sentences and executing in parallel
