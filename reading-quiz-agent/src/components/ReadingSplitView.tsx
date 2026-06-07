@@ -509,7 +509,6 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           contentHtml += `
             <div class="sentence-block">
               <div class="english-text">S${sIdx + 1}. ${sentence}</div>
-              ${activeAnalysis.translation ? `<div class="translation">📝 번역: ${activeAnalysis.translation}</div>` : ''}
               ${vocabHtml}
               ${exprHtml}
               ${grammarHtml}
@@ -520,7 +519,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           contentHtml += `
             <div class="sentence-block">
               <div class="english-text">S${sIdx + 1}. ${sentence}</div>
-              <div class="translation" style="color: #ef4444;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
+              <div style="font-size: 13.5px; color: #ef4444; font-weight: 600;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
             </div>
           `;
         }
@@ -892,17 +891,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             {sentenceAnalysis && (
                               <div className="sentence-analysis-box animate-slide-down" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-                                  {/* Sentence Translation */}
-                                  {sentenceAnalysis.translation && (
-                                    <div className="eli5-analogy-box" style={{ margin: 0, padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.08)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
-                                      <span style={{ fontSize: '0.65rem', color: 'var(--secondary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>
-                                        📝 문장 번역
-                                      </span>
-                                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#f1f5f9', fontWeight: '600', lineHeight: '1.6' }}>
-                                        {sentenceAnalysis.translation}
-                                      </p>
-                                    </div>
-                                  )}
+
 
                                   {/* Vocabulary & Expressions */}
                                   {((sentenceAnalysis.vocabulary && sentenceAnalysis.vocabulary.length > 0) || (sentenceAnalysis.expressions && sentenceAnalysis.expressions.length > 0)) && (

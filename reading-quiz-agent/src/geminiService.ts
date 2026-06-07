@@ -605,7 +605,6 @@ For each of the English sentences listed below, generate a highly detailed lingu
 [
   {
     "sentence": "The original complete English sentence",
-    "translation": "Natural Korean translation of this sentence",
     "vocabulary": [
       {
         "word": "important word",
@@ -673,7 +672,7 @@ Ensure the response is a single, valid JSON array of objects. Do not wrap in mar
 
   return parsed.map((item: any) => ({
     sentence: item.sentence || "",
-    translation: item.translation || "",
+    translation: "",
     vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary.map((v: any) => ({
       word: v.word || "",
       meaning: v.meaning || ""
