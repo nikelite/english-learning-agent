@@ -144,6 +144,14 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
               if (isCurrent) {
                 setBgProgress({ completed, total });
               }
+            },
+            (paragraphId, pAnalysis) => {
+              if (isCurrent) {
+                setAnalysisCache(prev => ({
+                  ...prev,
+                  [paragraphId]: pAnalysis
+                }));
+              }
             }
           );
           if (isCurrent) {
@@ -207,6 +215,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         apiKey,
         (completed, total) => {
           setBgProgress({ completed, total });
+        },
+        (paragraphId, pAnalysis) => {
+          setAnalysisCache(prev => ({
+            ...prev,
+            [paragraphId]: pAnalysis
+          }));
         }
       );
       setAnalysisCache(fullResult);

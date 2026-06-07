@@ -649,7 +649,8 @@ export async function analyzePassageSentences(
   paragraphs: { id: number; englishText: string }[],
   passageText: string,
   apiKey: string,
-  onProgress?: (completed: number, total: number) => void
+  onProgress?: (completed: number, total: number) => void,
+  onParagraphAnalyzed?: (paragraphId: number, analysis: SentenceAnalysis[]) => void
 ): Promise<Record<number, SentenceAnalysis[]>> {
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
@@ -667,11 +668,14 @@ export async function analyzePassageSentences(
     try {
       const pResult = await analyzeSingleParagraphSentences(p.id, p.englishText, passageText, apiKey);
       result[p.id] = pResult;
+      if (onParagraphAnalyzed) {
+        onParagraphAnalyzed(p.id, pResult);
+      }
     } catch (err) {
       console.error(`Error analyzing paragraph ${p.id}:`, err);
       // Fallback: split paragraph by sentences manually
       const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
-      result[p.id] = sentences.map(s => ({
+      const fallbackResult = sentences.map(s => ({
         sentence: s,
         translation: "",
         vocabulary: [],
@@ -679,6 +683,10 @@ export async function analyzePassageSentences(
         grammar: "문법 분석을 생성하지 못했습니다. (네트워크/API 일시적 오류)",
         context: "문맥 분석을 생성하지 못했습니다."
       }));
+      result[p.id] = fallbackResult;
+      if (onParagraphAnalyzed) {
+        onParagraphAnalyzed(p.id, fallbackResult);
+      }
     } finally {
       completed++;
       if (onProgress) {
