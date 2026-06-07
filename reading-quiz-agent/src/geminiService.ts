@@ -4,7 +4,8 @@ import { ReadingLesson, ReadingVocabulary, SentenceAnalysis } from './types';
 // Centralized sentence splitting function using sbd (Sentence Boundary Detection)
 export function splitIntoSentences(text: string): string[] {
   if (!text) return [];
-  return sbd.sentences(text, {
+  const cleaned = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  return sbd.sentences(cleaned, {
     sanitize: false,
     preserve_whitespace: true,
     abbreviations: [
@@ -957,9 +958,9 @@ export async function splitPassageIntoLessons(
     
     // Robust sentence splitter supporting mixed English/Korean layout and varied punctuation using sbd
     const sentences: string[] = [];
-    const rawLines = chapterText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of rawLines) {
-      sentences.push(...splitIntoSentences(line));
+    const paragraphsList = chapterText.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    for (const para of paragraphsList) {
+      sentences.push(...splitIntoSentences(para));
     }
     
     // Count only English sentences for splitting threshold (Korean annotations don't count toward limit)

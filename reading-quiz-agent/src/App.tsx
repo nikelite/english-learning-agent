@@ -460,9 +460,9 @@ export default function App() {
   // English sentence counter matching geminiService split algorithm
   const countEnglishSentences = (txt: string): number => {
     const sentences: string[] = [];
-    const rawLines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of rawLines) {
-      sentences.push(...splitIntoSentences(line));
+    const paragraphsList = txt.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    for (const para of paragraphsList) {
+      sentences.push(...splitIntoSentences(para));
     }
     
     const isEnglishSentence = (s: string): boolean => {
@@ -625,18 +625,15 @@ export default function App() {
     };
 
     paragraphs.forEach((para, paraIdx) => {
-      const lines = para.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      lines.forEach(line => {
-        const lineSentences = splitIntoSentences(line);
-        lineSentences.forEach(s => {
-          const isEng = isEnglishSentence(s);
-          sentenceItems.push({
-            id: `s-${paraIdx}-${sentenceIdCounter++}`,
-            text: s,
-            isEnglish: isEng,
-            included: isEng,
-            paragraphIndex: paraIdx
-          });
+      const paraSentences = splitIntoSentences(para);
+      paraSentences.forEach(s => {
+        const isEng = isEnglishSentence(s);
+        sentenceItems.push({
+          id: `s-${paraIdx}-${sentenceIdCounter++}`,
+          text: s,
+          isEnglish: isEng,
+          included: isEng,
+          paragraphIndex: paraIdx
         });
       });
     });
