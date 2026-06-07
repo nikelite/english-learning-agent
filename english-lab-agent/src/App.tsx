@@ -899,6 +899,11 @@ export default function App() {
                               <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
                                 {lesson.style === 'spoken' ? '구어' : '문어'}
                               </span>
+                              {lesson.writingLevel && (
+                                <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
+                                  Level {lesson.writingLevel}
+                                </span>
+                              )}
                               
                               {editingTitleId === lesson.id ? (
                                 <form 

@@ -375,6 +375,16 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
                 <td style={{ fontWeight: 'bold', padding: '4px 0' }}>스타일:</td>
                 <td>{lesson.style === 'spoken' ? '구어체 (Spoken)' : '문어체 (Written)'}</td>
               </tr>
+              {lesson.writingLevel && (
+                <tr>
+                  <td style={{ fontWeight: 'bold', padding: '4px 0' }}>작문 레벨:</td>
+                  <td>
+                    <span style={{ padding: '1px 5px', background: '#3b82f6', color: 'white', borderRadius: '4px', fontWeight: 'bold', fontSize: '11px' }}>
+                      {lesson.writingLevel}
+                    </span>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -423,9 +433,14 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
               <span className="badge" style={{ background: 'var(--primary)', color: 'white', marginRight: '0.5rem' }}>
                 {lesson.style === 'spoken' ? '🗣️ 구어체' : '📝 문어체'}
               </span>
-              <span className="badge" style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
+              <span className="badge" style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
                 👤 {lesson.persona}
               </span>
+              {lesson.writingLevel && (
+                <span className="badge" style={{ background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
+                  📊 레벨: {lesson.writingLevel}
+                </span>
+              )}
               <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginTop: '0.4rem', color: 'white', fontFamily: 'var(--font-display)' }}>
                 {lesson.title}
               </h2>

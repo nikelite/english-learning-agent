@@ -49,6 +49,7 @@ export const PRESET_LESSONS: LabLesson[] = [
     createdAt: 1716656400000,
     persona: "두진 (40대 엔지니어, 직장인)",
     style: "written",
+    writingLevel: "A2",
     corrections: [
       {
         id: "corr-dj-1",
@@ -120,6 +121,7 @@ export const PRESET_LESSONS: LabLesson[] = [
     createdAt: 1716656460000,
     persona: "준후 (미국 중학생, 청소년)",
     style: "spoken",
+    writingLevel: "A2",
     corrections: [
       {
         id: "corr-jh-1",
@@ -222,10 +224,20 @@ Key Constraints & Guidelines for Analysis:
    - "correctIndex" is a 0-indexed integer (0, 1, 2, or 3) indicating the correct option.
    - "rationale": Extremely detailed Korean explanation of why the correct option is right and why the other options are wrong or awkward.
    - CRITICAL RATIONALE LABEL RULE: You MUST reference choices using letters A, B, C, D (choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번) and NOT numbers like 1번, 2번, 3번, 4번 in the rationale string.
+6. **Writing Level Evaluation (CEFR)**:
+   - Evaluate the CEFR level of the user's raw English writing (A1, A2, B1, B2, C1, C2) and provide it in the "writingLevel" field.
+   - Criteria:
+     * A1 (Beginner): Very simple sentences, frequent basic grammar/spelling errors, extremely limited vocabulary.
+     * A2 (Elementary): Can write simple phrases and sentences, uses basic connectors, but has basic grammar/spelling issues.
+     * B1 (Intermediate): Writes straightforward, connected text on familiar topics, correct basic grammar but limited advanced syntax or word choice.
+     * B2 (Upper Intermediate): Can write clear, detailed text, uses a variety of sentences and good vocabulary, minor mistakes that do not hinder communication.
+     * C1 (Advanced): Fluent, well-structured, clear writing, precise vocabulary, complex grammar rules applied correctly.
+     * C2 (Proficiency): Flawless, idiomatic, and highly sophisticated native-level writing.
 
 Strict JSON Schema Requirements:
 {
   "title": "A short, engaging title in Korean summarizing this correction session (e.g. '매니저에게 보내는 이메일 피드백')",
+  "writingLevel": "The evaluated CEFR level of the raw writing, strictly one of: 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'",
   "correctedText": "The entire corrected English text in full.",
   "overallFeedback": "Detailed overall analysis and encouraging feedback in Korean.",
   "corrections": [
@@ -405,7 +417,8 @@ ${cleanText}
       persona,
       style,
       corrections,
-      quizzes
+      quizzes,
+      writingLevel: parsedJson.writingLevel
     };
 
   } catch (error: any) {
