@@ -280,6 +280,7 @@ h1, h2, h3, h4, h5 {
   padding: 2rem;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 /* Card layout sections */
@@ -616,6 +617,7 @@ h1, h2, h3, h4, h5 {
   background: rgba(255, 255, 255, 0.01);
   margin-bottom: 0.5rem;
   overflow: hidden;
+  min-width: 0;
 }
 .history-item-container:hover {
   background: rgba(16, 185, 129, 0.04);

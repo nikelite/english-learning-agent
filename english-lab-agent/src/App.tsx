@@ -848,8 +848,14 @@ export default function App() {
                       </span>
                     </h3>
                     {userId && (
-                      <span style={{ fontSize: '0.725rem', color: 'var(--primary)', fontWeight: '700' }}>
-                        {syncStatus === 'syncing' ? '🔄 클라우드 연동 동기화 중...' : '✓ 클라우드 동기화 완료'}
+                      <span style={{ 
+                        fontSize: '0.725rem', 
+                        color: syncStatus === 'error' ? 'var(--error)' : 'var(--primary)', 
+                        fontWeight: '700' 
+                      }}>
+                        {syncStatus === 'syncing' && '🔄 클라우드 연동 동기화 중...'}
+                        {syncStatus === 'synced' && '✓ 클라우드 동기화 완료'}
+                        {syncStatus === 'error' && '❌ 클라우드 동기화 실패 (Firebase 권한 오류)'}
                       </span>
                     )}
                   </div>
