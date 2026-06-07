@@ -758,7 +758,6 @@ export default function App() {
     }
   };
 
-  // Stats updates
   const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
     const list = wrongQuestionsList || [];
     
@@ -772,11 +771,28 @@ export default function App() {
 
         if (userId && activeLesson) {
           const loggedTitle = isRetry ? `🔄 [재시도] ${activeLesson.title}` : activeLesson.title;
+          
+          let allQuestionsList: any[] = [];
+          if (userAnswers) {
+            allQuestionsList = activeLesson.quizzes.map(q => {
+              const userAnswerIndex = userAnswers[q.id];
+              return {
+                question: q.question,
+                choices: q.choices,
+                userAnswerIndex: userAnswerIndex !== undefined ? userAnswerIndex : -1,
+                correctIndex: q.correctIndex,
+                rationale: q.rationale
+              };
+            }).filter(q => q.userAnswerIndex !== -1);
+          } else {
+            allQuestionsList = list;
+          }
+
           logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-          sendEmailReport(userId, loggedTitle, correctCount, totalCount, list, newStats);
+          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats);
           
           setTimeout(() => {
-            alert(`📝 [클라우드 연동 성공]\n\n이번 학습 내역이 안전하게 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 오답 분석 리포트 메일이 발송 대기열에 등록되었습니다!`);
+            alert(`📝 [클라우드 연동 성공]\n\n이번 학습 내역이 안전하게 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 결과 리포트 메일이 발송 대기열에 등록되었습니다!`);
           }, 500);
         }
 

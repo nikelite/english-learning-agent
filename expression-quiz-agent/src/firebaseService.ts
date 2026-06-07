@@ -298,7 +298,7 @@ export async function sendEmailReport(
   lessonTitle: string,
   correctCount: number,
   totalCount: number,
-  wrongQuestionsList: any[],
+  questionsList: any[],
   stats: AppStats
 ): Promise<void> {
   try {
@@ -308,16 +308,22 @@ export async function sendEmailReport(
     const secondaryColor = '#ec4899'; // Pink highlighting
     const successColor = '#10b981'; // Green
     
-    let wrongQuestionsHtml = '';
+    let questionsHtml = '';
     
-    if (wrongQuestionsList.length > 0) {
-      wrongQuestionsList.forEach((wa, index) => {
+    if (questionsList.length > 0) {
+      questionsList.forEach((wa, index) => {
         const quizItem = wa.quizItem || wa;
         const questionText = quizItem.question;
         const choices = quizItem.choices || [];
         const userAnswerIndex = wa.userAnswerIndex;
         const correctIndex = quizItem.correctIndex;
         const rationale = quizItem.rationale || '해설이 제공되지 않았습니다.';
+        
+        const isCorrect = userAnswerIndex === correctIndex;
+        const borderColor = isCorrect ? '#10b981' : '#ef4444';
+        const statusBadge = isCorrect 
+          ? '<span style="font-size: 0.7rem; background-color: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px;">맞음</span>'
+          : '<span style="font-size: 0.7rem; background-color: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px;">틀림</span>';
         
         let choicesListHtml = '';
         choices.forEach((choice: string, cIdx: number) => {
@@ -333,9 +339,12 @@ export async function sendEmailReport(
           choicesListHtml += `<div style="${style}">${choice}${badge}</div>`;
         });
         
-        wrongQuestionsHtml += `
-          <div style="background-color: #1e293b; border-left: 4px solid #ef4444; padding: 16px; margin: 16px 0; border-radius: 0 12px 12px 0;">
-            <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #f8fafc;">Q${index + 1}. ${questionText}</h4>
+        questionsHtml += `
+          <div style="background-color: #1e293b; border-left: 4px solid ${borderColor}; padding: 16px; margin: 16px 0; border-radius: 0 12px 12px 0;">
+            <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #f8fafc; display: flex; align-items: center; justify-content: space-between;">
+              <span>Q${index + 1}. ${questionText}</span>
+              ${statusBadge}
+            </h4>
             <div style="margin-bottom: 12px;">${choicesListHtml}</div>
             <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px dashed #475569; padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.5; color: #94a3b8;">
               <strong style="color: #cbd5e1; display: block; margin-bottom: 4px;">💡 AI 상세 해설:</strong>
@@ -345,10 +354,9 @@ export async function sendEmailReport(
         `;
       });
     } else {
-      wrongQuestionsHtml = `
-        <div style="text-align: center; padding: 32px; background-color: #1e293b; border-radius: 12px; border: 1px dashed #10b981; color: #10b981; margin: 16px 0;">
-          <h3 style="margin: 0 0 8px 0;">💯 만점 달성!</h3>
-          <p style="margin: 0; font-size: 0.85rem; color: #94a3b8;">모든 문제를 완벽하게 맞추셨습니다. 정말 훌륭합니다!</p>
+      questionsHtml = `
+        <div style="text-align: center; padding: 32px; background-color: #1e293b; border-radius: 12px; border: 1px dashed #334155; color: #cbd5e1; margin: 16px 0;">
+          <p style="margin: 0; font-size: 0.85rem;">풀이 이력이 없습니다.</p>
         </div>
       `;
     }
@@ -410,11 +418,11 @@ export async function sendEmailReport(
             </table>
           </div>
 
-          <!-- Wrong Questions Breakdown -->
-          <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #f8fafc; border-bottom: 2px solid #ef4444; padding-bottom: 6px;">
-            📝 오답 및 상세 해설 분석
+          <!-- Questions Breakdown -->
+          <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #f8fafc; border-bottom: 2px solid ${isPerfect ? successColor : '#ef4444'}; padding-bottom: 6px;">
+            📝 전체 문항 상세 해설 및 분석
           </h3>
-          ${wrongQuestionsHtml}
+          ${questionsHtml}
 
           <!-- Footer -->
           <div style="text-align: center; margin-top: 48px; border-top: 1px solid #334155; padding-top: 16px; font-size: 0.75rem; color: #64748b;">
