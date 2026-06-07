@@ -487,7 +487,7 @@ export async function generateReadingLesson(
         });
 
         return {
-          id: q.id || `q-${Date.now()}-${idx}`,
+          id: `read-q-${Date.now()}-${idx}`,
           question: q.question || "문제가 생성되지 않았습니다.",
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,

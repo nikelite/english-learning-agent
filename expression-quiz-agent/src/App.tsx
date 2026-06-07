@@ -404,7 +404,7 @@ export default function App() {
 
     // Avoid duplicating exact same question
     setWrongAnswers(prev => {
-      if (prev.some(wa => wa.quizItem.id === quizItem.id)) {
+      if (prev.some(wa => wa.quizItem.id === quizItem.id || wa.quizItem.question === quizItem.question)) {
         return prev;
       }
       const newWrong: WrongAnswer = {

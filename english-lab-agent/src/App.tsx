@@ -454,7 +454,7 @@ export default function App() {
     if (!activeLesson) return;
 
     setWrongAnswers(prev => {
-      if (prev.some(wa => wa.quizItem.id === quizItem.id)) {
+      if (prev.some(wa => wa.quizItem.id === quizItem.id || wa.quizItem.question === quizItem.question)) {
         return prev;
       }
       const newWrong: WrongLabAnswer = {

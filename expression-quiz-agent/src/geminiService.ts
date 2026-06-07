@@ -402,7 +402,7 @@ export async function generateLessonFromText(
         });
 
         return {
-          id: q.id || `q-${Date.now()}-${index}`,
+          id: `expr-q-${Date.now()}-${index}`,
           question: q.question || "문제가 생성되지 않았습니다.",
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
