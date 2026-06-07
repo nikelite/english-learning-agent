@@ -27,6 +27,12 @@ service cloud.firestore {
     match /lab_wrong_answers/{document} {
       allow read, write: if true;
     }
+    match /lab_custom_personas/{document} {
+      allow read, write: if true;
+    }
+    match /lab_user_stats/{document} {
+      allow read, write: if true;
+    }
     
     // Trigger Email Extension Collection
     match /mail/{document} {

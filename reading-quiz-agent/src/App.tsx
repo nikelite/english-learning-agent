@@ -80,9 +80,18 @@ export default function App() {
   // 4. Main Generation configuration states
   const [inputText, setInputText] = useState('');
   const [titleInput, setTitleInput] = useState('');
-  const [comprehensionCount, setComprehensionCount] = useState<number>(3);
-  const [vocabCount, setVocabCount] = useState<number>(2);
-  const [sentenceLimit, setSentenceLimit] = useState<number>(75);
+  const [comprehensionCount, setComprehensionCount] = useState<number>(() => {
+    const saved = localStorage.getItem('last_reading_comprehension_count');
+    return saved ? Number(saved) : 3;
+  });
+  const [vocabCount, setVocabCount] = useState<number>(() => {
+    const saved = localStorage.getItem('last_reading_vocab_count');
+    return saved ? Number(saved) : 2;
+  });
+  const [sentenceLimit, setSentenceLimit] = useState<number>(() => {
+    const saved = localStorage.getItem('last_reading_sentence_limit');
+    return saved ? Number(saved) : 75;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,6 +305,19 @@ export default function App() {
       isMounted = false;
     };
   }, [userId]);
+
+  // Persist last selected configurations
+  useEffect(() => {
+    localStorage.setItem('last_reading_comprehension_count', String(comprehensionCount));
+  }, [comprehensionCount]);
+
+  useEffect(() => {
+    localStorage.setItem('last_reading_vocab_count', String(vocabCount));
+  }, [vocabCount]);
+
+  useEffect(() => {
+    localStorage.setItem('last_reading_sentence_limit', String(sentenceLimit));
+  }, [sentenceLimit]);
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
   const saveLessonToHistory = async (lesson: ReadingLesson): Promise<ReadingLesson> => {

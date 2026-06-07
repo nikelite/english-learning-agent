@@ -16,7 +16,9 @@ import {
   saveWrongAnswersToCloud,
   loadWrongAnswersFromCloud,
   logQuizAttempt,
-  sendEmailReport
+  sendEmailReport,
+  saveCustomPersonasToCloud,
+  loadCustomPersonasFromCloud
 } from './firebaseService';
 import { 
   Sparkles, Info, BookOpen, Trash2, Calendar, Edit2, Search, PlusCircle, Check
@@ -41,10 +43,21 @@ export default function App() {
   // 3. User Input States
   const [inputText, setInputText] = useState('');
   const [contextText, setContextText] = useState('');
-  const [personaType, setPersonaType] = useState('40대 엔지니어 직장인');
+  const [customPersonas, setCustomPersonas] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_custom_personas');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [personaType, setPersonaType] = useState<string>(() => {
+    return localStorage.getItem('last_lab_persona') || '40대 엔지니어 직장인';
+  });
   const [customPersona, setCustomPersona] = useState('');
-  const [writingStyle, setWritingStyle] = useState<'spoken' | 'written'>('written');
-  const [questionCount, setQuestionCount] = useState<number>(5);
+  const [writingStyle, setWritingStyle] = useState<'spoken' | 'written'>(() => {
+    return (localStorage.getItem('last_lab_style') as 'spoken' | 'written') || 'written';
+  });
+  const [questionCount, setQuestionCount] = useState<number>(() => {
+    const saved = localStorage.getItem('last_lab_question_count');
+    return saved ? Number(saved) : 5;
+  });
   const [formError, setFormError] = useState<string | null>(null);
 
   // 4. History Log Library
@@ -146,6 +159,40 @@ export default function App() {
       }
     }).catch(err => console.error("Cloud wrong answers load failed:", err));
     
+    return () => {
+      isMounted = false;
+    };
+  }, [userId]);
+
+  // Persist last selected options
+  useEffect(() => {
+    localStorage.setItem('last_lab_persona', personaType);
+  }, [personaType]);
+
+  useEffect(() => {
+    localStorage.setItem('last_lab_style', writingStyle);
+  }, [writingStyle]);
+
+  useEffect(() => {
+    localStorage.setItem('last_lab_question_count', String(questionCount));
+  }, [questionCount]);
+
+  // Synchronize Custom Personas with Cloud
+  useEffect(() => {
+    if (!userId) return;
+    let isMounted = true;
+    loadCustomPersonasFromCloud(userId).then((cloudPersonas) => {
+      if (cloudPersonas && isMounted) {
+        setCustomPersonas(prev => {
+          const merged = Array.from(new Set([...prev, ...cloudPersonas]));
+          localStorage.setItem('lab_custom_personas', JSON.stringify(merged));
+          if (merged.length > cloudPersonas.length) {
+            saveCustomPersonasToCloud(userId, merged);
+          }
+          return merged;
+        });
+      }
+    }).catch(err => console.error("Cloud custom personas load failed:", err));
     return () => {
       isMounted = false;
     };
@@ -278,6 +325,19 @@ export default function App() {
 
     setIsLoading(true);
     const chosenPersona = personaType === 'custom' ? customPersona.trim() : personaType;
+    
+    if (personaType === 'custom' && customPersona.trim()) {
+      const newCustom = customPersona.trim();
+      if (!customPersonas.includes(newCustom)) {
+        const updated = [...customPersonas, newCustom];
+        setCustomPersonas(updated);
+        localStorage.setItem('lab_custom_personas', JSON.stringify(updated));
+        if (userId) {
+          saveCustomPersonasToCloud(userId, updated);
+        }
+      }
+      setPersonaType(newCustom);
+    }
     
     try {
       const result = await generateCorrection(
@@ -728,6 +788,9 @@ export default function App() {
                       <option value="40대 엔지니어 직장인">40대 엔지니어 직장인</option>
                       <option value="미국 중학생 청소년">미국 중학생 청소년</option>
                       <option value="40대 일상 / 학부모 / 관공서/가게 등..">40대 일상 / 학부모 / 관공서/가게 등..</option>
+                      {customPersonas.map((cp) => (
+                        <option key={cp} value={cp}>{cp}</option>
+                      ))}
                       <option value="custom">직접 입력...</option>
                     </select>
                   </div>

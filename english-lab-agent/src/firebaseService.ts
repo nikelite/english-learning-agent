@@ -239,6 +239,36 @@ export async function saveWrongAnswersToCloud(userId: string, wrongAnswers: Wron
 }
 
 /**
+ * Saves custom personas of a user to Cloud
+ */
+export async function saveCustomPersonasToCloud(userId: string, personas: string[]): Promise<void> {
+  try {
+    const ref = doc(db, 'lab_custom_personas', userId);
+    await setDoc(ref, { personas });
+  } catch (error: any) {
+    console.error("Firebase save custom personas failed:", error);
+  }
+}
+
+/**
+ * Loads custom personas of a user from Cloud
+ */
+export async function loadCustomPersonasFromCloud(userId: string): Promise<string[] | null> {
+  try {
+    const ref = doc(db, 'lab_custom_personas', userId);
+    const docSnap = await getDoc(ref);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return (data.personas || []) as string[];
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Firebase load custom personas failed:", error);
+    return null;
+  }
+}
+
+/**
  * Loads the wrong answers array of a user from Cloud
  */
 export async function loadWrongAnswersFromCloud(userId: string): Promise<WrongLabAnswer[] | null> {

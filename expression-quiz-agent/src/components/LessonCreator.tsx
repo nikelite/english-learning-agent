@@ -20,8 +20,15 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [titleInput, setTitleInput] = useState('');
-  const [questionCount, setQuestionCount] = useState<number>(5);
+  const [questionCount, setQuestionCount] = useState<number>(() => {
+    const saved = localStorage.getItem('last_expr_question_count');
+    return saved ? Number(saved) : 5;
+  });
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    localStorage.setItem('last_expr_question_count', String(questionCount));
+  }, [questionCount]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
