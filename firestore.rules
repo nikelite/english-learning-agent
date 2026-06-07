@@ -14,6 +14,9 @@ service cloud.firestore {
     match /user_stats/{document} {
       allow read, write: if true;
     }
+    match /passage_analyses/{document} {
+      allow read, write: if true;
+    }
     
     // Expression Quiz Agent Collections
     match /expression_lessons/{document} {
