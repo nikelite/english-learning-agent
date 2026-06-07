@@ -569,7 +569,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           .sentence-block {
             page-break-inside: avoid;
             border: 1px solid #e2e8f0;
-            border-left: 4px solid #06b6d4;
+            border-left: 1px solid #06b6d4;
             border-radius: 8px;
             padding: 16px 20px;
             margin-bottom: 20px;
