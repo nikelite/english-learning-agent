@@ -5,7 +5,7 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
-import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons } from './geminiService';
+import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -385,17 +385,7 @@ export default function App() {
     const sentences: string[] = [];
     const rawLines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (const line of rawLines) {
-      const matches = line.match(/[^.!?]+[.!?]+['"”’)?\]}]*(?:\s+|$)/g);
-      if (matches && matches.length > 0) {
-        sentences.push(...matches.map(m => m.trim()));
-        const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);
-        const remaining = line.substring(lastMatchIdx + matches[matches.length - 1].length).trim();
-        if (remaining) {
-          sentences.push(remaining);
-        }
-      } else {
-        sentences.push(line);
-      }
+      sentences.push(...splitIntoSentences(line));
     }
     
     const isEnglishSentence = (s: string): boolean => {

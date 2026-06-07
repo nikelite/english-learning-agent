@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzePassageSentences } from '../geminiService';
+import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
@@ -173,7 +173,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           const CHUNK_SIZE = 10;
           let totalChunksCount = 0;
           lesson.paragraphs.forEach(p => {
-            const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+            const sentences = splitIntoSentences(p.englishText);
             totalChunksCount += Math.ceil(sentences.length / CHUNK_SIZE);
           });
           setBgProgress({ completed: 0, total: totalChunksCount });
@@ -259,7 +259,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     const CHUNK_SIZE = 10;
     let totalChunksCount = 0;
     lesson.paragraphs.forEach(p => {
-      const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+      const sentences = splitIntoSentences(p.englishText);
       totalChunksCount += Math.ceil(sentences.length / CHUNK_SIZE);
     });
     setBgProgress({ completed: 0, total: totalChunksCount });
@@ -465,7 +465,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
     let contentHtml = '';
     lesson.paragraphs.forEach((p, pIdx) => {
-      const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+      const sentences = splitIntoSentences(p.englishText);
       const paragraphAnalyses = analysisCache[p.id] || [];
 
       contentHtml += `<div class="paragraph-header">Paragraph ${pIdx + 1}</div>`;
@@ -665,7 +665,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     const totalWords = words.length;
 
     // 3. Count English sentences only
-    const sentences = cleanEnglishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g) || [];
+    const sentences = splitIntoSentences(cleanEnglishText);
     const totalSentences = Math.max(1, sentences.length);
 
     // 4. Estimate English syllables only
@@ -824,7 +824,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           {lesson.paragraphs.map((p) => {
             const isActive = activeParagraphId === p.id;
             // Split paragraph englishText into complete sentences
-            const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+            const sentences = splitIntoSentences(p.englishText);
             const paragraphAnalyses = analysisCache[p.id];
 
             return (

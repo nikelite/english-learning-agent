@@ -1,4 +1,19 @@
+import sbd from 'sbd';
 import { ReadingLesson, ReadingVocabulary, SentenceAnalysis } from './types';
+
+// Centralized sentence splitting function using sbd (Sentence Boundary Detection)
+export function splitIntoSentences(text: string): string[] {
+  if (!text) return [];
+  return sbd.sentences(text, {
+    sanitize: false,
+    preserve_whitespace: true,
+    abbreviations: [
+      "e.g", "i.e", "vs", "etc", "approx", 
+      "Jan", "Feb", "Mar", "Apr", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      "Mr", "Mrs", "Dr", "St", "Jr", "Sr", "Co", "Corp", "Inc", "Ltd"
+    ]
+  });
+}
 
 // Helper function to call fetch with exponential backoff retry for network errors/transient API limits
 async function fetchWithRetry(
@@ -708,7 +723,7 @@ export async function analyzePassageSentences(
 
   // 1. Prepare paragraph chunking tasks
   const paragraphTasks = paragraphs.map(p => {
-    const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+    const sentences = splitIntoSentences(p.englishText);
     const chunks: string[][] = [];
     for (let i = 0; i < sentences.length; i += CHUNK_SIZE) {
       chunks.push(sentences.slice(i, i + CHUNK_SIZE));
@@ -940,21 +955,11 @@ export async function splitPassageIntoLessons(
     const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
     const chapterText = chapterParagraphs.join('\n\n');
     
-    // Robust sentence splitter supporting mixed English/Korean layout and varied punctuation
+    // Robust sentence splitter supporting mixed English/Korean layout and varied punctuation using sbd
     const sentences: string[] = [];
     const rawLines = chapterText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (const line of rawLines) {
-      const matches = line.match(/[^.!?]+[.!?]+['"”’)?\]}]*(?:\s+|$)/g);
-      if (matches && matches.length > 0) {
-        sentences.push(...matches.map(m => m.trim()));
-        const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);
-        const remaining = line.substring(lastMatchIdx + matches[matches.length - 1].length).trim();
-        if (remaining) {
-          sentences.push(remaining);
-        }
-      } else {
-        sentences.push(line);
-      }
+      sentences.push(...splitIntoSentences(line));
     }
     
     // Count only English sentences for splitting threshold (Korean annotations don't count toward limit)
