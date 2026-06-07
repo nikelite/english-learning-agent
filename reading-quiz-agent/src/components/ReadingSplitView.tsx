@@ -480,30 +480,42 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         if (activeAnalysis) {
           let vocabHtml = '';
           if (activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) {
-            vocabHtml += `<div class="analysis-section"><div class="section-title">🔤 주요 어휘</div><ul class="vocab-list">`;
-            activeAnalysis.vocabulary.forEach(v => {
-              vocabHtml += `<li class="vocab-item"><strong>${v.word}</strong>: ${v.meaning}</li>`;
-            });
-            vocabHtml += `</ul></div>`;
+            vocabHtml += `
+              <div class="analysis-section">
+                <span class="section-title">🔤 주요 어휘:</span>
+                ${activeAnalysis.vocabulary.map(v => `<span class="inline-item"><strong>${v.word}</strong> (${v.meaning})</span>`).join('')}
+              </div>
+            `;
           }
 
           let exprHtml = '';
           if (activeAnalysis.expressions && activeAnalysis.expressions.length > 0) {
-            exprHtml += `<div class="analysis-section"><div class="section-title">✨ 주요 표현</div><ul class="vocab-list">`;
-            activeAnalysis.expressions.forEach(e => {
-              exprHtml += `<li class="vocab-item"><strong>${e.expression}</strong>: ${e.meaning} ${e.contextNote ? `(${e.contextNote})` : ''}</li>`;
-            });
-            exprHtml += `</ul></div>`;
+            exprHtml += `
+              <div class="analysis-section">
+                <span class="section-title">✨ 주요 표현:</span>
+                ${activeAnalysis.expressions.map(e => `<span class="inline-item"><strong>${e.expression}</strong>: ${e.meaning}${e.contextNote ? ` (${e.contextNote})` : ''}</span>`).join('')}
+              </div>
+            `;
           }
 
           let grammarHtml = '';
           if (activeAnalysis.grammar) {
-            grammarHtml += `<div class="analysis-section"><div class="section-title">⚖️ 구문 & 문법 구조</div><p class="grammar-text">${activeAnalysis.grammar}</p></div>`;
+            grammarHtml += `
+              <div class="analysis-section">
+                <span class="section-title">⚖️ 구문 & 문법:</span>
+                <span class="grammar-text">${activeAnalysis.grammar}</span>
+              </div>
+            `;
           }
 
           let contextHtmlSec = '';
           if (activeAnalysis.context) {
-            contextHtmlSec += `<div class="analysis-section"><div class="section-title">🌐 문맥 & 흐름 분석</div><p class="context-text">${activeAnalysis.context}</p></div>`;
+            contextHtmlSec += `
+              <div class="analysis-section">
+                <span class="section-title">🌐 문맥 분석:</span>
+                <span class="context-text">${activeAnalysis.context}</span>
+              </div>
+            `;
           }
 
           contentHtml += `
@@ -517,9 +529,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           `;
         } else {
           contentHtml += `
-            <div class="sentence-block">
-              <div class="english-text">S${sIdx + 1}. ${sentence}</div>
-              <div style="font-size: 13.5px; color: #ef4444; font-weight: 600;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
+            <div class="sentence-block" style="padding: 8px 12px; margin-bottom: 8px;">
+              <div class="english-text" style="font-size: 13.5px; margin-bottom: 2px;">S${sIdx + 1}. ${sentence}</div>
+              <div style="font-size: 11.5px; color: #ef4444; font-weight: 600;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
             </div>
           `;
         }
@@ -537,84 +549,85 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           body {
             font-family: 'Inter', 'Nanum Gothic', sans-serif;
             color: #1e293b;
-            line-height: 1.6;
-            margin: 40px;
+            line-height: 1.5;
+            margin: 20px;
           }
           .header {
             text-align: center;
             border-bottom: 2px solid #06b6d4;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
           }
           .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 28px;
+            margin: 0 0 6px 0;
+            font-size: 22px;
             color: #0f172a;
             font-weight: 800;
           }
           .header p {
             margin: 0;
-            font-size: 13px;
+            font-size: 12px;
             color: #64748b;
           }
           .paragraph-header {
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 800;
             color: #0f172a;
-            margin: 35px 0 15px 0;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 5px;
+            margin: 20px 0 10px 0;
+            border-bottom: 1.5px solid #e2e8f0;
+            padding-bottom: 4px;
             page-break-after: avoid;
           }
           .sentence-block {
             page-break-inside: avoid;
             border: 1px solid #e2e8f0;
-            border-left: 1px solid #06b6d4;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin-bottom: 20px;
-            background-color: #ffffff; /* Saved ink: pure white background instead of grey */
+            border-left: 3px solid #06b6d4;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            background-color: #ffffff;
           }
           .english-text {
-            font-size: 15px;
+            font-size: 14.5px;
             font-weight: 700;
             color: #0f172a;
-            margin-bottom: 8px;
-          }
-          .translation {
-            font-size: 13.5px;
-            color: #0284c7;
-            margin-bottom: 12px;
-            font-weight: 600;
+            margin-bottom: 6px;
           }
           .analysis-section {
-            margin-top: 10px;
-            font-size: 12.5px;
-            border-top: 1px dashed #e2e8f0;
-            padding-top: 8px;
+            margin-top: 6px;
+            font-size: 12px;
+            border-top: 1px dashed #f1f5f9;
+            padding-top: 5px;
+            line-height: 1.45;
           }
           .section-title {
             font-weight: 700;
             color: #475569;
-            margin-bottom: 4px;
-            font-size: 12px;
+            margin-right: 6px;
+            font-size: 11.5px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            display: inline-block;
           }
-          .vocab-list {
-            margin: 0;
-            padding-left: 18px;
-          }
-          .vocab-item {
-            margin-bottom: 3px;
+          .inline-item {
+            display: inline-block;
+            margin-right: 6px;
+            margin-bottom: 2px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            color: #334155;
           }
           .grammar-text, .context-text {
             margin: 0;
             color: #334155;
+            display: inline;
           }
           .stats-bar {
-            margin-top: 12px;
-            font-size: 13px;
+            margin-top: 10px;
+            font-size: 12px;
             color: #475569;
             display: flex;
             justify-content: center;
@@ -622,7 +635,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           }
           @media print {
             body {
-              margin: 20px;
+              margin: 15px;
             }
             .sentence-block {
               box-shadow: none;
@@ -644,7 +657,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       </body>
       </html>
     `;
-
+    
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(printHtml);
