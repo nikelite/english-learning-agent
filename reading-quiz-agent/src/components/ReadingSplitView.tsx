@@ -151,7 +151,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         bgFetchTriggeredRef.current = true;
         if (isCurrent) {
           setIsAnalyzingBg(true);
-          const CHUNK_SIZE = 3;
+          const CHUNK_SIZE = 10;
           let totalChunksCount = 0;
           lesson.paragraphs.forEach(p => {
             const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
@@ -237,7 +237,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       return;
     }
     setIsAnalyzingBg(true);
-    const CHUNK_SIZE = 3;
+    const CHUNK_SIZE = 10;
     let totalChunksCount = 0;
     lesson.paragraphs.forEach(p => {
       const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];

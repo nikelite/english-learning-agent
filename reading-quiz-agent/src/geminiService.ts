@@ -666,7 +666,7 @@ export async function analyzePassageSentences(
     throw new Error("분석할 문단 목록이 비어 있습니다.");
   }
 
-  const CHUNK_SIZE = 3;
+  const CHUNK_SIZE = 10;
   const result: Record<number, SentenceAnalysis[]> = {};
 
   // 1. Prepare paragraph chunking tasks
