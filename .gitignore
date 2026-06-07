@@ -23,3 +23,8 @@ pnpm-debug.log*
 *.sln
 *.sw?
 *.local
+
+# Local toolchain & temp files
+node-v20/
+temp-fb/
+**/scratch/
