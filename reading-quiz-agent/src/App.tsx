@@ -59,10 +59,27 @@ export default function App() {
 
   const [splitConfirm, setSplitConfirm] = useState<{
     show: boolean;
-    detectedCount: number;
     text: string;
     title: string;
-  }>({ show: false, detectedCount: 0, text: '', title: '' });
+    originalSentences: number;
+    originalWords: number;
+    remainingSentences: number;
+    remainingWords: number;
+    filteredSentences: number;
+    filteredWords: number;
+    exceedsLimit: boolean;
+  }>({
+    show: false,
+    text: '',
+    title: '',
+    originalSentences: 0,
+    originalWords: 0,
+    remainingSentences: 0,
+    remainingWords: 0,
+    filteredSentences: 0,
+    filteredWords: 0,
+    exceedsLimit: false
+  });
 
   // 5. Active Lesson State (default to wood wide web preset)
   const [activeLesson, setActiveLesson] = useState<ReadingLesson | null>(() => {
@@ -495,20 +512,51 @@ export default function App() {
       return;
     }
 
-    const engCount = countEnglishSentences(text);
-    
-    // Ask user if they want to split when the sentence count exceeds the configured limit
-    if (engCount > sentenceLimit) {
-      setSplitConfirm({
-        show: true,
-        detectedCount: engCount,
-        text: text,
-        title: titleInput
-      });
-    } else {
-      // Trigger execution directly without confirmation if it fits in 1 single part anyway
-      await executeAnalysis(text, titleInput, false);
+    // 1. Split into sentences
+    const sentences: string[] = [];
+    const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of rawLines) {
+      sentences.push(...splitIntoSentences(line));
     }
+
+    // 2. Count original words & sentences
+    const originalWords = text.split(/\s+/).filter(Boolean);
+    const originalWordsCount = originalWords.length;
+    const originalSentencesCount = sentences.length;
+
+    // 3. Filter criteria (isEnglishSentence)
+    const isEnglishSentence = (s: string): boolean => {
+      const latinChars = (s.match(/[a-zA-Z]/g) || []).length;
+      return latinChars >= 5;
+    };
+
+    const remainingSentences = sentences.filter(isEnglishSentence);
+    const remainingSentencesCount = remainingSentences.length;
+
+    const filteredSentencesCount = Math.max(0, originalSentencesCount - remainingSentencesCount);
+
+    // 4. Word count after filtering (only count words matching /[a-zA-Z]/ in remaining sentences)
+    const cleanEnglishText = remainingSentences.join(' ');
+    const remainingWords = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
+    const remainingWordsCount = remainingWords.length;
+
+    const filteredWordsCount = Math.max(0, originalWordsCount - remainingWordsCount);
+
+    const exceedsLimit = remainingSentencesCount > sentenceLimit;
+
+    // Open the preview/split confirmation modal for the user to see the breakdown and click start
+    setSplitConfirm({
+      show: true,
+      text: text,
+      title: titleInput,
+      originalSentences: originalSentencesCount,
+      originalWords: originalWordsCount,
+      remainingSentences: remainingSentencesCount,
+      remainingWords: remainingWordsCount,
+      filteredSentences: filteredSentencesCount,
+      filteredWords: filteredWordsCount,
+      exceedsLimit: exceedsLimit
+    });
   };
 
   // On-demand Lazy Loading trigger
@@ -1217,37 +1265,100 @@ export default function App() {
       {/* Smart Split Confirmation Modal */}
       {splitConfirm.show && (
         <div className="modal-overlay" style={{ zIndex: 2000 }}>
-          <div className="modal-content" style={{ maxWidth: '480px', padding: '2rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🤖</div>
-            <h3 style={{ fontSize: '1.25rem', color: 'white', marginBottom: '0.75rem', fontWeight: 'bold' }}>
-              지문 스마트 분석 검출
+          <div className="modal-content" style={{ maxWidth: '520px', padding: '2rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📊</div>
+            <h3 style={{ fontSize: '1.35rem', color: 'white', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+              지문 분석 및 필터링 리포트
             </h3>
-            
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '1.5rem' }}>
-              이 지문에서 총 <strong style={{ color: 'var(--secondary)' }}>{splitConfirm.detectedCount}개</strong>의 영어 문장이 감지되었습니다.<br />
-              설정하신 분할 기준(<strong style={{ color: 'var(--primary)' }}>{sentenceLimit}문장</strong>)을 초과합니다.
+            <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              영어 문장(알파벳 5자 이상)과 한국어 설명/기타 텍스트를 분류하여 사전 검사를 수행했습니다.
             </p>
-            
-            <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', fontSize: '0.775rem', color: 'var(--text-muted)', borderStyle: 'dashed' }}>
-              💡 여러 단원으로 분할하면 보관함에 <strong>Part 1, Part 2...</strong> 형태로 대기 세트가 생성되며, 하나씩 순차 학습이 가능합니다.
+
+            {/* Stats Table / Card Grid */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)', 
+              gap: '0.75rem', 
+              marginBottom: '1.5rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: '1rem',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.05)'
+            }}>
+              {/* Original */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '500' }}>원본 텍스트</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'white' }}>
+                  {splitConfirm.originalSentences}문장
+                </span>
+                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                  {splitConfirm.originalWords}단어
+                </span>
+              </div>
+
+              {/* Remaining */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.15)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: '600' }}>남은 영어 콘텐츠</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--secondary)' }}>
+                  {splitConfirm.remainingSentences}문장
+                </span>
+                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                  {splitConfirm.remainingWords}단어
+                </span>
+              </div>
+
+              {/* Filtered */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'rgb(239, 68, 68)', fontWeight: '500' }}>필터링된 텍스트</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'rgb(239, 68, 68)' }}>
+                  {splitConfirm.filteredSentences}문장
+                </span>
+                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                  {splitConfirm.filteredWords}단어
+                </span>
+              </div>
             </div>
 
+            {/* Split analogy/exceed message */}
+            {splitConfirm.exceedsLimit ? (
+              <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem 1rem', background: 'rgba(139, 92, 246, 0.05)', border: '1px dashed rgba(139, 92, 246, 0.3)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: '1.5' }}>
+                ⚠️ 설정된 분할 기준(<strong style={{ color: 'var(--primary)' }}>{sentenceLimit}문장</strong>)을 초과하는 방대한 지문입니다. 
+                단원 분할 기능 사용을 적극 권장합니다. (보관함에 분할 생성됨)
+              </div>
+            ) : (
+              <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.05)', border: '1px dashed rgba(6, 182, 212, 0.3)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: '1.5' }}>
+                ✅ 학습에 무리 없는 아담한 분량의 지문입니다. 바로 분석 및 학습을 시작할 수 있습니다.
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <button
-                onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, true)}
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '0.85rem' }}
-              >
-                ✂️ {Math.ceil(splitConfirm.detectedCount / sentenceLimit)}개 단원으로 분할하여 저장
-              </button>
-              
-              <button
-                onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, false)}
-                className="btn btn-accent"
-                style={{ width: '100%', padding: '0.85rem' }}
-              >
-                📖 분할 없이 전체 한 번에 즉시 학습
-              </button>
+              {splitConfirm.exceedsLimit ? (
+                <>
+                  <button
+                    onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, true)}
+                    className="btn btn-primary"
+                    style={{ width: '100%', padding: '0.85rem' }}
+                  >
+                    ✂️ {Math.ceil(splitConfirm.remainingSentences / sentenceLimit)}개 단원으로 분할하여 분석 시작
+                  </button>
+                  
+                  <button
+                    onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, false)}
+                    className="btn btn-accent"
+                    style={{ width: '100%', padding: '0.85rem' }}
+                  >
+                    📖 분할 없이 전체 한 번에 즉시 분석 시작
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => executeAnalysis(splitConfirm.text, splitConfirm.title, false)}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.85rem' }}
+                >
+                  🚀 분석 및 학습 즉시 시작
+                </button>
+              )}
               
               <button
                 onClick={() => setSplitConfirm(prev => ({ ...prev, show: false }))}
