@@ -569,16 +569,18 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const stats = (() => {
-    const words = lesson.passageText.split(/\s+/).filter(Boolean);
+    // 1. Concatenate all English paragraph texts to ensure we ONLY analyze actual English content (excluding Korean annotations)
+    const cleanEnglishText = lesson.paragraphs.map(p => p.englishText).join(' ');
+    
+    // 2. Count English words only
+    const words = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
     const totalWords = words.length;
 
-    let totalSentences = 0;
-    lesson.paragraphs.forEach(p => {
-      const s = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
-      totalSentences += s.length;
-    });
-    if (totalSentences === 0) totalSentences = 1;
+    // 3. Count English sentences only
+    const sentences = cleanEnglishText.match(/[^.!?]+[.!?]+(\s+|$)/g) || [];
+    const totalSentences = Math.max(1, sentences.length);
 
+    // 4. Estimate English syllables only
     let totalSyllables = 0;
     words.forEach(w => {
       let word = w.toLowerCase().replace(/[^a-z]/g, '');
@@ -593,23 +595,40 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       totalSyllables += syllables ? syllables.length : 1;
     });
 
+    // 5. Calculate average sentence length and average syllables per word
     const asl = totalWords / totalSentences;
-    const asw = totalSyllables / totalWords;
-    const grade = Math.max(0.5, 0.39 * asl + 11.8 * asw - 15.59);
-    
-    let lexile = 0;
-    if (grade <= 1) {
-      lexile = Math.round(grade * 200 + 100);
-    } else {
-      lexile = Math.round(grade * 100 + 200);
-    }
-    lexile = Math.max(100, Math.min(1600, lexile));
+    const asw = totalSyllables / Math.max(1, totalWords);
+
+    // 6. Calculate Flesch-Kincaid Grade Level (capped between Grade 1 and Grade 12 for realistic US K-12 schooling metrics)
+    const rawGrade = 0.39 * asl + 11.8 * asw - 15.59;
+    const grade = Math.max(1, Math.min(12, rawGrade));
+    const roundedGrade = Math.round(grade);
+
+    // 7. Map Grade Level to typical Lexile range
+    const lexileRanges: Record<number, { min: number; max: number; label: string }> = {
+      1: { min: 100, max: 400, label: "초등 1학년" },
+      2: { min: 300, max: 600, label: "초등 2학년" },
+      3: { min: 500, max: 800, label: "초등 3학년" },
+      4: { min: 600, max: 900, label: "초등 4학년" },
+      5: { min: 700, max: 1000, label: "초등 5학년" },
+      6: { min: 800, max: 1050, label: "초등 6학년" },
+      7: { min: 850, max: 1100, label: "중학 1학년" },
+      8: { min: 900, max: 1150, label: "중학 2학년" },
+      9: { min: 950, max: 1200, label: "중학 3학년" },
+      10: { min: 1000, max: 1250, label: "고교 1학년" },
+      11: { min: 1050, max: 1300, label: "고교 2학년" },
+      12: { min: 1100, max: 1400, label: "고교 3학년/대학" }
+    };
+
+    const info = lexileRanges[roundedGrade] || lexileRanges[12];
+    const estimatedLexileVal = Math.round(info.min + (info.max - info.min) * (grade % 1));
 
     return {
       words: totalWords,
       sentences: totalSentences,
-      lexile: `${lexile}L`,
-      grade: grade.toFixed(1)
+      lexile: `${Math.max(info.min, Math.min(info.max, estimatedLexileVal))}L`,
+      grade: grade.toFixed(1),
+      label: info.label
     };
   })();
 
@@ -681,7 +700,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
               📊 {stats.sentences}문장 / {stats.words}단어
             </span>
             <span style={{ fontSize: '0.7rem', background: 'rgba(6, 182, 212, 0.08)', color: 'var(--secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(6, 182, 212, 0.15)', fontWeight: '700' }}>
-              🎓 예상 Lexile: {stats.lexile} (미국 {Math.ceil(parseFloat(stats.grade))}학년 수준)
+              🎓 예상 Lexile: {stats.lexile} ({stats.label} 수준)
             </span>
           </div>
 
