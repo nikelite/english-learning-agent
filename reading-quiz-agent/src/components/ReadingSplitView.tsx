@@ -612,6 +612,14 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             margin: 0;
             color: #334155;
           }
+          .stats-bar {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #475569;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+          }
           @media print {
             body {
               margin: 20px;
@@ -626,6 +634,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         <div class="header">
           <h1>지문 제목: "${lesson.title}"</h1>
           <p>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트 | 출력 시간: ${new Date().toLocaleString()}</p>
+          <div class="stats-bar">
+            <span>📊 <strong>문장 수:</strong> ${stats.sentences}개</span>
+            <span>📝 <strong>단어 수:</strong> ${stats.words}단어</span>
+            <span>🎯 <strong>예상 난이도:</strong> ${stats.lexile} (${stats.label})</span>
+          </div>
         </div>
         ${contentHtml}
       </body>
