@@ -495,3 +495,137 @@ export async function deserializeLesson(base64Str: string): Promise<LabLesson | 
     return null;
   }
 }
+
+const FOLLOW_UP_SYSTEM_PROMPT = `You are a professional native English linguistic editor, proofreader, and educational tutor.
+The user has previously received an English correction for their writing. Now, they are asking a follow-up question or requesting a refinement/revision of the corrected text.
+
+You must reply with a single, valid JSON object and nothing else. Do not wrap the JSON inside markdown code blocks (e.g. do NOT include \`\`\`json or \`\`\`). Output only the raw string.
+All explanation, feedback, and answers MUST be written in friendly, encouraging, and detailed KOREAN.
+
+Key Constraints & Guidelines:
+1. Determine if the user is asking an educational/general question, OR requesting a rewrite/revision/refinement of the corrected text.
+2. If it is an educational or explanation question (e.g., "Why is X better than Y?", "Explain this grammar rule", "Can you explain why you changed goes to went?"):
+   - Set "textUpdated" to false.
+   - Provide a clear, detailed, and encouraging explanation in Korean under "answer".
+3. If it is a revision or rewrite request (e.g., "Make it sound more professional", "Rewrite in a polite business tone", "Make it sound like a teenager", "Make it shorter", "Change it to spoken style"):
+   - Set "textUpdated" to true.
+   - Provide a clear Korean explanation of what changes you made under "answer" (e.g. "더 격식있는 비즈니스 톤으로 수정하였습니다...").
+   - Provide the entire new corrected English text under "correctedText".
+   - Provide the updated overall feedback in Korean under "overallFeedback".
+   - Provide the updated corrections array under "corrections" conforming to the original schema. For each correction item:
+     * "original": The EXACT substring from the user's original raw text (sourceText) that was modified. It MUST match the raw text character-for-character.
+     * "corrected": The new corrected substring.
+     * "type": "grammar", "expression", "vocab", or "flow".
+     * "explanation": Detailed, easy-to-understand Korean explanation.
+
+Strict JSON Response Schema:
+{
+  "answer": "Korean explanation/answer to the user.",
+  "textUpdated": true,
+  "correctedText": "New full corrected text (only if textUpdated is true)",
+  "overallFeedback": "New overall feedback in Korean (only if textUpdated is true)",
+  "corrections": [
+    {
+      "original": "The exact original substring from sourceText",
+      "corrected": "The corrected replacement substring",
+      "type": "grammar",
+      "explanation": "Detailed Korean explanation of the correction"
+    }
+  ]
+}`;
+
+export async function processFollowUp(
+  lesson: LabLesson,
+  messageText: string,
+  apiKey: string
+): Promise<{
+  answer: string;
+  textUpdated: boolean;
+  correctedText?: string;
+  overallFeedback?: string;
+  corrections?: CorrectionItem[];
+}> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  // Build lesson context for the prompt
+  const contextPrompt = `
+Lesson Context:
+- User's Original Text (sourceText): "${lesson.sourceText}"
+- Target Persona: "${lesson.persona}"
+- Style: "${lesson.style === 'spoken' ? '구어체' : '문어체'}"
+- Current Corrected Text: "${lesson.correctedText}"
+- Current Overall Feedback: "${lesson.overallFeedback}"
+- Current Corrections:
+${JSON.stringify(lesson.corrections.map(c => ({ original: c.original, corrected: c.corrected, type: c.type, explanation: c.explanation })), null, 2)}
+
+User's New Message (Question or Revision request):
+"${messageText}"
+`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${FOLLOW_UP_SYSTEM_PROMPT}\n\nStrict Request:\n${contextPrompt}`
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.3
+    }
+  };
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!responseText) {
+    throw new Error("Gemini가 응답을 반환하지 않았습니다.");
+  }
+
+  try {
+    const parsedJson = JSON.parse(responseText.trim());
+    
+    const corrections: CorrectionItem[] | undefined = parsedJson.corrections 
+      ? parsedJson.corrections.map((c: any, index: number) => ({
+          id: c.id || `corr-refine-${Date.now()}-${index}`,
+          original: c.original || '',
+          corrected: c.corrected || '',
+          type: c.type === 'grammar' || c.type === 'expression' || c.type === 'vocab' || c.type === 'flow' ? c.type : 'expression',
+          explanation: c.explanation || '설명이 없습니다.'
+        }))
+      : undefined;
+
+    return {
+      answer: parsedJson.answer || "답변을 가져오지 못했습니다.",
+      textUpdated: !!parsedJson.textUpdated,
+      correctedText: parsedJson.correctedText,
+      overallFeedback: parsedJson.overallFeedback,
+      corrections
+    };
+  } catch (error) {
+    console.error("Failed to parse Gemini response:", error);
+    throw new Error("Gemini 응답의 형식이 올바르지 않습니다.");
+  }
+}

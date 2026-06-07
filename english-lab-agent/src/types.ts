@@ -20,6 +20,14 @@ export interface Persona {
   description: string;
 }
 
+export interface LabMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  createdAt: number;
+  textUpdated?: boolean;
+}
+
 export interface LabLesson {
   id: string;
   title: string;
@@ -37,6 +45,7 @@ export interface LabLesson {
   solvedAt?: number;
   firstAttemptScore?: { score: number; total: number };
   retryHistory?: Array<{ score: number; total: number; solvedAt: number }>;
+  chatHistory?: LabMessage[];
 }
 
 export interface WrongLabAnswer {

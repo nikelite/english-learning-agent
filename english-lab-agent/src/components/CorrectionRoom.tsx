@@ -1,24 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, 
-  Printer, HelpCircle, FileText, ClipboardList
+  Printer, HelpCircle, FileText, ClipboardList, ArrowLeft, Send, MessageSquare
 } from 'lucide-react';
-import type { LabLesson, LabQuizItem } from '../types';
+import type { LabLesson, LabQuizItem, LabMessage } from '../types';
+import { processFollowUp } from '../geminiService';
 
 interface CorrectionRoomProps {
   lesson: LabLesson;
+  apiKey: string;
   onAddWrongAnswer: (quizItem: LabQuizItem, selectedAnswerIndex: number) => void;
   onQuizCompleted: (correctCount: number, totalCount: number, wrongQuestionsList: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => void;
   onProgressUpdate: (userAnswers: Record<string, number>) => void;
   onGraduateReview: (wrongId: string) => void;
+  onLessonUpdate: (updatedLesson: LabLesson) => void;
+  onClose: () => void;
 }
 
 export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
   lesson,
+  apiKey,
   onAddWrongAnswer,
   onQuizCompleted,
   onProgressUpdate,
-  onGraduateReview
+  onGraduateReview,
+  onLessonUpdate,
+  onClose
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<LabQuizItem[]>(() => lesson.quizzes || []);
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
@@ -29,6 +36,92 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const chatHistory = lesson.chatHistory || [];
+
+  useEffect(() => {
+    if (chatOpen && messageEndRef.current) {
+      setTimeout(() => {
+        messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    }
+  }, [lesson.chatHistory, chatOpen, chatLoading]);
+
+  const handleSendChatMessage = async (e?: React.FormEvent, customText?: string) => {
+    if (e) e.preventDefault();
+    const targetText = customText || chatInput;
+    if (!targetText.trim() || chatLoading) return;
+    if (!apiKey) {
+      setChatError("설정에서 Gemini API Key를 먼저 입력해 주세요.");
+      return;
+    }
+
+    const userMsgText = targetText.trim();
+    if (!customText) {
+      setChatInput('');
+    }
+    setChatError(null);
+    setChatLoading(true);
+
+    const newUserMessage: LabMessage = {
+      id: `msg-${Date.now()}-user`,
+      sender: 'user',
+      text: userMsgText,
+      createdAt: Date.now()
+    };
+
+    const updatedChatHistory = [...chatHistory, newUserMessage];
+    
+    const lessonWithUserMsg = {
+      ...lesson,
+      chatHistory: updatedChatHistory
+    };
+    onLessonUpdate(lessonWithUserMsg);
+
+    try {
+      const result = await processFollowUp(lesson, userMsgText, apiKey);
+      
+      const aiMessage: LabMessage = {
+        id: `msg-${Date.now()}-ai`,
+        sender: 'ai',
+        text: result.answer,
+        createdAt: Date.now(),
+        textUpdated: result.textUpdated
+      };
+
+      const finalLesson: LabLesson = {
+        ...lessonWithUserMsg,
+        chatHistory: [...updatedChatHistory, aiMessage]
+      };
+
+      if (result.textUpdated && result.correctedText) {
+        finalLesson.correctedText = result.correctedText;
+        if (result.overallFeedback) finalLesson.overallFeedback = result.overallFeedback;
+        if (result.corrections) finalLesson.corrections = result.corrections;
+      }
+
+      onLessonUpdate(finalLesson);
+    } catch (err: any) {
+      console.error("AI chat error:", err);
+      setChatError(err.message || "AI 응답을 가져오는 중 오류가 발생했습니다.");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const suggestions = [
+    "왜 이 표현으로 수정되었나요?",
+    "더 정중하고 격식있는 비즈니스 문체로 수정해줘",
+    "더 친근한 또래 구어체 톤으로 수정해줘",
+    "단어 난이도를 조금만 낮춰서 더 쉽게 써줘"
+  ];
+
 
   const lastLessonIdRef = useRef<string | null>(null);
 
@@ -338,7 +431,16 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
               </h2>
             </div>
             
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button 
+                className="btn btn-secondary btn-sm"
+                onClick={onClose}
+                title="목록으로 돌아가기"
+              >
+                <ArrowLeft size={16} />
+                <span>목록으로 돌아가기</span>
+              </button>
+
               <button 
                 className="btn btn-secondary btn-sm"
                 onClick={() => window.print()}
@@ -383,6 +485,165 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
               {lesson.overallFeedback}
             </p>
           </div>
+
+          {/* Q&A Counselor Panel */}
+          <div className="eli5-analogy-box" style={{ 
+            marginTop: '0rem', 
+            marginBottom: '1.5rem', 
+            border: '1px solid var(--border-color)', 
+            background: 'rgba(16, 185, 129, 0.02)',
+            borderRadius: '12px',
+            padding: '1rem'
+          }}>
+            <button 
+              onClick={() => setChatOpen(!chatOpen)}
+              style={{
+                width: '100%',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                color: 'white',
+                fontWeight: '800',
+                fontSize: '0.95rem'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+                <MessageSquare size={18} />
+                <span>AI 첨삭 카운셀러 💬 {chatHistory.length > 0 ? `(${chatHistory.length})` : ''}</span>
+              </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {chatOpen ? '접기 ▲' : '질문 / 수정 요청하기 ▼'}
+              </span>
+            </button>
+
+            {chatOpen && (
+              <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                {/* Message List */}
+                <div style={{ 
+                  maxHeight: '260px', 
+                  overflowY: 'auto', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '0.75rem',
+                  marginBottom: '1rem',
+                  paddingRight: '0.25rem'
+                }}>
+                  <div style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+                    padding: '0.6rem 0.8rem', 
+                    borderRadius: '8px', 
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    alignSelf: 'flex-start',
+                    maxWidth: '85%'
+                  }}>
+                    안녕하세요! 첨삭 결과에 대해 설명이 필요하거나 문장을 다르게 수정(예: 격식있는 비즈니스 톤으로 변경 등)하고 싶으시다면 언제든 질문해 주세요. 😊
+                  </div>
+
+                  {chatHistory.map((msg) => (
+                    <div 
+                      key={msg.id}
+                      style={{
+                        padding: '0.65rem 0.8rem',
+                        borderRadius: '12px',
+                        fontSize: '0.825rem',
+                        lineHeight: '1.4',
+                        maxWidth: '85%',
+                        alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                        backgroundColor: msg.sender === 'user' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                        color: msg.sender === 'user' ? '#34d399' : 'var(--text-primary)',
+                        border: msg.sender === 'user' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border-color)'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 'bold' }}>
+                        {msg.sender === 'user' ? '나의 질문' : 'AI 답변'}
+                      </div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                      {msg.textUpdated && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--success)', marginTop: '0.3rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Check size={12} /> 교정 및 리포트가 업데이트되었습니다.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {chatLoading && (
+                    <div style={{ 
+                      alignSelf: 'flex-start', 
+                      backgroundColor: 'rgba(255, 255, 255, 0.02)', 
+                      padding: '0.5rem 0.8rem', 
+                      borderRadius: '8px',
+                      fontSize: '0.75rem',
+                      color: 'var(--text-muted)'
+                    }}>
+                      <span className="animate-pulse">🤖 답변 작성 및 첨삭 반영 중...</span>
+                    </div>
+                  )}
+
+                  {chatError && (
+                    <div style={{ 
+                      color: 'var(--error)', 
+                      fontSize: '0.75rem', 
+                      padding: '0.4rem', 
+                      background: 'rgba(239, 68, 68, 0.05)',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(239, 68, 68, 0.15)'
+                    }}>
+                      ⚠️ {chatError}
+                    </div>
+                  )}
+                  <div ref={messageEndRef} />
+                </div>
+
+                {/* Suggestions Chips */}
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  {suggestions.map((sug, sIdx) => (
+                    <button
+                      key={sIdx}
+                      className="btn btn-secondary btn-sm"
+                      style={{ 
+                        fontSize: '0.7rem', 
+                        padding: '0.2rem 0.5rem', 
+                        borderRadius: '9999px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        borderColor: 'rgba(255, 255, 255, 0.08)'
+                      }}
+                      onClick={() => handleSendChatMessage(undefined, sug)}
+                      disabled={chatLoading}
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input Form */}
+                <form onSubmit={handleSendChatMessage} style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="질문이나 수정 요구사항을 입력하세요..."
+                    className="input-glow"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem', flex: 1 }}
+                    disabled={chatLoading}
+                  />
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    disabled={chatLoading || !chatInput.trim()}
+                  >
+                    <Send size={14} />
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+
 
           {/* Detailed Correction Card List */}
           <div>

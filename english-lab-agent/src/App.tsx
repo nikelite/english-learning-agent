@@ -41,7 +41,7 @@ export default function App() {
   // 3. User Input States
   const [inputText, setInputText] = useState('');
   const [contextText, setContextText] = useState('');
-  const [personaType, setPersonaType] = useState('두진 - 한국에서 온 40대 남성 직장인 엔지니어');
+  const [personaType, setPersonaType] = useState('40대 엔지니어 직장인');
   const [customPersona, setCustomPersona] = useState('');
   const [writingStyle, setWritingStyle] = useState<'spoken' | 'written'>('written');
   const [questionCount, setQuestionCount] = useState<number>(5);
@@ -307,11 +307,20 @@ export default function App() {
     const presetsProgress = savedProgress ? JSON.parse(savedProgress) : {};
     const progress = presetsProgress[preset.id];
     
-    let presetWithProgress = preset;
+    let presetWithProgress = { ...preset };
     if (progress) {
-      const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
-      const solvedAt = progress.solvedAt;
-      presetWithProgress = { ...preset, userAnswers, solvedAt };
+      const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : undefined;
+      presetWithProgress = { 
+        ...preset, 
+        userAnswers,
+        solvedAt: progress.solvedAt,
+        firstAttemptScore: progress.firstAttemptScore,
+        retryHistory: progress.retryHistory,
+        chatHistory: progress.chatHistory,
+        correctedText: progress.correctedText || preset.correctedText,
+        overallFeedback: progress.overallFeedback || preset.overallFeedback,
+        corrections: progress.corrections || preset.corrections
+      };
     }
     
     setActiveLesson(presetWithProgress);
@@ -533,6 +542,29 @@ export default function App() {
     setActiveLesson(updatedLesson);
   };
 
+  const handleLessonUpdate = (updatedLesson: LabLesson) => {
+    if (updatedLesson.id.startsWith('preset-')) {
+      const savedProgress = localStorage.getItem('lab_presets_progress');
+      const presetsProgress = savedProgress ? JSON.parse(savedProgress) : {};
+      presetsProgress[updatedLesson.id] = {
+        ...(presetsProgress[updatedLesson.id] || {}),
+        userAnswers: updatedLesson.userAnswers,
+        solvedAt: updatedLesson.solvedAt,
+        firstAttemptScore: updatedLesson.firstAttemptScore,
+        retryHistory: updatedLesson.retryHistory,
+        chatHistory: updatedLesson.chatHistory,
+        correctedText: updatedLesson.correctedText,
+        overallFeedback: updatedLesson.overallFeedback,
+        corrections: updatedLesson.corrections
+      };
+      localStorage.setItem('lab_presets_progress', JSON.stringify(presetsProgress));
+    } else {
+      saveLessonToHistory(updatedLesson);
+    }
+    setActiveLesson(updatedLesson);
+  };
+
+
   // Inject current/past wrong answers into study session for spaced repetition
   const injectedQuizzes = (() => {
     if (!activeLesson) return [];
@@ -630,10 +662,13 @@ export default function App() {
                   ...activeLesson,
                   quizzes: injectedQuizzes
                 }}
+                apiKey={apiKey}
                 onAddWrongAnswer={handleAddWrongAnswer}
                 onQuizCompleted={handleQuizCompleted}
                 onProgressUpdate={handleProgressUpdate}
                 onGraduateReview={handleGraduateReview}
+                onLessonUpdate={handleLessonUpdate}
+                onClose={() => setActiveLesson(null)}
               />
 
               <ShareModal
@@ -690,8 +725,9 @@ export default function App() {
                       disabled={isLoading}
                       style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)' }}
                     >
-                      <option value="두진 - 한국에서 온 40대 남성 직장인 엔지니어">두진 (40대 엔지니어 직장인)</option>
-                      <option value="준후 - 한국에서 온 미국 중학생">준후 (미국 중학생 청소년)</option>
+                      <option value="40대 엔지니어 직장인">40대 엔지니어 직장인</option>
+                      <option value="미국 중학생 청소년">미국 중학생 청소년</option>
+                      <option value="40대 일상 / 학부모 / 관공서/가게 등..">40대 일상 / 학부모 / 관공서/가게 등..</option>
                       <option value="custom">직접 입력...</option>
                     </select>
                   </div>
@@ -852,8 +888,8 @@ export default function App() {
                           onClick={() => handleLoadPreset(lesson)}
                           style={{ cursor: 'pointer' }}
                         >
-                          <div style={{ flex: 1, overflow: 'hidden', marginRight: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <div style={{ flex: 1, overflow: 'hidden', marginRight: '1rem', minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap', minWidth: 0 }}>
                               <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
                                 {lesson.style === 'spoken' ? '구어' : '문어'}
                               </span>
@@ -877,7 +913,7 @@ export default function App() {
                                   </button>
                                 </form>
                               ) : (
-                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: 'white', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: 'white', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
                                   {lesson.title}
                                 </span>
                               )}
@@ -892,26 +928,54 @@ export default function App() {
                                 </button>
                               )}
                             </div>
+
+                            {/* Solved Status and Cloud Chips Row */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.25rem', marginBottom: '0.35rem' }}>
+                              {score !== null ? (() => {
+                                const firstScore = lesson.firstAttemptScore 
+                                  ? `${lesson.firstAttemptScore.score}/${lesson.firstAttemptScore.total}`
+                                  : `${score}/${(lesson.quizzes || []).length}`;
+                                
+                                const retryStr = lesson.retryHistory && lesson.retryHistory.length > 0
+                                  ? `, 재시도: ` + lesson.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
+                                  : '';
+
+                                return (
+                                  <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
+                                    ✅ 풀이 완료 ({firstScore}{retryStr})
+                                  </span>
+                                );
+                              })() : hasQuiz ? (
+                                <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
+                                  📖 미풀이
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.65rem', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
+                                  ✏️ 교정 전용
+                                </span>
+                              )}
+
+                              {lesson.ownerId && lesson.ownerId !== userId && (
+                                <span style={{ fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
+                                  📥 다른 사용자 공유
+                                </span>
+                              )}
+                              {lesson.ownerId && lesson.ownerId === userId && (
+                                <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
+                                  ☁️ My 클라우드
+                                </span>
+                              )}
+                            </div>
                             
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', margin: 0 }}>
                               {lesson.sourceText}
                             </p>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <Calendar size={12} /> {new Date(lesson.createdAt).toLocaleDateString('ko-KR')}
                             </span>
-                            
-                            {score !== null ? (
-                              <span style={{ fontSize: '0.8rem', color: score === (lesson.quizzes || []).length ? 'var(--success)' : 'var(--text-primary)', fontWeight: '700' }}>
-                                {score} / {(lesson.quizzes || []).length} 문제
-                              </span>
-                            ) : hasQuiz ? (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--accent)', background: 'rgba(244,63,94,0.1)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>퀴즈 미풀이</span>
-                            ) : (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>교정 전용</span>
-                            )}
 
                             <button
                               className="btn btn-danger btn-sm"
