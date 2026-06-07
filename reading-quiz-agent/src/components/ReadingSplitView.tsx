@@ -52,6 +52,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const bgFetchTriggeredRef = useRef<boolean>(false);
   const [isAnalyzingBg, setIsAnalyzingBg] = useState<boolean>(false);
+  const [bgProgress, setBgProgress] = useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
 
   // Quiz States
   const [activeQuizzesState, setActiveQuizzesState] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -77,6 +78,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setActiveParagraphId(null);
     bgFetchTriggeredRef.current = false;
     setIsAnalyzingBg(false);
+    setBgProgress({ completed: 0, total: 0 });
     
     if (lesson.userAnswers) {
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
@@ -104,7 +106,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
   // Background auto-fetching and analysis effect
   useEffect(() => {
-    if (!lesson.id || lesson.id.startsWith('reading-pending-')) {
+    if (!lesson.id || lesson.isPending) {
       return;
     }
 
@@ -130,13 +132,19 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         bgFetchTriggeredRef.current = true;
         if (isCurrent) {
           setIsAnalyzingBg(true);
+          setBgProgress({ completed: 0, total: lesson.paragraphs.length });
         }
         console.log("Auto-starting background analysis for the passage...");
         try {
           const fullResult = await analyzePassageSentences(
             lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
             lesson.passageText,
-            apiKey
+            apiKey,
+            (completed, total) => {
+              if (isCurrent) {
+                setBgProgress({ completed, total });
+              }
+            }
           );
           if (isCurrent) {
             setAnalysisCache(fullResult);
@@ -161,7 +169,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     return () => {
       isCurrent = false;
     };
-  }, [lesson.id, apiKey]);
+  }, [lesson.id, lesson.isPending, apiKey]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
@@ -189,13 +197,17 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       return;
     }
     setIsAnalyzingBg(true);
+    setBgProgress({ completed: 0, total: lesson.paragraphs.length });
     bgFetchTriggeredRef.current = true;
     setAnalysisError(null);
     try {
       const fullResult = await analyzePassageSentences(
         lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
         lesson.passageText,
-        apiKey
+        apiKey,
+        (completed, total) => {
+          setBgProgress({ completed, total });
+        }
       );
       setAnalysisCache(fullResult);
       await savePassageAnalysisToCloud(lesson.id, fullResult);
@@ -556,6 +568,51 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
   };
 
+  const stats = (() => {
+    const words = lesson.passageText.split(/\s+/).filter(Boolean);
+    const totalWords = words.length;
+
+    let totalSentences = 0;
+    lesson.paragraphs.forEach(p => {
+      const s = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+      totalSentences += s.length;
+    });
+    if (totalSentences === 0) totalSentences = 1;
+
+    let totalSyllables = 0;
+    words.forEach(w => {
+      let word = w.toLowerCase().replace(/[^a-z]/g, '');
+      if (word.length === 0) return;
+      if (word.length <= 3) {
+        totalSyllables += 1;
+        return;
+      }
+      word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+      word = word.replace(/^y/, '');
+      const syllables = word.match(/[aeiouy]{1,2}/g);
+      totalSyllables += syllables ? syllables.length : 1;
+    });
+
+    const asl = totalWords / totalSentences;
+    const asw = totalSyllables / totalWords;
+    const grade = Math.max(0.5, 0.39 * asl + 11.8 * asw - 15.59);
+    
+    let lexile = 0;
+    if (grade <= 1) {
+      lexile = Math.round(grade * 200 + 100);
+    } else {
+      lexile = Math.round(grade * 100 + 200);
+    }
+    lexile = Math.max(100, Math.min(1600, lexile));
+
+    return {
+      words: totalWords,
+      sentences: totalSentences,
+      lexile: `${lexile}L`,
+      grade: grade.toFixed(1)
+    };
+  })();
+
   return (
     <div className="split-view-container animate-fade-in">
       
@@ -618,9 +675,44 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'white', marginBottom: '0.75rem', fontFamily: 'var(--font-display)', lineHeight: '1.4' }}>
             {lesson.title}
           </h1>
+
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.7rem', background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', fontWeight: '600' }}>
+              📊 {stats.sentences}문장 / {stats.words}단어
+            </span>
+            <span style={{ fontSize: '0.7rem', background: 'rgba(6, 182, 212, 0.08)', color: 'var(--secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(6, 182, 212, 0.15)', fontWeight: '700' }}>
+              🎓 예상 Lexile: {stats.lexile} (미국 {Math.ceil(parseFloat(stats.grade))}학년 수준)
+            </span>
+          </div>
+
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.5rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>
             💡 공부하고 싶은 문장을 마우스로 클릭하면 해당 문장의 한글 번역, 구문 분석(문법), 핵심 어휘 및 문맥 설명을 실시간 AI 과외 서비스로 볼 수 있습니다.
           </p>
+
+          {isAnalyzingBg && (
+            <div className="eli5-analogy-box animate-pulse-glow" style={{ margin: '0 0 1.5rem 0', padding: '1rem', background: 'rgba(6, 182, 212, 0.06)', borderColor: 'rgba(6, 182, 212, 0.2)', borderRadius: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                <span style={{ color: 'var(--secondary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--secondary)', borderRadius: '50%' }}></span>
+                  AI 지문 전체 문장 분석 중 (백그라운드)
+                </span>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: '700' }}>
+                  {bgProgress.completed} / {bgProgress.total} 문단 완료 ({bgProgress.total > 0 ? Math.round((bgProgress.completed / bgProgress.total) * 100) : 0}%)
+                </span>
+              </div>
+              <div className="quiz-progress-bar" style={{ height: '6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div 
+                  className="quiz-progress-fill" 
+                  style={{ 
+                    width: `${bgProgress.total > 0 ? (bgProgress.completed / bgProgress.total) * 100 : 0}%`, 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
+                    transition: 'width 0.4s ease'
+                  }}
+                ></div>
+              </div>
+            </div>
+          )}
 
           {lesson.paragraphs.map((p) => {
             const isActive = activeParagraphId === p.id;
@@ -687,7 +779,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             {!sentenceAnalysis && isAnalyzingBg && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(6, 182, 212, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
                                 <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
-                                <span>AI가 이 문장을 포함한 전체 지문을 정밀 분석 중입니다... 잠시만 기다려 주세요.</span>
+                                <span>AI가 이 문장을 포함한 전체 지문을 정밀 분석 중입니다... ({bgProgress.completed} / {bgProgress.total} 문단 완료)</span>
                               </div>
                             )}
 

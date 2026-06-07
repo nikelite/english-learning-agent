@@ -243,10 +243,15 @@ export default function App() {
   }, [userId]);
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
-  const saveLessonToHistory = async (lesson: ReadingLesson) => {
-    if (!lesson || lesson.id.startsWith('preset-')) return;
+  const saveLessonToHistory = async (lesson: ReadingLesson): Promise<ReadingLesson> => {
+    if (!lesson || lesson.id.startsWith('preset-')) return lesson;
     
     let updatedLesson = { ...lesson };
+
+    // If it is a pending lesson and we are offline/guest, generate a clean ID
+    if (!userId && updatedLesson.id.startsWith('reading-pending-')) {
+      updatedLesson.id = `reading-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
     
     // If user is configured with an ID, save to Cloud
     if (userId) {
@@ -267,11 +272,17 @@ export default function App() {
     }
     
     setLessonsHistory(prev => {
-      const filtered = prev.filter(item => item.id !== updatedLesson.id && item.title !== updatedLesson.title);
+      const filtered = prev.filter(item => 
+        item.id !== lesson.id && 
+        item.id !== updatedLesson.id && 
+        item.title !== updatedLesson.title
+      );
       const updated = [updatedLesson, ...filtered];
       localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
+
+    return updatedLesson;
   };
 
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
@@ -535,10 +546,10 @@ export default function App() {
         };
 
         // 3. Save/sync the completed lesson back to lessonsHistory & Cloud
-        await saveLessonToHistory(completedLesson);
+        const savedLesson = await saveLessonToHistory(completedLesson);
 
         // 4. Set as active lesson and open split-view
-        setActiveLesson(completedLesson);
+        setActiveLesson(savedLesson);
         setViewMode('split');
       } catch (err: any) {
         setError(err.message || "지문 실시간 대기 학습 생성 중 오류가 발생했습니다.");
