@@ -20,6 +20,35 @@ import {
   sendEmailReport
 } from './firebaseService';
 
+interface SentenceItem {
+  id: string;
+  text: string;
+  isEnglish: boolean;
+  included: boolean;
+  paragraphIndex: number;
+}
+
+const reconstructText = (items: SentenceItem[]): string => {
+  const paragraphsMap: Record<number, string[]> = {};
+  items.forEach(item => {
+    if (item.included) {
+      if (!paragraphsMap[item.paragraphIndex]) {
+        paragraphsMap[item.paragraphIndex] = [];
+      }
+      paragraphsMap[item.paragraphIndex].push(item.text);
+    }
+  });
+
+  const sortedIndices = Object.keys(paragraphsMap)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  return sortedIndices
+    .map(idx => paragraphsMap[idx].join(' '))
+    .filter(Boolean)
+    .join('\n\n');
+};
+
 export default function App() {
   // 1. Core API & Key Settings
   const [apiKey, setApiKey] = useState<string>(() => {
@@ -71,6 +100,7 @@ export default function App() {
     originalSentenceList: string[];
     remainingSentenceList: string[];
     filteredSentenceList: string[];
+    sentences: SentenceItem[];
   }>({
     show: false,
     text: '',
@@ -84,7 +114,8 @@ export default function App() {
     exceedsLimit: false,
     originalSentenceList: [],
     remainingSentenceList: [],
-    filteredSentenceList: []
+    filteredSentenceList: [],
+    sentences: []
   });
   const [reportExpand, setReportExpand] = useState<{ original: boolean; remaining: boolean; filtered: boolean }>({ original: false, remaining: false, filtered: false });
 
@@ -420,6 +451,45 @@ export default function App() {
     return sentences.filter(isEnglishSentence).length;
   };
 
+  const toggleSentenceInReport = (id: string) => {
+    setSplitConfirm(prev => {
+      const updatedSentences = prev.sentences.map(s => 
+        s.id === id ? { ...s, included: !s.included } : s
+      );
+
+      const remainingList = updatedSentences.filter(s => s.included);
+      const remainingSentencesCount = remainingList.length;
+      
+      const filteredList = updatedSentences.filter(s => !s.included);
+      const filteredSentencesCount = filteredList.length;
+
+      const cleanEnglishText = remainingList.map(s => s.text).join(' ');
+      const remainingWords = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
+      const remainingWordsCount = remainingWords.length;
+
+      const filteredText = filteredList.map(s => s.text).join(' ');
+      const filteredWords = filteredText.split(/\s+/).filter(Boolean);
+      const filteredWordsCount = filteredWords.length;
+
+      const exceedsLimit = remainingSentencesCount > sentenceLimit;
+      const reconstructedText = reconstructText(updatedSentences);
+
+      return {
+        ...prev,
+        text: reconstructedText,
+        remainingSentences: remainingSentencesCount,
+        remainingWords: remainingWordsCount,
+        filteredSentences: filteredSentencesCount,
+        filteredWords: filteredWordsCount,
+        exceedsLimit,
+        sentences: updatedSentences,
+        originalSentenceList: prev.originalSentenceList,
+        remainingSentenceList: remainingList.map(s => s.text),
+        filteredSentenceList: filteredList.map(s => s.text)
+      };
+    });
+  };
+
   const executeAnalysis = async (text: string, title: string, shouldSplit: boolean) => {
     setSplitConfirm(prev => ({ ...prev, show: false }));
     setIsLoading(true);
@@ -520,32 +590,47 @@ export default function App() {
       return;
     }
 
-    // 1. Split into sentences
-    const sentences: string[] = [];
-    const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of rawLines) {
-      sentences.push(...splitIntoSentences(line));
-    }
+    // 1. Split into paragraph-preserving sentence items
+    const paragraphs = text.split(/\r?\n\s*\r?\n/).map(p => p.trim()).filter(Boolean);
+    const sentenceItems: SentenceItem[] = [];
+    let sentenceIdCounter = 0;
 
-    // 2. Count original words & sentences
-    const originalWords = text.split(/\s+/).filter(Boolean);
-    const originalWordsCount = originalWords.length;
-    const originalSentencesCount = sentences.length;
-
-    // 3. Filter criteria (isEnglishSentence)
+    // Filter criteria (isEnglishSentence)
     const isEnglishSentence = (s: string): boolean => {
       const hasEnglish = /[a-zA-Z]/.test(s);
       const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
       return hasEnglish && !hasKorean;
     };
 
-    const remainingSentencesList = sentences.filter(isEnglishSentence);
+    paragraphs.forEach((para, paraIdx) => {
+      const lines = para.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      lines.forEach(line => {
+        const lineSentences = splitIntoSentences(line);
+        lineSentences.forEach(s => {
+          const isEng = isEnglishSentence(s);
+          sentenceItems.push({
+            id: `s-${paraIdx}-${sentenceIdCounter++}`,
+            text: s,
+            isEnglish: isEng,
+            included: isEng,
+            paragraphIndex: paraIdx
+          });
+        });
+      });
+    });
+
+    const sentences = sentenceItems.map(s => s.text);
+    const originalWords = text.split(/\s+/).filter(Boolean);
+    const originalWordsCount = originalWords.length;
+    const originalSentencesCount = sentences.length;
+
+    const remainingSentencesList = sentenceItems.filter(s => s.included).map(s => s.text);
     const remainingSentencesCount = remainingSentencesList.length;
 
-    const filteredSentencesList = sentences.filter(s => !isEnglishSentence(s));
+    const filteredSentencesList = sentenceItems.filter(s => !s.included).map(s => s.text);
     const filteredSentencesCount = filteredSentencesList.length;
 
-    // 4. Word count after filtering (only count words matching /[a-zA-Z]/ in remaining sentences)
+    // Word count after filtering (only count words matching /[a-zA-Z]/ in remaining sentences)
     const cleanEnglishText = remainingSentencesList.join(' ');
     const remainingWords = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
     const remainingWordsCount = remainingWords.length;
@@ -569,7 +654,8 @@ export default function App() {
       exceedsLimit: exceedsLimit,
       originalSentenceList: sentences,
       remainingSentenceList: remainingSentencesList,
-      filteredSentenceList: filteredSentencesList
+      filteredSentenceList: filteredSentencesList,
+      sentences: sentenceItems
     });
   };
 
@@ -1352,32 +1438,120 @@ export default function App() {
               </div>
 
               {/* Expandable Sentence Lists */}
-              {reportExpand.original && splitConfirm.originalSentenceList.length > 0 && (
+              {reportExpand.original && splitConfirm.sentences && splitConfirm.sentences.length > 0 && (
                 <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'left' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: '600' }}>📄 원본 문장 목록 ({splitConfirm.originalSentenceList.length}개)</div>
-                  {splitConfirm.originalSentenceList.map((s, i) => (
-                    <div key={i} style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', padding: '0.3rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)', lineHeight: '1.45' }}>
-                      <span style={{ color: 'var(--text-muted)', marginRight: '0.4rem', fontSize: '0.7rem' }}>{i + 1}.</span>{s}
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: '600' }}>📄 원본 문장 목록 ({splitConfirm.sentences.length}개)</div>
+                  {splitConfirm.sentences.map((sentence, i) => (
+                    <div key={sentence.id} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      fontSize: '0.775rem', 
+                      color: sentence.included ? 'var(--text-secondary)' : 'rgba(255,255,255,0.3)', 
+                      padding: '0.4rem 0', 
+                      borderBottom: '1px solid rgba(255,255,255,0.04)', 
+                      lineHeight: '1.45',
+                      textDecoration: sentence.included ? 'none' : 'line-through',
+                      textDecorationColor: 'rgba(255,255,255,0.15)'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ color: 'var(--text-muted)', marginRight: '0.4rem', fontSize: '0.7rem' }}>{i + 1}.</span>
+                        {sentence.text}
+                      </div>
+                      <button 
+                        onClick={() => toggleSentenceInReport(sentence.id)}
+                        style={{ 
+                          padding: '0.2rem 0.4rem', 
+                          fontSize: '0.7rem', 
+                          background: sentence.included ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.1)', 
+                          color: sentence.included ? 'rgb(239, 68, 68)' : 'white', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {sentence.included ? '제외' : '포함'}
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
-              {reportExpand.remaining && splitConfirm.remainingSentenceList.length > 0 && (
+              {reportExpand.remaining && splitConfirm.sentences && splitConfirm.sentences.filter(s => s.included).length > 0 && (
                 <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(6, 182, 212, 0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(6, 182, 212, 0.12)', textAlign: 'left' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginBottom: '0.5rem', fontWeight: '600' }}>✅ 남은 영어 문장 목록 ({splitConfirm.remainingSentenceList.length}개)</div>
-                  {splitConfirm.remainingSentenceList.map((s, i) => (
-                    <div key={i} style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', padding: '0.3rem 0', borderBottom: '1px solid rgba(6, 182, 212, 0.06)', lineHeight: '1.45' }}>
-                      <span style={{ color: 'var(--secondary)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>{s}
+                  <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginBottom: '0.5rem', fontWeight: '600' }}>✅ 남은 영어 문장 목록 ({splitConfirm.sentences.filter(s => s.included).length}개)</div>
+                  {splitConfirm.sentences.filter(s => s.included).map((sentence, i) => (
+                    <div key={sentence.id} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      fontSize: '0.775rem', 
+                      color: 'var(--text-secondary)', 
+                      padding: '0.4rem 0', 
+                      borderBottom: '1px solid rgba(6, 182, 212, 0.06)', 
+                      lineHeight: '1.45' 
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ color: 'var(--secondary)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>
+                        {sentence.text}
+                      </div>
+                      <button 
+                        onClick={() => toggleSentenceInReport(sentence.id)}
+                        title="이 문장 제외하기"
+                        style={{ 
+                          padding: '0.2rem 0.4rem', 
+                          fontSize: '0.7rem', 
+                          background: 'rgba(239, 68, 68, 0.15)', 
+                          color: 'rgb(239, 68, 68)', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        제외
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
-              {reportExpand.filtered && splitConfirm.filteredSentenceList.length > 0 && (
+              {reportExpand.filtered && splitConfirm.sentences && splitConfirm.sentences.filter(s => !s.included).length > 0 && (
                 <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(239, 68, 68, 0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.12)', textAlign: 'left' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'rgb(239, 68, 68)', marginBottom: '0.5rem', fontWeight: '600' }}>🚫 필터링된 문장 목록 ({splitConfirm.filteredSentenceList.length}개)</div>
-                  {splitConfirm.filteredSentenceList.map((s, i) => (
-                    <div key={i} style={{ fontSize: '0.775rem', color: 'rgba(239, 68, 68, 0.7)', padding: '0.3rem 0', borderBottom: '1px solid rgba(239, 68, 68, 0.06)', lineHeight: '1.45', textDecoration: 'line-through', textDecorationColor: 'rgba(239, 68, 68, 0.3)' }}>
-                      <span style={{ color: 'rgb(239, 68, 68)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>{s}
+                  <div style={{ fontSize: '0.7rem', color: 'rgb(239, 68, 68)', marginBottom: '0.5rem', fontWeight: '600' }}>🚫 필터링된 문장 목록 ({splitConfirm.sentences.filter(s => !s.included).length}개)</div>
+                  {splitConfirm.sentences.filter(s => !s.included).map((sentence, i) => (
+                    <div key={sentence.id} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      fontSize: '0.775rem', 
+                      color: 'rgba(239, 68, 68, 0.7)', 
+                      padding: '0.4rem 0', 
+                      borderBottom: '1px solid rgba(239, 68, 68, 0.06)', 
+                      lineHeight: '1.45'
+                    }}>
+                      <div style={{ flex: 1, textDecoration: 'line-through', textDecorationColor: 'rgba(239, 68, 68, 0.3)' }}>
+                        <span style={{ color: 'rgb(239, 68, 68)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>
+                        {sentence.text}
+                      </div>
+                      <button 
+                        onClick={() => toggleSentenceInReport(sentence.id)}
+                        title="이 문장 포함하기"
+                        style={{ 
+                          padding: '0.2rem 0.4rem', 
+                          fontSize: '0.7rem', 
+                          background: 'rgba(6, 182, 212, 0.15)', 
+                          color: 'var(--secondary)', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        복원
+                      </button>
                     </div>
                   ))}
                 </div>
