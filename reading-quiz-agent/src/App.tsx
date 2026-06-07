@@ -68,6 +68,9 @@ export default function App() {
     filteredSentences: number;
     filteredWords: number;
     exceedsLimit: boolean;
+    originalSentenceList: string[];
+    remainingSentenceList: string[];
+    filteredSentenceList: string[];
   }>({
     show: false,
     text: '',
@@ -78,8 +81,12 @@ export default function App() {
     remainingWords: 0,
     filteredSentences: 0,
     filteredWords: 0,
-    exceedsLimit: false
+    exceedsLimit: false,
+    originalSentenceList: [],
+    remainingSentenceList: [],
+    filteredSentenceList: []
   });
+  const [reportExpand, setReportExpand] = useState<{ original: boolean; remaining: boolean; filtered: boolean }>({ original: false, remaining: false, filtered: false });
 
   // 5. Active Lesson State (default to wood wide web preset)
   const [activeLesson, setActiveLesson] = useState<ReadingLesson | null>(() => {
@@ -530,13 +537,14 @@ export default function App() {
       return latinChars >= 5;
     };
 
-    const remainingSentences = sentences.filter(isEnglishSentence);
-    const remainingSentencesCount = remainingSentences.length;
+    const remainingSentencesList = sentences.filter(isEnglishSentence);
+    const remainingSentencesCount = remainingSentencesList.length;
 
-    const filteredSentencesCount = Math.max(0, originalSentencesCount - remainingSentencesCount);
+    const filteredSentencesList = sentences.filter(s => !isEnglishSentence(s));
+    const filteredSentencesCount = filteredSentencesList.length;
 
     // 4. Word count after filtering (only count words matching /[a-zA-Z]/ in remaining sentences)
-    const cleanEnglishText = remainingSentences.join(' ');
+    const cleanEnglishText = remainingSentencesList.join(' ');
     const remainingWords = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
     const remainingWordsCount = remainingWords.length;
 
@@ -544,7 +552,8 @@ export default function App() {
 
     const exceedsLimit = remainingSentencesCount > sentenceLimit;
 
-    // Open the preview/split confirmation modal for the user to see the breakdown and click start
+    // Reset expand states and open the preview modal
+    setReportExpand({ original: false, remaining: false, filtered: false });
     setSplitConfirm({
       show: true,
       text: text,
@@ -555,7 +564,10 @@ export default function App() {
       remainingWords: remainingWordsCount,
       filteredSentences: filteredSentencesCount,
       filteredWords: filteredWordsCount,
-      exceedsLimit: exceedsLimit
+      exceedsLimit: exceedsLimit,
+      originalSentenceList: sentences,
+      remainingSentenceList: remainingSentencesList,
+      filteredSentenceList: filteredSentencesList
     });
   };
 
@@ -1276,47 +1288,103 @@ export default function App() {
 
             {/* Stats Table / Card Grid */}
             <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(3, 1fr)', 
+              display: 'flex',
+              flexDirection: 'column',
               gap: '0.75rem', 
               marginBottom: '1.5rem',
-              background: 'rgba(255, 255, 255, 0.02)',
-              padding: '1rem',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.05)'
             }}>
-              {/* Original */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '500' }}>원본 텍스트</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'white' }}>
-                  {splitConfirm.originalSentences}문장
-                </span>
-                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                  {splitConfirm.originalWords}단어
-                </span>
+              {/* Card Grid */}
+              <div style={{
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
+                gap: '0.75rem',
+                background: 'rgba(255, 255, 255, 0.02)',
+                padding: '1rem',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.05)'
+              }}>
+                {/* Original */}
+                <div
+                  onClick={() => setReportExpand(prev => ({ original: !prev.original, remaining: false, filtered: false }))}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: reportExpand.original ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s', border: reportExpand.original ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent' }}
+                >
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '500' }}>📄 원본 텍스트</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'white' }}>
+                    {splitConfirm.originalSentences}문장
+                  </span>
+                  <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                    {splitConfirm.originalWords}단어
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{reportExpand.original ? '▲ 접기' : '▼ 문장 보기'}</span>
+                </div>
+
+                {/* Remaining */}
+                <div
+                  onClick={() => setReportExpand(prev => ({ original: false, remaining: !prev.remaining, filtered: false }))}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: reportExpand.remaining ? 'rgba(6, 182, 212, 0.1)' : 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: reportExpand.remaining ? '1px solid rgba(6, 182, 212, 0.3)' : '1px solid rgba(6, 182, 212, 0.15)', cursor: 'pointer', transition: 'background 0.2s' }}
+                >
+                  <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: '600' }}>✅ 남은 영어 콘텐츠</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--secondary)' }}>
+                    {splitConfirm.remainingSentences}문장
+                  </span>
+                  <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                    {splitConfirm.remainingWords}단어
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{reportExpand.remaining ? '▲ 접기' : '▼ 문장 보기'}</span>
+                </div>
+
+                {/* Filtered */}
+                <div
+                  onClick={() => setReportExpand(prev => ({ original: false, remaining: false, filtered: !prev.filtered }))}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: reportExpand.filtered ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: reportExpand.filtered ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(239, 68, 68, 0.15)', cursor: 'pointer', transition: 'background 0.2s' }}
+                >
+                  <span style={{ fontSize: '0.75rem', color: 'rgb(239, 68, 68)', fontWeight: '500' }}>🚫 필터링된 텍스트</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'rgb(239, 68, 68)' }}>
+                    {splitConfirm.filteredSentences}문장
+                  </span>
+                  <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                    {splitConfirm.filteredWords}단어
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{reportExpand.filtered ? '▲ 접기' : '▼ 문장 보기'}</span>
+                </div>
               </div>
 
-              {/* Remaining */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.15)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: '600' }}>남은 영어 콘텐츠</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--secondary)' }}>
-                  {splitConfirm.remainingSentences}문장
-                </span>
-                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                  {splitConfirm.remainingWords}단어
-                </span>
-              </div>
-
-              {/* Filtered */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'rgb(239, 68, 68)', fontWeight: '500' }}>필터링된 텍스트</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'rgb(239, 68, 68)' }}>
-                  {splitConfirm.filteredSentences}문장
-                </span>
-                <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                  {splitConfirm.filteredWords}단어
-                </span>
-              </div>
+              {/* Expandable Sentence Lists */}
+              {reportExpand.original && splitConfirm.originalSentenceList.length > 0 && (
+                <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: '600' }}>📄 원본 문장 목록 ({splitConfirm.originalSentenceList.length}개)</div>
+                  {splitConfirm.originalSentenceList.map((s, i) => (
+                    <div key={i} style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', padding: '0.3rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)', lineHeight: '1.45' }}>
+                      <span style={{ color: 'var(--text-muted)', marginRight: '0.4rem', fontSize: '0.7rem' }}>{i + 1}.</span>{s}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {reportExpand.remaining && splitConfirm.remainingSentenceList.length > 0 && (
+                <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(6, 182, 212, 0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(6, 182, 212, 0.12)', textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginBottom: '0.5rem', fontWeight: '600' }}>✅ 남은 영어 문장 목록 ({splitConfirm.remainingSentenceList.length}개)</div>
+                  {splitConfirm.remainingSentenceList.map((s, i) => (
+                    <div key={i} style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', padding: '0.3rem 0', borderBottom: '1px solid rgba(6, 182, 212, 0.06)', lineHeight: '1.45' }}>
+                      <span style={{ color: 'var(--secondary)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>{s}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {reportExpand.filtered && splitConfirm.filteredSentenceList.length > 0 && (
+                <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(239, 68, 68, 0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.12)', textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'rgb(239, 68, 68)', marginBottom: '0.5rem', fontWeight: '600' }}>🚫 필터링된 문장 목록 ({splitConfirm.filteredSentenceList.length}개)</div>
+                  {splitConfirm.filteredSentenceList.map((s, i) => (
+                    <div key={i} style={{ fontSize: '0.775rem', color: 'rgba(239, 68, 68, 0.7)', padding: '0.3rem 0', borderBottom: '1px solid rgba(239, 68, 68, 0.06)', lineHeight: '1.45', textDecoration: 'line-through', textDecorationColor: 'rgba(239, 68, 68, 0.3)' }}>
+                      <span style={{ color: 'rgb(239, 68, 68)', marginRight: '0.4rem', fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>{s}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {reportExpand.filtered && splitConfirm.filteredSentenceList.length === 0 && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.12)', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  필터링된 문장이 없습니다. 모든 문장이 영어 콘텐츠로 유효합니다. ✨
+                </div>
+              )}
             </div>
 
             {/* Split analogy/exceed message */}
