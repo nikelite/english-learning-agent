@@ -964,8 +964,9 @@ export async function splitPassageIntoLessons(
     
     // Count only English sentences for splitting threshold (Korean annotations don't count toward limit)
     const isEnglishSentence = (s: string): boolean => {
-      const latinChars = (s.match(/[a-zA-Z]/g) || []).length;
-      return latinChars >= 5;
+      const hasEnglish = /[a-zA-Z]/.test(s);
+      const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
+      return hasEnglish && !hasKorean;
     };
     const englishSentenceCount = sentences.filter(isEnglishSentence).length;
     
