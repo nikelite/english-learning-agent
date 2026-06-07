@@ -547,23 +547,23 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             margin-bottom: 30px;
           }
           .header h1 {
-            margin: 0;
-            font-size: 24px;
+            margin: 0 0 10px 0;
+            font-size: 28px;
             color: #0f172a;
+            font-weight: 800;
           }
           .header p {
-            margin: 5px 0 0 0;
+            margin: 0;
             font-size: 13px;
             color: #64748b;
           }
           .paragraph-header {
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 800;
             color: #0f172a;
-            margin: 30px 0 15px 0;
-            background-color: #e2e8f0;
-            padding: 6px 12px;
-            border-radius: 6px;
+            margin: 35px 0 15px 0;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 5px;
             page-break-after: avoid;
           }
           .sentence-block {
@@ -573,7 +573,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             border-radius: 8px;
             padding: 16px 20px;
             margin-bottom: 20px;
-            background-color: #f8fafc;
+            background-color: #ffffff; /* Saved ink: pure white background instead of grey */
           }
           .english-text {
             font-size: 15px;
@@ -624,8 +624,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       </head>
       <body>
         <div class="header">
-          <h1>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트</h1>
-          <p>지문 제목: "${lesson.title}" | 출력 시간: ${new Date().toLocaleString()}</p>
+          <h1>지문 제목: "${lesson.title}"</h1>
+          <p>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트 | 출력 시간: ${new Date().toLocaleString()}</p>
         </div>
         ${contentHtml}
       </body>
