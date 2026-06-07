@@ -216,6 +216,8 @@ Key Constraints & Guidelines for Analysis:
    - Provide a encouraging, multi-line paragraph summarizing the user's strong points, areas of improvement, and how they can write better next time. Write this in Korean.
 5. **Interactive Multiple-Choice Quizzes**:
    - Generate EXACTLY the requested number of quizzes (N) based on the corrections made.
+   - The quizzes MUST be formatted as standard, professional TOEIC or TOEFL multiple-choice questions (e.g. sentence completion with a blank, choosing the correct grammatical option, or finding error corrections).
+   - CRITICAL: The question text itself MUST be written entirely in ENGLISH, in the style of TOEIC/TOEFL questions (e.g., 'Choose the option that best completes the sentence:' or 'Identify the grammatically correct sentence:').
    - Each quiz must have exactly 4 choices (English words or sentences).
    - "correctIndex" is a 0-indexed integer (0, 1, 2, or 3) indicating the correct option.
    - "rationale": Extremely detailed Korean explanation of why the correct option is right and why the other options are wrong or awkward.
@@ -238,7 +240,7 @@ Strict JSON Schema Requirements:
   "quizzes": [
     {
       "id": "A unique string (e.g. 'q1', 'q2')",
-      "question": "The quiz question in Korean, testing the correction points.",
+      "question": "The quiz question written entirely in English in TOEIC/TOEFL format (e.g. testing grammar, vocabulary, or expression blanks), testing the correction points.",
       "choices": [
         "Choice A",
         "Choice B",
