@@ -26,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempUserId, setTempUserId] = useState(userId);
-  const [tempWebhookUrl, setTempWebhookUrl] = useState(() => localStorage.getItem('email_webhook_url') || '');
   const [showKey, setShowKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
 
@@ -34,13 +33,6 @@ export const Header: React.FC<HeaderProps> = ({
     e.preventDefault();
     onSaveApiKey(tempKey.trim());
     onSaveUserId(tempUserId.trim());
-    
-    const url = tempWebhookUrl.trim();
-    if (url) {
-      localStorage.setItem('email_webhook_url', url);
-    } else {
-      localStorage.removeItem('email_webhook_url');
-    }
     
     setIsSavedAlert(true);
     setTimeout(() => {
@@ -187,23 +179,6 @@ export const Header: React.FC<HeaderProps> = ({
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                   * ID를 설정하면 로컬 영작 학습 보관함이 클라우드와 자동으로 양방향 동기화(Sync)되며, 기기 변경이나 캐시 초기화 시에도 학습 기록을 보존할 수 있습니다. (영문/숫자/_/- 만 허용)
-                </span>
-              </div>
-
-              {/* Webhook URL Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
-                  이메일 리포트 Webhook URL
-                </label>
-                <input
-                  type="text"
-                  value={tempWebhookUrl}
-                  onChange={(e) => setTempWebhookUrl(e.target.value)}
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  className="input-glow"
-                />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                  구글 Firebase SMTP 메일 발송 에러 우회를 위한 Webhook 주소입니다. 등록하면 퀴즈 풀이 완료 시 메일 성적표가 즉시 전송됩니다.
                 </span>
               </div>
 
