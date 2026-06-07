@@ -113,13 +113,32 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     let isCurrent = true;
 
     const runAutoAnalysis = async () => {
-      // 1. Try cloud cache
+      // 1. Try LocalStorage cache first (instantaneous & offline friendly!)
+      try {
+        const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
+        if (localCached) {
+          const parsed = JSON.parse(localCached);
+          if (parsed && Object.keys(parsed).length > 0) {
+            if (isCurrent) {
+              setAnalysisCache(parsed);
+              bgFetchTriggeredRef.current = true;
+            }
+            return;
+          }
+        }
+      } catch (localErr) {
+        console.warn("Failed to check local analysis cache:", localErr);
+      }
+
+      // 2. Try cloud cache second
       try {
         const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
         if (cloudCached && Object.keys(cloudCached).length > 0) {
           if (isCurrent) {
             setAnalysisCache(cloudCached);
             bgFetchTriggeredRef.current = true;
+            // Cache locally for next time
+            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cloudCached));
           }
           return;
         }
@@ -127,7 +146,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         console.warn("Failed to check cloud analysis cache:", err);
       }
 
-      // 2. If not cached, trigger silent background fetch
+      // 3. If not cached, trigger silent background fetch
       if (!bgFetchTriggeredRef.current && apiKey && lesson.paragraphs && lesson.paragraphs.length > 0) {
         bgFetchTriggeredRef.current = true;
         if (isCurrent) {
@@ -147,15 +166,22 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             },
             (paragraphId, pAnalysis) => {
               if (isCurrent) {
-                setAnalysisCache(prev => ({
-                  ...prev,
-                  [paragraphId]: pAnalysis
-                }));
+                setAnalysisCache(prev => {
+                  const updated = {
+                    ...prev,
+                    [paragraphId]: pAnalysis
+                  };
+                  // Progressively save to LocalStorage so partial progress is saved!
+                  localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+                  return updated;
+                });
               }
             }
           );
           if (isCurrent) {
             setAnalysisCache(fullResult);
+            // Save final results to both LocalStorage and Firestore
+            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
             await savePassageAnalysisToCloud(lesson.id, fullResult);
             console.log("Auto-started passage analysis successfully cached!");
           }
@@ -217,13 +243,18 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           setBgProgress({ completed, total });
         },
         (paragraphId, pAnalysis) => {
-          setAnalysisCache(prev => ({
-            ...prev,
-            [paragraphId]: pAnalysis
-          }));
+          setAnalysisCache(prev => {
+            const updated = {
+              ...prev,
+              [paragraphId]: pAnalysis
+            };
+            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+            return updated;
+          });
         }
       );
       setAnalysisCache(fullResult);
+      localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
       await savePassageAnalysisToCloud(lesson.id, fullResult);
     } catch (err: any) {
       setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
