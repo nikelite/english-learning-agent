@@ -971,8 +971,7 @@ export async function splitPassageIntoLessons(
   // Post-process: If Gemini returned more chapters than targetChapterCount, merge adjacent ones sequentially
   if (semanticChapters.length > targetChapterCount) {
     while (semanticChapters.length > targetChapterCount) {
-      // Calculate total English sentences for each chapter currently
-      const chapterSentenceCounts = semanticChapters.map(chapter => {
+      const currentCounts = semanticChapters.map(chapter => {
         const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
         const endIdx = Math.max(startIdx, Math.min(chapter.endParagraphIndex, paragraphs.length - 1));
         const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
@@ -989,7 +988,7 @@ export async function splitPassageIntoLessons(
       let minCombined = Infinity;
       let mergeIdx = 0;
       for (let i = 0; i < semanticChapters.length - 1; i++) {
-        const combined = chapterSentenceCounts[i] + chapterSentenceCounts[i + 1];
+        const combined = currentCounts[i] + currentCounts[i + 1];
         if (combined < minCombined) {
           minCombined = combined;
           mergeIdx = i;
@@ -1013,6 +1012,38 @@ export async function splitPassageIntoLessons(
       semanticChapters.splice(mergeIdx, 2, mergedChapter);
     }
   }
+
+  // Calculate final English sentence count for each chapter
+  const finalChapterSentenceCounts = semanticChapters.map(chapter => {
+    const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
+    const endIdx = Math.max(startIdx, Math.min(chapter.endParagraphIndex, paragraphs.length - 1));
+    const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
+    
+    let count = 0;
+    for (const para of chapterParagraphs) {
+      const sentences = splitIntoSentences(para);
+      count += sentences.filter(isEnglishSentence).length;
+    }
+    return count;
+  });
+
+  // Apportionment: allocate partsCount to each chapter such that the sum is exactly targetChapterCount
+  const partsCount = new Array(semanticChapters.length).fill(1);
+  let currentTotalParts = semanticChapters.length;
+  
+  while (currentTotalParts < targetChapterCount) {
+    let maxRatio = -1;
+    let maxIdx = 0;
+    for (let i = 0; i < semanticChapters.length; i++) {
+      const sentencesPerPart = finalChapterSentenceCounts[i] / partsCount[i];
+      if (sentencesPerPart > maxRatio) {
+        maxRatio = sentencesPerPart;
+        maxIdx = i;
+      }
+    }
+    partsCount[maxIdx]++;
+    currentTotalParts++;
+  }
   
   const baseTitle = titleInput.trim() || cleanText.substring(0, 20).replace(/\n/g, ' ') + '...';
   const lessons: ReadingLesson[] = [];
@@ -1020,6 +1051,7 @@ export async function splitPassageIntoLessons(
   // 3. Process each semantic chapter
   for (let chIdx = 0; chIdx < semanticChapters.length; chIdx++) {
     const chapter = semanticChapters[chIdx];
+    const totalParts = partsCount[chIdx];
     
     // Safety check indices
     const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
@@ -1036,9 +1068,7 @@ export async function splitPassageIntoLessons(
       sentences.push(...splitIntoSentences(para));
     }
     
-    const englishSentenceCount = sentences.filter(isEnglishSentence).length;
-    
-    if (englishSentenceCount <= sentenceLimit) {
+    if (totalParts === 1) {
       // Create a single placeholder lesson for this chapter
       const lessonTitle = semanticChapters.length > 1
         ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title}`
@@ -1055,9 +1085,9 @@ export async function splitPassageIntoLessons(
         isPending: true
       });
     } else {
-      // Exceeds threshold: split chapter locally into balanced parts by English sentence count
-      const totalParts = Math.ceil(englishSentenceCount / sentenceLimit);
-      const targetSize = Math.ceil(englishSentenceCount / totalParts);
+      // Split chapter locally into totalParts balanced parts by English sentence count
+      const chapterSentencesCount = finalChapterSentenceCounts[chIdx];
+      const targetSize = Math.max(1, Math.ceil(chapterSentencesCount / totalParts));
       
       const parts: string[][] = [];
       let currentPart: string[] = [];
