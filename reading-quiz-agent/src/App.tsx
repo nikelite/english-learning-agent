@@ -385,7 +385,7 @@ export default function App() {
     const sentences: string[] = [];
     const rawLines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (const line of rawLines) {
-      const matches = line.match(/[^.!?]+[.!?]+(?:\s+|$)/g);
+      const matches = line.match(/[^.!?]+[.!?]+['"”’)?\]}]*(?:\s+|$)/g);
       if (matches && matches.length > 0) {
         sentences.push(...matches.map(m => m.trim()));
         const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);

@@ -708,7 +708,7 @@ export async function analyzePassageSentences(
 
   // 1. Prepare paragraph chunking tasks
   const paragraphTasks = paragraphs.map(p => {
-    const sentences = p.englishText.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
+    const sentences = p.englishText.match(/[^.!?]+[.!?]+['"”’)?\]}]*(\s+|$)/g)?.map(s => s.trim()) || [p.englishText];
     const chunks: string[][] = [];
     for (let i = 0; i < sentences.length; i += CHUNK_SIZE) {
       chunks.push(sentences.slice(i, i + CHUNK_SIZE));
@@ -944,7 +944,7 @@ export async function splitPassageIntoLessons(
     const sentences: string[] = [];
     const rawLines = chapterText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (const line of rawLines) {
-      const matches = line.match(/[^.!?]+[.!?]+(?:\s+|$)/g);
+      const matches = line.match(/[^.!?]+[.!?]+['"”’)?\]}]*(?:\s+|$)/g);
       if (matches && matches.length > 0) {
         sentences.push(...matches.map(m => m.trim()));
         const lastMatchIdx = line.lastIndexOf(matches[matches.length - 1]);
