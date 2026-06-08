@@ -954,6 +954,18 @@ export default function App() {
           onClose={() => setIsShareOpen(false)}
         />
       )}
+      <footer style={{ 
+        textAlign: 'center', 
+        padding: '2rem 0 1.5rem 0', 
+        fontSize: '0.7rem', 
+        color: '#6b7280', 
+        opacity: 0.75, 
+        fontFamily: 'monospace',
+        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+        marginTop: '2rem'
+      }}>
+        Version: {(import.meta.env as any).VITE_BUILD_TIME || 'dev'}
+      </footer>
     </div>
   );
 }

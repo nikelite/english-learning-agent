@@ -131,18 +131,19 @@ ${chunkText}
 Instructions:
 1. Parse the input text to extract English vocabulary words or expressions.
 2. If a sentence contains double curly braces (e.g., {{word}} or {{c1::word}}), extract the word inside as the correct answer, and use that sentence for the cloze quiz.
-3. For each vocabulary item, generate:
-   - "english": The target correct English word/expression (e.g. "downstream").
-   - "korean": The Korean translation of the example sentence.
-   - "pos": Part of speech (e.g., 형용사, 명사, 동사, 부사).
+3. CRITICAL: If the input text is a full sentence without double curly braces, you MUST select a key vocabulary word from that sentence to be the quiz target. Wrap that word in double curly braces (e.g., {{word}}) in "exampleEng", set it as the "english" property, and generate a 4-choice quiz for it. NEVER output a quiz card without 4 options (options array must always have exactly 4 items) and never output an exampleEng without the target word wrapped in double curly braces.
+4. For each vocabulary item, generate:
+   - "english": The target correct English word/expression (e.g. "downstream" or "apple").
+   - "korean": The Korean translation of the entire example sentence (e.g., "하루에 사과 한 개를 먹으면 의사를 멀리하게 된다.").
+   - "pos": Part of speech of the target word (e.g., 형용사, 명사, 동사, 부사).
    - "exampleEng": The English example sentence where the target word is replaced by standard curly braces: {{word}} (e.g., "How will this change affect other {{downstream}} services?").
    - "options": Exactly 4 choices in English (including the correct word, e.g., ["downstream", "upstream", "vertical", "internal"]). They must be grammatically matching (same part of speech) to make it a high-quality TOEIC/TOEFL multiple choice question.
    - "correctIndex": The 0-based index of the correct word in the "options" array.
    - "phonetic": Phonetic respelling of the correct word using syllable-capitalized hyphenated phonetic spelling in brackets (e.g., "[DOWN-streem]", "[STAW-ling]"). DO NOT use IPA symbols like /ɪ/, /d/, /ə/, etc.
-   - "level": Difficulty or school grade level in Korean (e.g., 초등 5학년, 중학 2학년, 고교 1학년, 토익/대학 수준).
+   - "level": Difficulty or school grade level of the target word in Korean (e.g., 초등 5학년, 중학 2학년, 고교 1학년, 토익/대학 수준).
    - "rationale": A detailed Korean explanation of why the correct option is correct, and why EACH of the other three wrong options is incorrect or misleading in this context. Reference the choices as A번, B번, C번, D번 matching their indices (0=A, 1=B, 2=C, 3=D).
-   - "tip": An engaging memorization tip in Korean (etymology, mnemonics, etc.).
-4. Return the result in a single, valid JSON array of objects following this schema:
+   - "tip": An engaging memorization tip in Korean for the target word (etymology, mnemonics, etc.).
+5. Return the result in a single, valid JSON array of objects following this schema:
 [
   {
     "id": "A unique short string (e.g. q-12345)",
