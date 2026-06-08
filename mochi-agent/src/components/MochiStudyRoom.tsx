@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { shuffleChoicesAndRemapRationale } from '../types';
+import { shuffleChoicesAndRemapRationale, formatLevel } from '../types';
 import type { MochiDeck, MochiCard } from '../types';
 import { 
   BookOpen, 
@@ -422,13 +422,6 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                       __html: formatQuizSentence(currentCard.exampleEng, quizAnswered) 
                     }}
                   />
-                  
-                  {/* Hints and Translations shown on the front */}
-                  <div className="quiz-hints-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.75rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.75rem' }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <strong>번역:</strong> {currentCard.korean}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -469,13 +462,14 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
               {/* Rationale & Tip details */}
               {quizAnswered && (
                 <div className="quiz-explanation-box animate-slide-up">
-                  {currentCard.phonetic && (
-                    <div className="explanation-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                        <strong>발음:</strong> <span className="font-english" style={{ color: 'var(--secondary)', fontWeight: 'bold', fontSize: '1.05rem', marginLeft: '0.4rem' }}>{currentCard.phonetic}</span>
-                      </div>
+                  <div className="explanation-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontWeight: 'bold' }}>
+                      {currentCard.english} {currentCard.phonetic && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.25rem' }}>[{currentCard.phonetic.replace(/[\[\]]/g, '')}]</span>} <span style={{ fontWeight: 'normal', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>| {currentCard.pos} | {formatLevel(currentCard.level || '')}</span>
                     </div>
-                  )}
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                      <strong>번역:</strong> {currentCard.korean}
+                    </div>
+                  </div>
 
                   <div className="explanation-section">
                     <h4 className="section-title">

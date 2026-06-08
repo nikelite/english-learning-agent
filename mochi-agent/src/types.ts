@@ -87,3 +87,25 @@ export function shuffleChoicesAndRemapRationale(
     rationale: remappedRationale
   };
 }
+
+export function formatLevel(level: string): string {
+  if (!level) return 'general';
+  
+  const match = level.match(/(\d+)\s*학년/);
+  if (match) {
+    const num = match[1];
+    if (level.includes('초등')) {
+      return `grade ${num}`;
+    } else if (level.includes('중학')) {
+      return `grade ${parseInt(num) + 6}`;
+    } else if (level.includes('고교') || level.includes('고등')) {
+      return `grade ${parseInt(num) + 9}`;
+    }
+    return `grade ${num}`;
+  }
+  
+  if (level.includes('대학') || level.includes('토익')) {
+    return 'college/TOEIC';
+  }
+  return level;
+}

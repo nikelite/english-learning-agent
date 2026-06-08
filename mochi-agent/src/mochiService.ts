@@ -1,4 +1,4 @@
-import { shuffleChoicesAndRemapRationale } from './types';
+import { shuffleChoicesAndRemapRationale, formatLevel } from './types';
 import type { MochiCard } from './types';
 
 const BASE_URL = 'https://app.mochi.cards/api';
@@ -95,18 +95,20 @@ export async function createMochiCard(
     // Replace curly braces/clozes in sentence with a blank (e.g. _______)
     const blankSentence = card.exampleEng.replace(/\{\{(?:c\d::)?(.*?)\}\}/gi, '_______');
 
-    const content = `${blankSentence}
+    const formattedLevel = formatLevel(card.level || '');
+    const cleanPhonetic = card.phonetic ? card.phonetic.replace(/[\[\]]/g, '') : '';
+    const phoneticPart = cleanPhonetic ? ` [${cleanPhonetic}]` : '';
 
-**전체 번역:** ${card.korean}
+    const content = `${blankSentence}
 
 **선택지:**
 ${shuffledOptions.map((opt, i) => `- ${String.fromCharCode(65 + i)}. ${opt}`).join('\n')}
 
 ---
 
-**정답:** **${correctWord}** ${card.phonetic ? `[${card.phonetic}]` : ''}
-**품사:** ${card.pos}
-**단어 레벨:** ${card.level || '일반'}
+**${correctWord}${phoneticPart} | ${card.pos} | ${formattedLevel}**
+
+**번역:** ${card.korean}
 
 **해설:**
 ${remappedRationale}
