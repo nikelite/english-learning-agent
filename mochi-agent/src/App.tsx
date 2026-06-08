@@ -681,7 +681,10 @@ I’m curious about your {{perspective}} on the new tech stack."
                               <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
                                 {blankSentence}
                               </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.5rem' }}>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                <strong>번역:</strong> {card.korean}
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                 {card.options?.map((opt, oIdx) => (
                                   <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
                                     {String.fromCharCode(65 + oIdx)}. {opt}
@@ -697,9 +700,6 @@ I’m curious about your {{perspective}} on the new tech stack."
                             <div className="preview-face-content">
                               <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
                                 {card.options?.[card.correctIndex ?? 0] || card.english} {card.phonetic && <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.25rem' }}>[{card.phonetic.replace(/[\[\]]/g, '')}]</span>} <span style={{ fontWeight: 'normal', fontSize: '0.8rem', color: 'var(--text-muted)' }}>| {card.pos} | {formatLevel(card.level || '')}</span>
-                              </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                                <strong>번역:</strong> {card.korean}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderLeft: '2px solid var(--primary)', paddingLeft: '0.4rem', lineHeight: '1.4' }}>
                                 <strong>해설:</strong> {card.rationale}
@@ -799,7 +799,10 @@ I’m curious about your {{perspective}} on the new tech stack."
                               <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
                                 {blankSentence}
                               </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.5rem' }}>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                <strong>번역:</strong> {card.korean}
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                 {card.options?.map((opt, oIdx) => (
                                   <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
                                     {String.fromCharCode(65 + oIdx)}. {opt}
@@ -815,9 +818,6 @@ I’m curious about your {{perspective}} on the new tech stack."
                             <div className="preview-face-content">
                               <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
                                 {card.options?.[card.correctIndex ?? 0] || card.english} {card.phonetic && <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.25rem' }}>[{card.phonetic.replace(/[\[\]]/g, '')}]</span>} <span style={{ fontWeight: 'normal', fontSize: '0.8rem', color: 'var(--text-muted)' }}>| {card.pos} | {formatLevel(card.level || '')}</span>
-                              </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                                <strong>번역:</strong> {card.korean}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderLeft: '2px solid var(--primary)', paddingLeft: '0.4rem', lineHeight: '1.4' }}>
                                 <strong>해설:</strong> {card.rationale}
