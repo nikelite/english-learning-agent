@@ -320,7 +320,6 @@ function App() {
           <span className="logo-text">MOCHI.AGENT</span>
         </div>
         <div className="nav-actions">
-          {userId && <span className="user-badge font-english">Owner: {userId}</span>}
           <button 
             onClick={() => setShowSettings(!showSettings)} 
             className="btn btn-secondary"
