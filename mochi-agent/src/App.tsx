@@ -39,6 +39,8 @@ function App() {
   const [previewCards, setPreviewCards] = useState<MochiCard[]>([]);
   const [decks, setDecks] = useState<MochiDeck[]>([]);
   const [activeDeck, setActiveDeck] = useState<MochiDeck | null>(null);
+  const [selectedDeckForPreview, setSelectedDeckForPreview] = useState<MochiDeck | null>(null);
+  const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
 
   // Status & Loading State
   const [isLoading, setIsLoading] = useState(false);
@@ -243,10 +245,13 @@ function App() {
       setSaveStatusText('클라우드 데이터베이스 저장 중...');
 
       // Step 3: Compile MochiDeck object and save to LocalStorage & Firebase Firestore
+      const targetDeckId = editingDeckId || `deck-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const newDeck: MochiDeck = {
-        id: `deck-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        id: targetDeckId,
         name: deckName.trim(),
-        createdAt: Date.now(),
+        createdAt: editingDeckId 
+          ? (decks.find(d => d.id === editingDeckId)?.createdAt || Date.now())
+          : Date.now(),
         cards: previewCards,
         tags: tagsArray,
         mode: deckMode,
@@ -263,14 +268,25 @@ function App() {
       }
 
       // Update Local State & LocalStorage
-      const updatedDecks = [newDeck, ...decks];
+      let updatedDecks: MochiDeck[];
+      if (editingDeckId) {
+        updatedDecks = decks.map(d => d.id === editingDeckId ? newDeck : d);
+      } else {
+        updatedDecks = [newDeck, ...decks];
+      }
       setDecks(updatedDecks);
       localStorage.setItem('mochi_local_decks', JSON.stringify(updatedDecks));
+
+      // Update selectedDeckForPreview if active
+      if (selectedDeckForPreview?.id === targetDeckId) {
+        setSelectedDeckForPreview(newDeck);
+      }
 
       setSaveProgress(100);
       setSaveStatusText(saveType === 'mochi' ? 'Mochi 내보내기 및 저장이 완료되었습니다!' : '로컬 및 클라우드 저장이 완료되었습니다!');
       setSaveSuccess(true);
       setPreviewCards([]); // Clear preview list
+      setEditingDeckId(null);
     } catch (err: any) {
       console.error(err);
       alert(`저장 중 오류가 발생했습니다: ${err.message || err}`);
@@ -298,6 +314,9 @@ function App() {
       if (activeDeck && activeDeck.id === deckId) {
         setActiveDeck(null);
       }
+      if (selectedDeckForPreview && selectedDeckForPreview.id === deckId) {
+        setSelectedDeckForPreview(null);
+      }
       showNotification('덱이 안전하게 삭제되었습니다.', 'success');
     } catch (err: any) {
       console.error(err);
@@ -316,6 +335,15 @@ function App() {
           <span className="logo-text">MOCHI.AGENT</span>
         </div>
         <div className="nav-actions">
+          <a 
+            href="https://app.mochi.cards/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="btn btn-secondary font-english"
+            style={{ textDecoration: 'none' }}
+          >
+            Mochi 바로가기 ↗
+          </a>
           <button 
             onClick={() => setShowSettings(!showSettings)} 
             className="btn btn-secondary"
@@ -443,10 +471,11 @@ I’m curious about your {{perspective}} on the new tech stack."
                 {decks.map((deck) => (
                   <div 
                     key={deck.id} 
-                    className={`deck-item-card ${activeDeck?.id === deck.id ? 'active' : ''}`}
+                    className={`deck-item-card ${selectedDeckForPreview?.id === deck.id ? 'active' : ''}`}
                     onClick={() => {
-                      setPreviewCards([]); // Close preview if we study a deck
-                      setActiveDeck(deck);
+                      setPreviewCards([]);
+                      setActiveDeck(null);
+                      setSelectedDeckForPreview(deck);
                     }}
                   >
                     <div className="deck-item-info">
@@ -508,6 +537,93 @@ I’m curious about your {{perspective}} on the new tech stack."
               deck={activeDeck} 
               onClose={() => setActiveDeck(null)} 
             />
+          ) : selectedDeckForPreview ? (
+            /* Preview of a saved deck */
+            <div className="animate-fade-in" style={{ width: '100%', maxWidth: '800px' }}>
+              <div className="preview-header-bar">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FileText size={20} className="text-primary" />
+                    <h3 className="preview-title">
+                      {selectedDeckForPreview.name}
+                    </h3>
+                  </div>
+                  <div className="deck-item-meta" style={{ marginTop: '0.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <span className={`deck-badge ${selectedDeckForPreview.mode}`}>
+                      {selectedDeckForPreview.mode === 'study' ? '암기' : '퀴즈'}
+                    </span>
+                    <span>• Card: {selectedDeckForPreview.cards?.length || 0}개</span>
+                    <span>
+                      {selectedDeckForPreview.isExported ? (
+                        <span className="sync-status-badge synced" title="Mochi 동기화 완료">Mochi 내보냄</span>
+                      ) : (
+                        <span className="sync-status-badge local" title="로컬/클라우드 저장됨">Saved</span>
+                      )}
+                    </span>
+                    {selectedDeckForPreview.tags?.length > 0 && (
+                      <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                        태그: {selectedDeckForPreview.tags.join(', ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button 
+                    onClick={() => {
+                      setActiveDeck(selectedDeckForPreview);
+                    }} 
+                    className="btn btn-success"
+                  >
+                    <Play size={16} /> 학습 시작
+                  </button>
+                  {!selectedDeckForPreview.isExported && (
+                    <button 
+                      onClick={() => {
+                        setPreviewCards(selectedDeckForPreview.cards);
+                        setDeckMode(selectedDeckForPreview.mode);
+                        setDeckName(selectedDeckForPreview.name);
+                        setTagsInput(selectedDeckForPreview.tags.join(', '));
+                        setEditingDeckId(selectedDeckForPreview.id);
+                        openSaveModal('mochi');
+                      }} 
+                      className="btn btn-primary"
+                    >
+                      <UploadCloud size={16} /> Mochi로 내보내기
+                    </button>
+                  )}
+                  <button onClick={() => setSelectedDeckForPreview(null)} className="btn btn-secondary">
+                    닫기
+                  </button>
+                </div>
+              </div>
+
+              <div className="preview-cards-grid">
+                {selectedDeckForPreview.cards?.map((card) => (
+                  <div key={card.id} className="preview-card">
+                    <div className="preview-card-header">
+                      <span className="preview-card-term font-english">{card.english}</span>
+                      <span className="preview-card-pos font-korean">{card.pos}</span>
+                    </div>
+
+                    <div className="preview-card-meaning font-korean">
+                      {card.korean}
+                    </div>
+
+                    <div className="preview-card-example font-korean">
+                      <div className="eng font-english">{card.exampleEng}</div>
+                      <div className="kor font-korean">{card.exampleKor}</div>
+                    </div>
+
+                    {card.tip && (
+                      <div className="preview-card-tip font-korean">
+                        <span>💡</span>
+                        <span>{card.tip}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : previewCards.length > 0 ? (
             /* Preview of Generated Cards Prior to saving */
             <div className="animate-fade-in" style={{ width: '100%', maxWidth: '800px' }}>
@@ -519,10 +635,10 @@ I’m curious about your {{perspective}} on the new tech stack."
                   </h3>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button onClick={() => openSaveModal('local')} className="btn btn-secondary">
+                  <button onClick={() => { setEditingDeckId(null); openSaveModal('local'); }} className="btn btn-secondary">
                     <Save size={16} /> 저장만 하기
                   </button>
-                  <button onClick={() => openSaveModal('mochi')} className="btn btn-primary">
+                  <button onClick={() => { setEditingDeckId(null); openSaveModal('mochi'); }} className="btn btn-primary">
                     <UploadCloud size={16} /> Mochi로 내보내기 & 저장
                   </button>
                 </div>
@@ -565,9 +681,9 @@ I’m curious about your {{perspective}} on the new tech stack."
             </div>
           ) : (
             /* Idle Empty State */
-            <div className="empty-right-panel">
+            <div className="empty-right-panel animate-fade-in">
               <div className="empty-icon-container">
-                <BookOpen size={48} />
+                <BookOpen size={36} />
               </div>
               <h2>Mochi 학습 덱 플래너</h2>
               <p>
