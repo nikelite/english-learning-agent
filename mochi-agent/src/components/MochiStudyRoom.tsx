@@ -293,9 +293,9 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                     </div>
                     <div className="card-front-content">
                       {studyStyle === 'eng-first' ? (
-                        <h1 className="term-text font-english">{currentCard.english}</h1>
+                        <div className="term-text font-english">{currentCard.english}</div>
                       ) : (
-                        <h1 className="term-text font-korean">{currentCard.korean}</h1>
+                        <div className="term-text font-korean">{currentCard.korean}</div>
                       )}
                       <p className="flip-hint">카드를 탭하여 뜻 확인하기</p>
                     </div>

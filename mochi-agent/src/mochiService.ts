@@ -104,7 +104,7 @@ ${card.tip}`;
   } else {
     // Memorization Card Mode
     if (style === 'eng-first' || style === 'both') {
-      const content = `# ${card.english} ${card.phonetic ? `[${card.phonetic}]` : ''}
+      const content = `**${card.english}** ${card.phonetic ? `[${card.phonetic}]` : ''}
 
 ---
 
@@ -120,7 +120,7 @@ ${card.tip}`;
     }
 
     if (style === 'kor-first' || style === 'both') {
-      const content = `# ${card.korean} (${card.pos})
+      const content = `**${card.korean}** (${card.pos})
 
 ---
 
