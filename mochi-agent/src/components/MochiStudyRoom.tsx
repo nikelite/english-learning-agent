@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { shuffleChoicesAndRemapRationale } from '../types';
 import type { MochiDeck, MochiCard } from '../types';
 import { 
   BookOpen, 
@@ -31,6 +32,10 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
   const [studyQueue, setStudyQueue] = useState<MochiCard[]>([]);
   const [completed, setCompleted] = useState(false);
 
+  const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+  const [shuffledCorrectIndex, setShuffledCorrectIndex] = useState<number>(0);
+  const [remappedRationale, setRemappedRationale] = useState<string>('');
+
   // Initialize deck cards
   useEffect(() => {
     if (deck.cards && deck.cards.length > 0) {
@@ -45,6 +50,21 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
       setCompleted(false);
     }
   }, [deck]);
+
+  // Shuffle options programmatically whenever card changes
+  useEffect(() => {
+    const activeCard = deck.mode === 'study' ? studyQueue[currentIndex] : cards[currentIndex];
+    if (activeCard && deck.mode === 'quiz') {
+      const result = shuffleChoicesAndRemapRationale(
+        activeCard.options || [],
+        activeCard.correctIndex ?? 0,
+        activeCard.rationale || ''
+      );
+      setShuffledOptions(result.choices);
+      setShuffledCorrectIndex(result.correctIndex);
+      setRemappedRationale(result.rationale);
+    }
+  }, [currentIndex, cards, studyQueue, deck.mode]);
 
   if (!deck.cards || deck.cards.length === 0) {
     return (
@@ -103,7 +123,7 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
     setSelectedOption(optionIdx);
     setQuizAnswered(true);
 
-    const isCorrect = optionIdx === currentCard.correctIndex;
+    const isCorrect = optionIdx === shuffledCorrectIndex;
     if (isCorrect) {
       setScore(prev => prev + 1);
     } else {
@@ -137,7 +157,7 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
 
   // Helper to format the quiz sentence showing blank or answer
   const formatQuizSentence = (sentence: string, showAnswer: boolean) => {
-    const regex = /\{\{c1::(.*?)\}\}/gi;
+    const regex = /\{\{(?:c\d::)?(.*?)\}\}/gi;
     if (showAnswer) {
       // Replace with highlighted answer
       return sentence.replace(regex, `<span class="quiz-highlight-correct">$1</span>`);
@@ -335,6 +355,12 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                         </>
                       )}
 
+                      {currentCard.level && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                          <strong>단어 레벨:</strong> <span className="pos-badge" style={{ verticalAlign: 'middle', marginLeft: '0.25rem', padding: '1px 6px', fontSize: '0.7rem' }}>{currentCard.level}</span>
+                        </div>
+                      )}
+
                       {/* Example sentences */}
                       <div className="card-example-section">
                         <span className="section-label">Example Sentence</span>
@@ -370,9 +396,15 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
               {/* Question card */}
               <div className="quiz-question-card">
                 <div className="quiz-card-header">
-                  <span className="pos-badge">{currentCard.pos}</span>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <span className="pos-badge">{currentCard.pos}</span>
+                    {currentCard.level && (
+                      <span className="pos-badge" style={{ background: 'var(--secondary-light)', color: 'var(--secondary)' }}>
+                        {currentCard.level}
+                      </span>
+                    )}
+                  </div>
                   <div className="quiz-controls-right">
-                    {currentCard.phonetic && <span className="phonetic-display">{currentCard.phonetic}</span>}
                     <button 
                       className="tts-btn"
                       onClick={() => speakWord(currentCard.english)}
@@ -390,19 +422,26 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                       __html: formatQuizSentence(currentCard.exampleEng, quizAnswered) 
                     }}
                   />
-                  {quizAnswered && (
-                    <p className="quiz-translation font-korean animate-fade-in">
-                      {currentCard.korean}
-                    </p>
-                  )}
+                  
+                  {/* Hints and Translations shown on the front */}
+                  <div className="quiz-hints-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.75rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      <strong>번역:</strong> {currentCard.korean}
+                    </div>
+                    {currentCard.phonetic && (
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        <strong>발음 힌트:</strong> <span className="font-english" style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{currentCard.phonetic}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Options list */}
               <div className="quiz-options-list">
-                {currentCard.options?.map((option, index) => {
+                {shuffledOptions.map((option, index) => {
                   const letter = String.fromCharCode(65 + index);
-                  const isCorrect = index === currentCard.correctIndex;
+                  const isCorrect = index === shuffledCorrectIndex;
                   const isSelected = index === selectedOption;
 
                   let optionClass = 'quiz-option-btn';
@@ -439,7 +478,7 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                     <h4 className="section-title">
                       <Info size={16} /> 해설 (Rationale)
                     </h4>
-                    <p className="explanation-text font-korean">{currentCard.rationale}</p>
+                    <p className="explanation-text font-korean">{remappedRationale}</p>
                   </div>
 
                   {currentCard.tip && (

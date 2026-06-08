@@ -1,3 +1,4 @@
+import { shuffleChoicesAndRemapRationale } from './types';
 import type { MochiCard } from './types';
 
 const BASE_URL = 'https://app.mochi.cards/api';
@@ -81,21 +82,35 @@ export async function createMochiCard(
   };
 
   if (mode === 'quiz') {
-    // For Quiz, we format using Mochi's cloze format
-    // exampleEng already has {{c1::word}} from Gemini
-    const content = `${card.exampleEng}
+    // Shuffling choices and remapping rationale using shared utility
+    const result = shuffleChoicesAndRemapRationale(
+      card.options || [],
+      card.correctIndex ?? 0,
+      card.rationale || ''
+    );
+    const shuffledOptions = result.choices;
+    const correctWord = shuffledOptions[result.correctIndex] || card.english;
+    const remappedRationale = result.rationale;
+
+    // Replace curly braces/clozes in sentence with a blank (e.g. _______)
+    const blankSentence = card.exampleEng.replace(/\{\{(?:c\d::)?(.*?)\}\}/gi, '_______');
+
+    const content = `${blankSentence}
+
+**전체 번역:** ${card.korean}
+**발음 힌트:** ${card.phonetic || ''}
+
+**선택지:**
+${shuffledOptions.map((opt, i) => `- ${String.fromCharCode(65 + i)}. ${opt}`).join('\n')}
 
 ---
 
-**정답:** **${card.english}** ${card.phonetic ? `[${card.phonetic}]` : ''}
+**정답:** **${correctWord}**
 **품사:** ${card.pos}
-**뜻 (전체 번역):** ${card.korean}
-
-**선택지:**
-${card.options?.map((opt, i) => `- ${String.fromCharCode(65 + i)}. ${opt}`).join('\n')}
+**단어 레벨:** ${card.level || '일반'}
 
 **해설:**
-${card.rationale}
+${remappedRationale}
 
 **암기 팁:**
 ${card.tip}`;
@@ -104,11 +119,12 @@ ${card.tip}`;
   } else {
     // Memorization Card Mode
     if (style === 'eng-first' || style === 'both') {
-      const content = `**${card.english}** ${card.phonetic ? `[${card.phonetic}]` : ''}
+      const content = `**${card.english}** ${card.phonetic ? `${card.phonetic}` : ''}
 
 ---
 
 **뜻:** ${card.korean} (${card.pos})
+**단어 레벨:** ${card.level || '일반'}
 
 **예문:**
 - **ENG:** ${card.exampleEng}
@@ -124,7 +140,8 @@ ${card.tip}`;
 
 ---
 
-**단어:** **${card.english}** ${card.phonetic ? `[${card.phonetic}]` : ''}
+**단어:** **${card.english}** ${card.phonetic ? `${card.phonetic}` : ''}
+**단어 레벨:** ${card.level || '일반'}
 
 **예문:**
 - **KOR:** ${card.exampleKor}

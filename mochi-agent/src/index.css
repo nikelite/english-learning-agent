@@ -1378,3 +1378,50 @@ p {
   0%, 100% { opacity: 1; }
   50% { opacity: .5; }
 }
+
+/* Split-face Preview Layouts */
+.preview-card-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .preview-card-split {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.preview-card-face-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background-color: var(--bg-main);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.face-label {
+  font-size: 0.75rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-face-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

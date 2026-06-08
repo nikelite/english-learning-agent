@@ -598,32 +598,99 @@ I’m curious about your {{perspective}} on the new tech stack."
               </div>
 
               <div className="preview-cards-grid">
-                {selectedDeckForPreview.cards?.map((card) => (
-                  <div key={card.id} className="preview-card">
-                    <div className="preview-card-header">
-                      <span className="preview-card-term font-english">
-                        {card.english} {card.phonetic && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.4rem' }}>{card.phonetic}</span>}
-                      </span>
-                      <span className="preview-card-pos font-korean">{card.pos}</span>
-                    </div>
+                {selectedDeckForPreview.cards?.map((card) => {
+                  const isQuiz = selectedDeckForPreview.mode === 'quiz';
+                  const blankSentence = card.exampleEng.replace(/\{\{(?:c\d::)?(.*?)\}\}/gi, '_______');
 
-                    <div className="preview-card-meaning font-korean">
-                      {card.korean}
-                    </div>
-
-                    <div className="preview-card-example font-korean">
-                      <div className="eng font-english">{card.exampleEng}</div>
-                      <div className="kor font-korean">{card.exampleKor}</div>
-                    </div>
-
-                    {card.tip && (
-                      <div className="preview-card-tip font-korean">
-                        <span>💡</span>
-                        <span>{card.tip}</span>
+                  return (
+                    <div key={card.id} className="preview-card">
+                       <div className="preview-card-header">
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <span className="preview-card-pos font-korean">{card.pos}</span>
+                          {card.level && (
+                            <span className="preview-card-pos font-korean" style={{ background: 'var(--secondary-light)', color: 'var(--secondary)', borderColor: 'var(--secondary)' }}>
+                              {card.level}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div className="preview-card-split">
+                        {/* Front Side */}
+                        <div className="preview-card-face-col">
+                          <span className="face-label">앞면 (Front)</span>
+                          <div className="preview-face-content">
+                            {isQuiz ? (
+                              <>
+                                <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                                  {blankSentence}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  <strong>번역:</strong> {card.korean}
+                                </div>
+                                {card.phonetic && (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                    <strong>발음 힌트:</strong> <span style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{card.phonetic}</span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
+                                  {card.options?.map((opt, oIdx) => (
+                                    <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
+                                      {String.fromCharCode(65 + oIdx)}. {opt}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="preview-card-term font-english" style={{ fontSize: '1.1rem', textAlign: 'center', margin: '0.5rem 0' }}>
+                                {card.english} {card.phonetic && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.25rem' }}>{card.phonetic}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Back Side */}
+                        <div className="preview-card-face-col">
+                          <span className="face-label">뒷면 (Back)</span>
+                          <div className="preview-face-content">
+                            {isQuiz ? (
+                              <>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 'bold' }}>
+                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.15rem 0' }}>
+                                  <strong>품사:</strong> {card.pos} | <strong>단어 레벨:</strong> {card.level || '일반'}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderLeft: '2px solid var(--primary)', paddingLeft: '0.4rem', lineHeight: '1.4' }}>
+                                  <strong>해설:</strong> {card.rationale}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="preview-card-meaning font-korean" style={{ fontWeight: '600' }}>
+                                  {card.korean}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>
+                                  <strong>단어 레벨:</strong> {card.level || '일반'}
+                                </div>
+                                <div className="preview-card-example font-korean" style={{ fontSize: '0.8rem', padding: '0.5rem', margin: 0 }}>
+                                  <div className="eng font-english" style={{ color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{card.exampleEng}</div>
+                                  <div className="kor font-korean" style={{ color: 'var(--text-secondary)' }}>{card.exampleKor}</div>
+                                </div>
+                              </>
+                            )}
+
+                            {card.tip && (
+                              <div className="preview-card-tip font-korean" style={{ padding: '0.4rem 0.5rem', margin: 0 }}>
+                                💡 {card.tip}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : previewCards.length > 0 ? (
@@ -647,40 +714,107 @@ I’m curious about your {{perspective}} on the new tech stack."
               </div>
 
               <div className="preview-cards-grid">
-                {previewCards.map((card) => (
-                  <div key={card.id} className="preview-card">
-                    <button 
-                      className="preview-card-delete-btn" 
-                      onClick={() => handleDeletePreviewCard(card.id)}
-                      title="이 카드 제외"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                    
-                    <div className="preview-card-header">
-                      <span className="preview-card-term font-english">
-                        {card.english} {card.phonetic && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.4rem' }}>{card.phonetic}</span>}
-                      </span>
-                      <span className="preview-card-pos font-korean">{card.pos}</span>
-                    </div>
+                {previewCards.map((card) => {
+                  const isQuiz = deckMode === 'quiz';
+                  const blankSentence = card.exampleEng.replace(/\{\{(?:c\d::)?(.*?)\}\}/gi, '_______');
 
-                    <div className="preview-card-meaning font-korean">
-                      {card.korean}
-                    </div>
+                  return (
+                    <div key={card.id} className="preview-card">
+                      <button 
+                        className="preview-card-delete-btn" 
+                        onClick={() => handleDeletePreviewCard(card.id)}
+                        title="이 카드 제외"
+                      >
+                        <Trash2 size={16} />
+                      </button>
 
-                    <div className="preview-card-example font-korean">
-                      <div className="eng font-english">{card.exampleEng}</div>
-                      <div className="kor font-korean">{card.exampleKor}</div>
-                    </div>
-
-                    {card.tip && (
-                      <div className="preview-card-tip font-korean">
-                        <span>💡</span>
-                        <span>{card.tip}</span>
+                      <div className="preview-card-header">
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <span className="preview-card-pos font-korean">{card.pos}</span>
+                          {card.level && (
+                            <span className="preview-card-pos font-korean" style={{ background: 'var(--secondary-light)', color: 'var(--secondary)', borderColor: 'var(--secondary)' }}>
+                              {card.level}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div className="preview-card-split">
+                        {/* Front Side */}
+                        <div className="preview-card-face-col">
+                          <span className="face-label">앞면 (Front)</span>
+                          <div className="preview-face-content">
+                            {isQuiz ? (
+                              <>
+                                <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                                  {blankSentence}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  <strong>번역:</strong> {card.korean}
+                                </div>
+                                {card.phonetic && (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                    <strong>발음 힌트:</strong> <span style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{card.phonetic}</span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
+                                  {card.options?.map((opt, oIdx) => (
+                                    <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
+                                      {String.fromCharCode(65 + oIdx)}. {opt}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="preview-card-term font-english" style={{ fontSize: '1.1rem', textAlign: 'center', margin: '0.5rem 0' }}>
+                                {card.english} {card.phonetic && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.25rem' }}>{card.phonetic}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Back Side */}
+                        <div className="preview-card-face-col">
+                          <span className="face-label">뒷면 (Back)</span>
+                          <div className="preview-face-content">
+                            {isQuiz ? (
+                              <>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 'bold' }}>
+                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.15rem 0' }}>
+                                  <strong>품사:</strong> {card.pos} | <strong>단어 레벨:</strong> {card.level || '일반'}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderLeft: '2px solid var(--primary)', paddingLeft: '0.4rem', lineHeight: '1.4' }}>
+                                  <strong>해설:</strong> {card.rationale}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="preview-card-meaning font-korean" style={{ fontWeight: '600' }}>
+                                  {card.korean}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>
+                                  <strong>단어 레벨:</strong> {card.level || '일반'}
+                                </div>
+                                <div className="preview-card-example font-korean" style={{ fontSize: '0.8rem', padding: '0.5rem', margin: 0 }}>
+                                  <div className="eng font-english" style={{ color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{card.exampleEng}</div>
+                                  <div className="kor font-korean" style={{ color: 'var(--text-secondary)' }}>{card.exampleKor}</div>
+                                </div>
+                              </>
+                            )}
+
+                            {card.tip && (
+                              <div className="preview-card-tip font-korean" style={{ padding: '0.4rem 0.5rem', margin: 0 }}>
+                                💡 {card.tip}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (
