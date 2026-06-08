@@ -49,6 +49,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
+    // Mochi Agent Collections
+    match /mochi_decks/{document} {
+      allow read, write: if true;
+    }
+    
     // Trigger Email Extension Collection
     match /mail/{document} {
       allow read, write: if true;
