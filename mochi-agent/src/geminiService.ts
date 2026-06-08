@@ -36,6 +36,31 @@ async function fetchWithRetry(
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
 }
 
+// Splits input text into small chunks to prevent API limits on large vocabulary lists
+function chunkInputText(text: string, maxItemsPerChunk = 10): string[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  
+  if (lines.length > 1) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < lines.length; i += maxItemsPerChunk) {
+      chunks.push(lines.slice(i, i + maxItemsPerChunk));
+    }
+    return chunks.map(chunk => chunk.join('\n'));
+  } else {
+    // Only one line. Split by sentences.
+    const sentences = text.match(/[^.!?]+[.!?]+(\s+|$)/g)?.map(s => s.trim()).filter(Boolean) || [text];
+    if (sentences.length > maxItemsPerChunk) {
+      const chunks: string[][] = [];
+      for (let i = 0; i < sentences.length; i += maxItemsPerChunk) {
+        chunks.push(sentences.slice(i, i + maxItemsPerChunk));
+      }
+      return chunks.map(chunk => chunk.join(' '));
+    }
+  }
+  
+  return [text];
+}
+
 export async function generateMochiCards(
   inputText: string,
   mode: 'study' | 'quiz',
@@ -50,16 +75,18 @@ export async function generateMochiCards(
     throw new Error("입력된 내용이 없습니다.");
   }
 
+  const chunks = chunkInputText(cleanText, 10);
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
-  let prompt = "";
-  if (mode === 'study') {
-    prompt = `You are an elite academic English linguist and ESL curriculum developer.
+  const generateChunk = async (chunkText: string, chunkIdx: number): Promise<MochiCard[]> => {
+    let prompt = "";
+    if (mode === 'study') {
+      prompt = `You are an elite academic English linguist and ESL curriculum developer.
 Analyze the following vocabulary list, expressions, or sentences, and generate flashcard content.
 
 Input Text:
 """
-${cleanText}
+${chunkText}
 """
 
 Instructions:
@@ -91,14 +118,14 @@ Instructions:
 ]
 
 Do not wrap the output in markdown code blocks. Return strictly valid JSON.`;
-  } else {
-    // Quiz Mode
-    prompt = `You are an elite academic English linguist and ESL test developer (TOEIC/TOEFL specialist).
+    } else {
+      // Quiz Mode
+      prompt = `You are an elite academic English linguist and ESL test developer (TOEIC/TOEFL specialist).
 Analyze the following vocabulary list, expressions, or sentences, and generate 4-choice 어휘 퀴즈 (cloze vocabulary quizzes).
 
 Input Text:
 """
-${cleanText}
+${chunkText}
 """
 
 Instructions:
@@ -133,26 +160,25 @@ Instructions:
 ]
 
 Do not wrap the output in markdown code blocks. Return strictly valid JSON.`;
-  }
-
-  const requestBody = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: prompt
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.1
     }
-  };
 
-  try {
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: prompt
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1
+      }
+    };
+
     const response = await fetchWithRetry(endpoint, {
       method: "POST",
       headers: {
@@ -164,29 +190,27 @@ Do not wrap the output in markdown code blocks. Return strictly valid JSON.`;
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
-      throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+      throw new Error(`Gemini API 통신 실패 (Chunk ${chunkIdx + 1}): ${errorMessage}`);
     }
 
     const data = await response.json();
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!responseText) {
-      throw new Error("Gemini가 유효한 퀴즈/단어 분석 결과를 반환하지 않았습니다.");
+      throw new Error(`Gemini가 유효한 결과를 반환하지 않았습니다 (Chunk ${chunkIdx + 1}).`);
     }
 
     const parsed = JSON.parse(responseText);
     if (!Array.isArray(parsed)) {
-      throw new Error("결과가 올바른 배열 형식이 아닙니다.");
+      throw new Error(`결과가 올바른 배열 형식이 아닙니다 (Chunk ${chunkIdx + 1}).`);
     }
 
-    return parsed.map((item: any, idx: number) => {
-      // Clean example sentence to use standard {{word}} format
+    return parsed.map((item: any, itemIdx: number) => {
       const cleanExampleEng = (item.exampleEng || "").replace(/\{\{c\d::/gi, '{{');
       
       let options = Array.isArray(item.options) ? item.options : [];
       let correctIndex = typeof item.correctIndex === 'number' ? item.correctIndex : 0;
       let rationale = item.rationale || "";
 
-      // Programmatically shuffle choices and remap labels upon generation
       if (mode === 'quiz' && options.length > 0) {
         const result = shuffleChoicesAndRemapRationale(options, correctIndex, rationale);
         options = result.choices;
@@ -195,7 +219,7 @@ Do not wrap the output in markdown code blocks. Return strictly valid JSON.`;
       }
 
       return {
-        id: item.id || `mochi-item-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        id: item.id || `mochi-item-${Date.now()}-${chunkIdx}-${itemIdx}-${Math.random().toString(36).substring(2, 6)}`,
         english: item.english || "",
         korean: item.korean || "",
         pos: item.pos || "",
@@ -209,6 +233,13 @@ Do not wrap the output in markdown code blocks. Return strictly valid JSON.`;
         rationale
       };
     });
+  };
+
+  try {
+    const results = await Promise.all(
+      chunks.map((chunk, idx) => generateChunk(chunk, idx))
+    );
+    return results.flat();
   } catch (error: any) {
     console.error("generateMochiCards error:", error);
     throw new Error(error.message || "암기카드/퀴즈 데이터 생성에 실패했습니다.");
