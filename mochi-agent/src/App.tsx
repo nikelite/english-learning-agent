@@ -628,11 +628,6 @@ I’m curious about your {{perspective}} on the new tech stack."
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                   <strong>번역:</strong> {card.korean}
                                 </div>
-                                {card.phonetic && (
-                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                    <strong>발음 힌트:</strong> <span style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{card.phonetic}</span>
-                                  </div>
-                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                   {card.options?.map((opt, oIdx) => (
                                     <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
@@ -656,7 +651,7 @@ I’m curious about your {{perspective}} on the new tech stack."
                             {isQuiz ? (
                               <>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 'bold' }}>
-                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english}
+                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english} {card.phonetic && <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.25rem' }}>[{card.phonetic}]</span>}
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.15rem 0' }}>
                                   <strong>품사:</strong> {card.pos} | <strong>단어 레벨:</strong> {card.level || '일반'}
@@ -752,11 +747,6 @@ I’m curious about your {{perspective}} on the new tech stack."
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                   <strong>번역:</strong> {card.korean}
                                 </div>
-                                {card.phonetic && (
-                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                    <strong>발음 힌트:</strong> <span style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{card.phonetic}</span>
-                                  </div>
-                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                   {card.options?.map((opt, oIdx) => (
                                     <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
@@ -780,7 +770,7 @@ I’m curious about your {{perspective}} on the new tech stack."
                             {isQuiz ? (
                               <>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 'bold' }}>
-                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english}
+                                  정답: {card.options?.[card.correctIndex ?? 0] || card.english} {card.phonetic && <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: '0.75rem', marginLeft: '0.25rem' }}>[{card.phonetic}]</span>}
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.15rem 0' }}>
                                   <strong>품사:</strong> {card.pos} | <strong>단어 레벨:</strong> {card.level || '일반'}

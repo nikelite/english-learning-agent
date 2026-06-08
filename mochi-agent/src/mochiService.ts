@@ -98,14 +98,13 @@ export async function createMochiCard(
     const content = `${blankSentence}
 
 **전체 번역:** ${card.korean}
-**발음 힌트:** ${card.phonetic || ''}
 
 **선택지:**
 ${shuffledOptions.map((opt, i) => `- ${String.fromCharCode(65 + i)}. ${opt}`).join('\n')}
 
 ---
 
-**정답:** **${correctWord}**
+**정답:** **${correctWord}** ${card.phonetic ? `[${card.phonetic}]` : ''}
 **품사:** ${card.pos}
 **단어 레벨:** ${card.level || '일반'}
 

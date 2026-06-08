@@ -428,11 +428,6 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                       <strong>번역:</strong> {currentCard.korean}
                     </div>
-                    {currentCard.phonetic && (
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        <strong>발음 힌트:</strong> <span className="font-english" style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{currentCard.phonetic}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -474,6 +469,14 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
               {/* Rationale & Tip details */}
               {quizAnswered && (
                 <div className="quiz-explanation-box animate-slide-up">
+                  {currentCard.phonetic && (
+                    <div className="explanation-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                        <strong>발음:</strong> <span className="font-english" style={{ color: 'var(--secondary)', fontWeight: 'bold', fontSize: '1.05rem', marginLeft: '0.4rem' }}>{currentCard.phonetic}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="explanation-section">
                     <h4 className="section-title">
                       <Info size={16} /> 해설 (Rationale)
