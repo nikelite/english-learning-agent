@@ -681,15 +681,15 @@ I’m curious about your {{perspective}} on the new tech stack."
                               <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
                                 {blankSentence}
                               </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                <strong>번역:</strong> {card.korean}
-                              </div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                 {card.options?.map((opt, oIdx) => (
                                   <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
                                     {String.fromCharCode(65 + oIdx)}. {opt}
                                   </div>
                                 ))}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                                {"{{"}번역: {card.korean}{"}}"}
                               </div>
                             </div>
                           </div>
@@ -799,15 +799,15 @@ I’m curious about your {{perspective}} on the new tech stack."
                               <div className="font-english" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
                                 {blankSentence}
                               </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                <strong>번역:</strong> {card.korean}
-                              </div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.25rem' }}>
                                 {card.options?.map((opt, oIdx) => (
                                   <div key={oIdx} style={{ fontSize: '0.75rem', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}>
                                     {String.fromCharCode(65 + oIdx)}. {opt}
                                   </div>
                                 ))}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                                {"{{"}번역: {card.korean}{"}}"}
                               </div>
                             </div>
                           </div>

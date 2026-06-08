@@ -35,6 +35,12 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
   const [shuffledCorrectIndex, setShuffledCorrectIndex] = useState<number>(0);
   const [remappedRationale, setRemappedRationale] = useState<string>('');
+  const [showTranslation, setShowTranslation] = useState(false);
+
+  // Reset translation visibility when current card changes
+  useEffect(() => {
+    setShowTranslation(false);
+  }, [currentIndex]);
 
   // Initialize deck cards
   useEffect(() => {
@@ -423,11 +429,28 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                     }}
                   />
                   
-                  {/* Hints and Translations shown on the front */}
-                  <div className="quiz-hints-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.75rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.75rem' }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <strong>번역:</strong> {currentCard.korean}
-                    </div>
+                  {/* Unobtrusive translation wrapped in {{}} (Click to reveal) */}
+                  <div style={{ marginTop: '0.8rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.6rem', textAlign: 'left' }}>
+                    <button 
+                      onClick={() => setShowTranslation(!showTranslation)}
+                      style={{ 
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        margin: 0,
+                        font: 'inherit',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-muted)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        userSelect: 'none'
+                      }}
+                      title="클릭하여 번역 보기/숨기기"
+                    >
+                      {"{{"}번역: {showTranslation ? currentCard.korean : '탭하여 보기'}{"}}"}
+                    </button>
                   </div>
                 </div>
               </div>

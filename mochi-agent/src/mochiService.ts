@@ -101,10 +101,10 @@ export async function createMochiCard(
 
     const content = `${blankSentence}
 
-**전체 번역:** ${card.korean}
-
 **선택지:**
 ${shuffledOptions.map((opt, i) => `- ${String.fromCharCode(65 + i)}. ${opt}`).join('\n')}
+
+{{번역: ${card.korean}}}
 
 ---
 
