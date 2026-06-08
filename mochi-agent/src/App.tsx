@@ -459,17 +459,38 @@ I’m curious about your {{perspective}} on the new tech stack."
             </div>
 
             <div className="form-group">
-              <label className="form-label">학습 형태 모드 선택</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label className="form-label" style={{ margin: 0 }}>학습 형태 모드 선택</label>
+                {(previewCards.length > 0 || editingDeckId !== null) && (
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                    (생성된 카드가 있어 모드가 고정됩니다)
+                  </span>
+                )}
+              </div>
               <div className="mode-selector">
                 <button 
                   className={`mode-option-btn ${deckMode === 'study' ? 'active' : ''}`}
-                  onClick={() => setDeckMode('study')}
+                  onClick={() => {
+                    if (previewCards.length === 0 && editingDeckId === null) {
+                      setDeckMode('study');
+                    }
+                  }}
+                  disabled={previewCards.length > 0 || editingDeckId !== null}
+                  style={(previewCards.length > 0 || editingDeckId !== null) ? { cursor: 'not-allowed', opacity: 0.6 } : undefined}
+                  title={(previewCards.length > 0 || editingDeckId !== null) ? "이미 생성되거나 편집 중인 카드가 있어 모드를 변경할 수 없습니다." : "암기 카드 모드로 생성"}
                 >
                   암기 카드
                 </button>
                 <button 
                   className={`mode-option-btn ${deckMode === 'quiz' ? 'active' : ''}`}
-                  onClick={() => setDeckMode('quiz')}
+                  onClick={() => {
+                    if (previewCards.length === 0 && editingDeckId === null) {
+                      setDeckMode('quiz');
+                    }
+                  }}
+                  disabled={previewCards.length > 0 || editingDeckId !== null}
+                  style={(previewCards.length > 0 || editingDeckId !== null) ? { cursor: 'not-allowed', opacity: 0.6 } : undefined}
+                  title={(previewCards.length > 0 || editingDeckId !== null) ? "이미 생성되거나 편집 중인 카드가 있어 모드를 변경할 수 없습니다." : "어휘 퀴즈 모드로 생성"}
                 >
                   어휘 퀴즈
                 </button>
@@ -717,7 +738,25 @@ I’m curious about your {{perspective}} on the new tech stack."
                     AI 분석 카드 검토 ({previewCards.length}개)
                   </h3>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <button 
+                    onClick={() => {
+                      if (window.confirm("현재 생성/편집 중인 카드를 비우시겠습니까? (저장하지 않은 데이터는 유실됩니다)")) {
+                        setPreviewCards([]);
+                        setEditingDeckId(null);
+                      }
+                    }} 
+                    className="btn btn-secondary" 
+                    style={{ 
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                      color: '#ef4444', 
+                      borderColor: 'rgba(239, 68, 68, 0.2)',
+                      padding: '0.5rem 0.75rem' 
+                    }}
+                    title="검토 중인 카드 비우고 입력 폼 잠금 해제"
+                  >
+                    초기화
+                  </button>
                   <button onClick={() => { setEditingDeckId(null); openSaveModal('local'); }} className="btn btn-secondary">
                     <Save size={16} /> 저장만 하기
                   </button>
