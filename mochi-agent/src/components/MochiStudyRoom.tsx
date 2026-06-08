@@ -321,11 +321,15 @@ export const MochiStudyRoom: React.FC<MochiStudyRoomProps> = ({ deck, onClose })
                         <>
                           <h2 className="back-term font-korean">{currentCard.korean}</h2>
                           <div className="back-details-divider" />
-                          <h4 className="back-original-term font-english">{currentCard.english}</h4>
+                          <h4 className="back-original-term font-english">
+                            {currentCard.english} {currentCard.phonetic && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginLeft: '0.5rem', fontWeight: 'normal' }}>{currentCard.phonetic}</span>}
+                          </h4>
                         </>
                       ) : (
                         <>
-                          <h2 className="back-term font-english">{currentCard.english}</h2>
+                          <h2 className="back-term font-english">
+                            {currentCard.english} {currentCard.phonetic && <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginLeft: '0.5rem', fontWeight: 'normal' }}>{currentCard.phonetic}</span>}
+                          </h2>
                           <div className="back-details-divider" />
                           <h4 className="back-original-term font-korean">{currentCard.korean}</h4>
                         </>

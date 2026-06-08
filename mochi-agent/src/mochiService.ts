@@ -104,7 +104,7 @@ ${card.tip}`;
   } else {
     // Memorization Card Mode
     if (style === 'eng-first' || style === 'both') {
-      const content = `# ${card.english}
+      const content = `# ${card.english} ${card.phonetic ? `[${card.phonetic}]` : ''}
 
 ---
 
@@ -124,7 +124,7 @@ ${card.tip}`;
 
 ---
 
-**단어:** **${card.english}**
+**단어:** **${card.english}** ${card.phonetic ? `[${card.phonetic}]` : ''}
 
 **예문:**
 - **KOR:** ${card.exampleKor}

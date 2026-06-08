@@ -601,7 +601,9 @@ I’m curious about your {{perspective}} on the new tech stack."
                 {selectedDeckForPreview.cards?.map((card) => (
                   <div key={card.id} className="preview-card">
                     <div className="preview-card-header">
-                      <span className="preview-card-term font-english">{card.english}</span>
+                      <span className="preview-card-term font-english">
+                        {card.english} {card.phonetic && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.4rem' }}>{card.phonetic}</span>}
+                      </span>
                       <span className="preview-card-pos font-korean">{card.pos}</span>
                     </div>
 
@@ -656,7 +658,9 @@ I’m curious about your {{perspective}} on the new tech stack."
                     </button>
                     
                     <div className="preview-card-header">
-                      <span className="preview-card-term font-english">{card.english}</span>
+                      <span className="preview-card-term font-english">
+                        {card.english} {card.phonetic && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '0.4rem' }}>{card.phonetic}</span>}
+                      </span>
                       <span className="preview-card-pos font-korean">{card.pos}</span>
                     </div>
 

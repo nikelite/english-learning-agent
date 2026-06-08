@@ -70,6 +70,7 @@ Instructions:
    - "pos": Part of speech (e.g., 명사, 동사, 형용사, 부사, 숙어).
    - "exampleEng": A natural, contextual English example sentence (use the sentence from input if provided, with braces removed).
    - "exampleKor": Korean translation of the example sentence.
+   - "phonetic": Phonetic respelling of the word (e.g., "[daʊn-streem]" or IPA).
    - "tip": An engaging memorization tip in Korean (etymology, mnemonic device, or usage tip).
 4. CRITICAL RULE FOR MULTIPLE MEANINGS: If an English word or expression has multiple distinct meanings, you MUST split them and generate a separate object for EACH meaning. For example, if "compromise" is in the input, generate one card for "타협하다 (동사)" and another card for "손상시키다 (동사)".
 5. Return the result in a single, valid JSON array of objects following this schema:
@@ -81,6 +82,7 @@ Instructions:
     "pos": "형용사",
     "exampleEng": "How will this change affect other downstream services?",
     "exampleKor": "이 변경사항이 하위 서비스들에 어떤 영향을 주게 되나요?",
+    "phonetic": "[daʊn-streem]",
     "tip": "stream(흐름)이 down(아래로) 내려가는 것이므로, 비즈니스나 시스템 구조에서 '하류' 즉 '하위 단계'를 나타냅니다."
   }
 ]
