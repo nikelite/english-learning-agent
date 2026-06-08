@@ -70,10 +70,6 @@ function App() {
     setMochiApiKey(savedMochiKey);
     setUserId(savedUserId);
 
-    if (!savedGeminiKey || !savedMochiKey) {
-      setShowSettings(true);
-    }
-
     // Load local decks first
     const localDecksJson = localStorage.getItem('mochi_local_decks');
     let localDecks: MochiDeck[] = [];
