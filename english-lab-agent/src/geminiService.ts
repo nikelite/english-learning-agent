@@ -1,4 +1,5 @@
-import type { LabLesson, LabQuizItem, CorrectionItem } from './types';
+import type { LabLesson, LabQuizItem, CorrectionItem, LabMessage, ConversationSituation } from './types';
+
 
 // Helper function to call fetch with exponential backoff retry for network errors/transient API limits
 async function fetchWithRetry(
@@ -641,6 +642,354 @@ User's New Message (Question or Revision request):
     };
   } catch (error) {
     console.error("Failed to parse Gemini response:", error);
+    throw new Error("Gemini 응답의 형식이 올바르지 않습니다.");
+  }
+}
+
+// 1. Generate AI Brainstormed / custom situation
+export async function generateAIPresentedSituation(
+  ideationInput: string,
+  type: string,
+  apiKey: string
+): Promise<ConversationSituation> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const systemPrompt = `You are a creative educational counselor. Your task is to design a highly engaging, custom English conversation situation based on the user's ideation prompt (which could be a news topic, question-answer, or simple keywords).
+The conversation category is: ${type}.
+
+You must respond with a single, valid JSON object and nothing else. Do not wrap in markdown \`\`\`json or similar.
+All description, myRole, partnerRole, and goal fields MUST be written in detailed, encouraging KOREAN.
+The 'openingLine' (first sentence the AI partner says) MUST be written in natural, fluent English.
+
+JSON Schema:
+{
+  "title": "A short, engaging title in Korean summarizing this situation",
+  "myRole": "Detailed description in Korean of the user's role, background, and their conversation objectives",
+  "partnerRole": "Detailed description in Korean of the AI's role, name (if applicable), and attitude",
+  "openingLine": "The opening greeting and question in English that the AI partner will say to start the session.",
+  "goal": "Specific learning/speaking objectives in Korean for the user to achieve in this session"
+}`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt}\n\nUser's custom ideation prompt:\n"""\n${ideationInput}\n"""`
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.7
+    }
+  };
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!responseText) {
+    throw new Error("Gemini가 상황을 생성하지 못했습니다.");
+  }
+
+  try {
+    const parsed = JSON.parse(responseText.trim());
+    return {
+      title: parsed.title || "새로운 영어 토론/롤플레잉",
+      myRole: parsed.myRole || "대화 참가자",
+      partnerRole: parsed.partnerRole || "대화 상대방",
+      openingLine: parsed.openingLine || "Hello, nice to meet you. Shall we start our conversation?",
+      goal: parsed.goal || "자유로운 영어 회화 연습"
+    };
+  } catch (error) {
+    console.error("Failed to parse AI situation:", error);
+    throw new Error("Gemini 응답의 형식이 올바르지 않습니다.");
+  }
+}
+
+// 2. Generate Chat Partner Response (single turn)
+export async function generateChatPartnerResponse(
+  chatHistory: LabMessage[],
+  situation: ConversationSituation,
+  userPersona: string,
+  apiKey: string
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const systemInstructions = `You are roleplaying as a conversation partner in a specific situation.
+Situation Context:
+- Title: ${situation.title}
+- Your Role & Character: ${situation.partnerRole}
+- User's Role & Goal: ${situation.myRole}
+- User's Persona (English skill / difficulty level): ${userPersona}
+- Overall Conversation Goal: ${situation.goal}
+
+Roleplay Constraints:
+1. Play your character naturally and stay in character at all times.
+2. Respond entirely in English.
+3. Keep your response relatively brief (1-3 sentences) so the user can easily reply.
+4. Try to ask a natural follow-up question or make a statement that prompts the user to respond.
+5. CRITICAL: Do NOT correct the user's English, point out errors, or explain grammar rules during this chat. Just converse naturally as a native speaker would. The correction will be done separately after the chat session ends.`;
+
+  // Format history for Gemini
+  const contents = chatHistory.map(msg => ({
+    role: msg.sender === 'user' ? 'user' : 'model',
+    parts: [{ text: msg.text }]
+  }));
+
+  const requestBody = {
+    contents: contents,
+    systemInstruction: {
+      parts: [{ text: systemInstructions }]
+    },
+    generationConfig: {
+      temperature: 0.7
+    }
+  };
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!responseText) {
+    throw new Error("Gemini가 대화 응답을 반환하지 않았습니다.");
+  }
+
+  return responseText.trim();
+}
+
+// 3. Generate Final Conversation Correction & Feedback (End Session)
+export async function generateConversationFeedback(
+  chatHistory: LabMessage[],
+  situation: ConversationSituation,
+  userPersona: string,
+  questionCount: number,
+  apiKey: string
+): Promise<LabLesson> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  // Format chat history into a human-readable transcript
+  const transcript = chatHistory
+    .map(msg => `${msg.sender === 'user' ? 'User (Me)' : 'AI Partner'}: ${msg.text}`)
+    .join('\n');
+
+  // We compile user messages to serve as sourceText
+  const userMessages = chatHistory
+    .filter(msg => msg.sender === 'user')
+    .map(msg => msg.text);
+  const combinedUserText = userMessages.join('\n');
+
+  const systemPrompt = `You are a professional native English linguistic editor and conversation tutor.
+Your task is to analyze the English utterances made by the 'User (Me)' in the provided chat conversation transcript.
+You must generate a detailed structural review and study material based on their mistakes.
+
+You must reply with a single, valid JSON object and nothing else. Do not wrap the JSON inside markdown code blocks (e.g. do NOT include \`\`\`json or \`\`\`). Output only the raw string.
+All explanation and feedback fields MUST be written in friendly, encouraging, and detailed KOREAN.
+
+Key Constraints & Guidelines for Analysis:
+1. **CEFR Writing/Speaking Level**:
+   - Evaluate the CEFR level of the user's utterances (A1, A2, B1, B2, C1, C2) and provide it in the "writingLevel" field.
+2. **Overall Feedback**:
+   - Write a detailed, encouraging paragraph in Korean summarizing the user's vocabulary range, fluency, grammar patterns, and areas of improvement based on this conversation.
+3. **Corrected Text**:
+   - Set "correctedText" to a fully polished, natural English paragraph or list summarizing what the user said (or a polished version of their statements in context).
+4. **Diff-like Corrections Array**:
+   - Identify specific grammar, spelling, or natural phrasing errors in the User's messages.
+   - For each correction:
+     * "original": The EXACT substring from the User's spoken message that contains the error. It must match a portion of their spoken messages exactly.
+     * "corrected": The natural, native replacement.
+     * "type": "grammar", "expression", "vocab", or "flow".
+     * "explanation": Detailed Korean explanation of why this was changed, nuancing differences.
+5. **Interactive Quizzes**:
+   - Generate EXACTLY ${questionCount} multiple-choice questions in English based on the corrections.
+   - Question text must be in English. Rationale must be in Korean.
+   - Rationale must refer to choices using A번, B번, C번, D번 labels (NOT 1번, 2번, 3번, 4번).
+
+JSON Response Schema:
+{
+  "title": "A short engaging title in Korean summarizing this session (e.g. '호텔 체크인 대화 피드백')",
+  "writingLevel": "A1 | A2 | B1 | B2 | C1 | C2",
+  "correctedText": "The polished/corrected version of user's spoken content.",
+  "overallFeedback": "Detailed overall feedback in Korean.",
+  "corrections": [
+    {
+      "id": "A unique correction id (e.g., 'corr-1')",
+      "original": "The exact awkward/wrong substring from the user's messages",
+      "corrected": "The corrected replacement substring",
+      "type": "grammar",
+      "explanation": "Detailed explanation in Korean"
+    }
+  ],
+  "quizzes": [
+    {
+      "id": "A unique quiz id (e.g., 'q-1')",
+      "question": "The question in English",
+      "choices": ["Choice A", "Choice B", "Choice C", "Choice D"],
+      "correctIndex": 0,
+      "rationale": "Detailed Korean explanation using letters A, B, C, D"
+    }
+  ]
+}`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt}\n\nConversation Details:\n- Situation: ${situation.title} (${situation.goal})\n- Persona: ${userPersona}\n\nFull Transcript:\n"""\n${transcript}\n"""`
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.3
+    }
+  };
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!responseText) {
+    throw new Error("Gemini가 대화 첨삭 피드백을 반환하지 않았습니다.");
+  }
+
+  try {
+    const parsedJson = JSON.parse(responseText.trim());
+
+    // Process quizzes
+    const quizzes: LabQuizItem[] = (parsedJson.quizzes || []).map((q: any, idx: number) => {
+      const rawChoices = q.choices || ["A", "B", "C", "D"];
+      const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
+      const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+
+      // Fisher-Yates shuffle
+      const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
+      for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+      }
+
+      const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
+      const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+
+      // Remap rationale labels
+      const LABELS = ['A', 'B', 'C', 'D'];
+      const oldToNewIdx: Record<number, number> = {};
+      choicesWithIndex.forEach((item: any, newIdx: number) => {
+        oldToNewIdx[item.cIdx] = newIdx;
+      });
+      let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+      const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
+      LABELS.forEach((label, oldIdx) => {
+        if (oldToNewIdx[oldIdx] !== undefined) {
+          const temp = TEMP[oldToNewIdx[oldIdx]];
+          remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+          remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}\\\b`, 'g'), temp);
+        }
+      });
+      for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
+        if (oldToNewIdx[oldIdx] !== undefined) {
+          const numStr = `${oldIdx + 1}번`;
+          const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
+          remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
+        }
+      }
+      TEMP.forEach((temp, labelIdx) => {
+        remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[labelIdx]);
+      });
+
+      return {
+        id: q.id || `q-${Date.now()}-${idx}`,
+        question: q.question || "문제가 생성되지 않았습니다.",
+        choices: shuffledChoices,
+        correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
+        rationale: remappedRationale
+      };
+    });
+
+    const corrections: CorrectionItem[] = (parsedJson.corrections || []).map((c: any, idx: number) => {
+      return {
+        id: c.id || `corr-${Date.now()}-${idx}`,
+        original: c.original || '',
+        corrected: c.corrected || '',
+        type: c.type === 'grammar' || c.type === 'expression' || c.type === 'vocab' || c.type === 'flow' ? c.type : 'expression',
+        explanation: c.explanation || '설명이 없습니다.'
+      };
+    });
+
+    return {
+      id: `lab-${Date.now()}`,
+      title: parsedJson.title || `${situation.title} 피드백`,
+      sourceText: combinedUserText || "대화가 진행되지 않았습니다.",
+      correctedText: parsedJson.correctedText || combinedUserText,
+      overallFeedback: parsedJson.overallFeedback || "대화 교정이 성공적으로 완료되었습니다.",
+      createdAt: Date.now(),
+      persona: userPersona,
+      style: 'spoken',
+      corrections,
+      quizzes,
+      writingLevel: parsedJson.writingLevel,
+      chatHistory: chatHistory
+    };
+  } catch (error) {
+    console.error("Failed to parse Gemini conversation feedback:", error);
     throw new Error("Gemini 응답의 형식이 올바르지 않습니다.");
   }
 }

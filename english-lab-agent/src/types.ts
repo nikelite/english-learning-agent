@@ -65,3 +65,11 @@ export interface AppStats {
   totalCorrectAnswers: number;
   masteredCount: number;
 }
+
+export interface ConversationSituation {
+  title: string;
+  myRole: string;
+  partnerRole: string;
+  openingLine: string;
+  goal: string;
+}

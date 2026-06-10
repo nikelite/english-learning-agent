@@ -41,6 +41,22 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [roomSubTab, setRoomSubTab] = useState<'feedback' | 'chatHistory'>('feedback');
+
+  const speakText = (text: string) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoice = voices.find(v => v.lang.startsWith('en-') && v.name.includes('Google')) ||
+                        voices.find(v => v.lang.startsWith('en-') && v.name.includes('Natural')) ||
+                        voices.find(v => v.lang.startsWith('en-'));
+    if (englishVoice) {
+      utterance.voice = englishVoice;
+    }
+    window.speechSynthesis.speak(utterance);
+  };
 
   const messageEndRef = useRef<HTMLDivElement>(null);
   const chatHistory = lesson.chatHistory || [];
@@ -467,8 +483,29 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
             </div>
           </div>
 
-          {/* Side-by-Side Comparison */}
-          <div className="diff-box">
+          {lesson.chatHistory && lesson.chatHistory.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', background: 'rgba(255, 255, 255, 0.02)', padding: '0.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <button
+                className={`btn btn-sm ${roomSubTab === 'feedback' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, padding: '0.45rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                onClick={() => setRoomSubTab('feedback')}
+              >
+                📊 종합 첨삭 리포트
+              </button>
+              <button
+                className={`btn btn-sm ${roomSubTab === 'chatHistory' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, padding: '0.45rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                onClick={() => setRoomSubTab('chatHistory')}
+              >
+                💬 대화 기록 복습
+              </button>
+            </div>
+          )}
+
+          {roomSubTab === 'feedback' ? (
+            <>
+              {/* Side-by-Side Comparison */}
+              <div className="diff-box">
             <div className="diff-pane">
               <div className="pane-header red">
                 <span>Original Text</span>
@@ -695,6 +732,88 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
               ))}
             </div>
           </div>
+          </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: 'white', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <MessageSquare size={18} style={{ color: 'var(--primary)' }} />
+                대화 기록 및 발화 교정 복습
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                대화 흐름 속에서 본인이 사용한 영어 표현과 AI의 원어민 교정 제안을 한눈에 복습할 수 있습니다. 각 문장에 마우스를 대면 세부 설명 툴팁이 나타납니다.
+              </p>
+              <div className="scroll-y" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '550px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {lesson.chatHistory?.map((msg) => {
+                  if (msg.sender === 'ai') {
+                    return (
+                      <div key={msg.id} style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-start', maxWidth: '85%' }}>
+                        <div style={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                          border: '1px solid var(--border-color)',
+                          padding: '0.65rem 0.8rem',
+                          borderRadius: '12px',
+                          fontSize: '0.85rem',
+                          color: 'var(--text-primary)',
+                          lineHeight: '1.4'
+                        }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>AI 상대방</span>
+                            <button
+                              onClick={() => speakText(msg.text)}
+                              style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginLeft: '0.5rem' }}
+                              title="음성 듣기"
+                            >
+                              🔊
+                            </button>
+                          </div>
+                          <div>{msg.text}</div>
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    const hasCorrection = lesson.corrections.some(c => msg.text.includes(c.original));
+                    return (
+                      <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignSelf: 'flex-end', maxWidth: '85%', alignItems: 'flex-end' }}>
+                        <div style={{
+                          backgroundColor: hasCorrection ? 'rgba(239, 68, 68, 0.06)' : 'rgba(16, 185, 129, 0.12)',
+                          border: hasCorrection ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)',
+                          padding: '0.65rem 0.8rem',
+                          borderRadius: '12px',
+                          fontSize: '0.85rem',
+                          color: hasCorrection ? '#fca5a5' : '#34d399',
+                          lineHeight: '1.4'
+                        }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 'bold' }}>
+                            나의 발화 {hasCorrection && '⚠️ (오류/교정 필요)'}
+                          </div>
+                          <div>{hasCorrection ? renderHighlightedText(msg.text, true) : msg.text}</div>
+                        </div>
+                        {hasCorrection && (
+                          <div style={{
+                            backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                            padding: '0.5rem 0.75rem',
+                            borderRadius: '10px',
+                            fontSize: '0.8rem',
+                            color: '#34d399',
+                            lineHeight: '1.4',
+                            maxWidth: '95%',
+                            alignSelf: 'flex-end',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                          }}>
+                            <div style={{ fontSize: '0.65rem', color: '#10b981', marginBottom: '0.15rem', fontWeight: 'bold' }}>
+                              ➔ 추천 교정 표현
+                            </div>
+                            <div>{renderHighlightedText(msg.text, false)}</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Side: Quiz Practice Room */}
