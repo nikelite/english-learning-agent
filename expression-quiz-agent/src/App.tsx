@@ -158,22 +158,40 @@ export default function App() {
   }, [userId]);
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
-  const saveLessonToHistory = async (lesson: Lesson) => {
-    if (!lesson || lesson.id.startsWith('preset-')) return;
+  const saveLessonToHistory = async (lesson: Lesson): Promise<Lesson> => {
+    if (!lesson || lesson.id.startsWith('preset-')) return lesson;
     
     let updatedLesson = { ...lesson };
     
+    // Optimistic local save
+    setLessonsHistory(prev => {
+      const filtered = prev.filter(item => item.id !== lesson.id && item.id !== updatedLesson.id && item.title !== updatedLesson.title);
+      const updated = [updatedLesson, ...filtered];
+      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+      return updated;
+    });
+
     // If user is configured with an ID, save to Cloud
     if (userId) {
       try {
         setSyncStatus('syncing');
         const docId = await saveLessonToCloud(lesson, userId);
-        updatedLesson = {
+        const cloudLesson = {
           ...lesson,
           id: docId,
           ownerId: userId,
           sharedWith: lesson.sharedWith || []
         };
+
+        if (docId !== lesson.id) {
+          setLessonsHistory(prev => {
+            const filtered = prev.filter(item => item.id !== lesson.id && item.id !== docId && item.title !== cloudLesson.title);
+            const updated = [cloudLesson, ...filtered];
+            localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+            return updated;
+          });
+        }
+        updatedLesson = cloudLesson;
         setSyncStatus('synced');
       } catch (err: any) {
         console.error("Failed to upload lesson on save:", err);
@@ -181,12 +199,7 @@ export default function App() {
       }
     }
     
-    setLessonsHistory(prev => {
-      const filtered = prev.filter(item => item.id !== updatedLesson.id && item.title !== updatedLesson.title);
-      const updated = [updatedLesson, ...filtered];
-      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
-      return updated;
-    });
+    return updatedLesson;
   };
 
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
@@ -258,18 +271,16 @@ export default function App() {
     if (sharePayload) {
       deserializeLesson(sharePayload).then((decodedLesson) => {
         if (decodedLesson) {
-          setActiveLesson(decodedLesson);
           setIsSharedQuiz(true);
           setViewMode('study');
           setActiveStudyTab('eli5');
-          saveLessonToHistory(decodedLesson);
+          saveLessonToHistory(decodedLesson).then(saved => setActiveLesson(saved));
         }
       });
     } else if (cloudDocId) {
       setIsLoading(true);
       loadLessonFromCloud(cloudDocId).then((decodedLesson) => {
         if (decodedLesson) {
-          setActiveLesson(decodedLesson);
           setIsSharedQuiz(true);
           setViewMode('study');
           setActiveStudyTab('eli5');
@@ -282,7 +293,7 @@ export default function App() {
               sharedLessonWithUser.sharedWith.push(currentUserId);
             }
           }
-          saveLessonToHistory(sharedLessonWithUser);
+          saveLessonToHistory(sharedLessonWithUser).then(saved => setActiveLesson(saved));
         }
       }).catch((err: any) => {
         console.error("Firestore loading error:", err);
@@ -370,10 +381,10 @@ export default function App() {
       if (customTitle && customTitle.trim()) {
         generated.title = customTitle.trim();
       }
-      setActiveLesson(generated);
       setViewMode('study');
       setActiveStudyTab('eli5');
-      saveLessonToHistory(generated);
+      const savedLesson = await saveLessonToHistory(generated);
+      setActiveLesson(savedLesson);
     } catch (error) {
       throw error;
     } finally {
@@ -390,7 +401,9 @@ export default function App() {
     if (progress) {
       const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
       const solvedAt = progress.solvedAt;
-      presetWithProgress = { ...preset, userAnswers, solvedAt };
+      const firstAttemptScore = progress.firstAttemptScore;
+      const retryHistory = progress.retryHistory;
+      presetWithProgress = { ...preset, userAnswers, solvedAt, firstAttemptScore, retryHistory };
     }
     
     setActiveLesson(presetWithProgress);
@@ -444,7 +457,7 @@ export default function App() {
   };
 
   // Update stats on quiz completion
-  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
+  const handleQuizCompleted = async (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
     const list = wrongQuestionsList || [];
 
     if (totalCount > 0) {
@@ -524,11 +537,25 @@ export default function App() {
         };
       }
       setActiveLesson(updatedLesson);
-      saveLessonToHistory(updatedLesson);
+      
+      if (activeLesson.id.startsWith('preset-')) {
+        const savedPresetsProgress = localStorage.getItem('eng_expression_presets_progress');
+        const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+        presetsProgress[activeLesson.id] = {
+          userAnswers: updatedLesson.userAnswers,
+          solvedAt: updatedLesson.solvedAt,
+          firstAttemptScore: updatedLesson.firstAttemptScore,
+          retryHistory: updatedLesson.retryHistory
+        };
+        localStorage.setItem('eng_expression_presets_progress', JSON.stringify(presetsProgress));
+      } else {
+        const savedLesson = await saveLessonToHistory(updatedLesson);
+        setActiveLesson(savedLesson);
+      }
     }
   };
 
-  const handleProgressUpdate = (userAnswers: Record<string, number>) => {
+  const handleProgressUpdate = async (userAnswers: Record<string, number>) => {
     if (!activeLesson) return;
     
     const updatedLesson = {
@@ -541,10 +568,16 @@ export default function App() {
     if (activeLesson.id.startsWith('preset-')) {
       const savedPresetsProgress = localStorage.getItem('eng_expression_presets_progress');
       const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
-      presetsProgress[activeLesson.id] = { userAnswers, solvedAt: Date.now() };
+      presetsProgress[activeLesson.id] = {
+        userAnswers,
+        solvedAt: Date.now(),
+        firstAttemptScore: activeLesson.firstAttemptScore,
+        retryHistory: activeLesson.retryHistory
+      };
       localStorage.setItem('eng_expression_presets_progress', JSON.stringify(presetsProgress));
     } else {
-      saveLessonToHistory(updatedLesson);
+      const savedLesson = await saveLessonToHistory(updatedLesson);
+      setActiveLesson(savedLesson);
     }
   };
 

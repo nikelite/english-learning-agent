@@ -138,7 +138,9 @@ export default function App() {
       if (progress) {
         const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
         const solvedAt = progress.solvedAt;
-        return { ...defaultPreset, userAnswers, solvedAt };
+        const firstAttemptScore = progress.firstAttemptScore;
+        const retryHistory = progress.retryHistory;
+        return { ...defaultPreset, userAnswers, solvedAt, firstAttemptScore, retryHistory };
       }
     }
     return defaultPreset;
@@ -330,24 +332,7 @@ export default function App() {
       updatedLesson.id = `reading-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
     
-    // If user is configured with an ID, save to Cloud
-    if (userId) {
-      try {
-        setSyncStatus('syncing');
-        const docId = await saveLessonToCloud(lesson, userId);
-        updatedLesson = {
-          ...lesson,
-          id: docId,
-          ownerId: userId,
-          sharedWith: lesson.sharedWith || []
-        };
-        setSyncStatus('synced');
-      } catch (err: any) {
-        console.error("Failed to upload lesson on save:", err);
-        setSyncStatus('error');
-      }
-    }
-    
+    // Optimistic local save
     setLessonsHistory(prev => {
       const filtered = prev.filter(item => 
         item.id !== lesson.id && 
@@ -358,6 +343,39 @@ export default function App() {
       localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
+
+    // If user is configured with an ID, save to Cloud
+    if (userId) {
+      try {
+        setSyncStatus('syncing');
+        const docId = await saveLessonToCloud(lesson, userId);
+        const cloudLesson = {
+          ...lesson,
+          id: docId,
+          ownerId: userId,
+          sharedWith: lesson.sharedWith || []
+        };
+        
+        // If docId changed, update history and localStorage again
+        if (docId !== lesson.id) {
+          setLessonsHistory(prev => {
+            const filtered = prev.filter(item => 
+              item.id !== lesson.id && 
+              item.id !== docId && 
+              item.title !== cloudLesson.title
+            );
+            const updated = [cloudLesson, ...filtered];
+            localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+            return updated;
+          });
+        }
+        updatedLesson = cloudLesson;
+        setSyncStatus('synced');
+      } catch (err: any) {
+        console.error("Failed to upload lesson on save:", err);
+        setSyncStatus('error');
+      }
+    }
 
     return updatedLesson;
   };
@@ -729,7 +747,9 @@ export default function App() {
     if (progress) {
       const userAnswers = progress.userAnswers !== undefined ? progress.userAnswers : progress;
       const solvedAt = progress.solvedAt;
-      presetWithProgress = { ...preset, userAnswers, solvedAt };
+      const firstAttemptScore = progress.firstAttemptScore;
+      const retryHistory = progress.retryHistory;
+      presetWithProgress = { ...preset, userAnswers, solvedAt, firstAttemptScore, retryHistory };
     }
     
     setActiveLesson(presetWithProgress);
@@ -777,7 +797,7 @@ export default function App() {
     }
   };
 
-  const handleQuizCompleted = (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
+  const handleQuizCompleted = async (correctCount: number, totalCount: number, wrongQuestionsList?: any[], userAnswers?: Record<string, number>, isRetry?: boolean) => {
     const list = wrongQuestionsList || [];
     
     if (totalCount > 0) {
@@ -857,11 +877,25 @@ export default function App() {
         };
       }
       setActiveLesson(updatedLesson);
-      saveLessonToHistory(updatedLesson);
+      
+      if (activeLesson.id.startsWith('preset-')) {
+        const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
+        const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
+        presetsProgress[activeLesson.id] = {
+          userAnswers: updatedLesson.userAnswers,
+          solvedAt: updatedLesson.solvedAt,
+          firstAttemptScore: updatedLesson.firstAttemptScore,
+          retryHistory: updatedLesson.retryHistory
+        };
+        localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
+      } else {
+        const savedLesson = await saveLessonToHistory(updatedLesson);
+        setActiveLesson(savedLesson);
+      }
     }
   };
 
-  const handleProgressUpdate = (userAnswers: Record<string, number>) => {
+  const handleProgressUpdate = async (userAnswers: Record<string, number>) => {
     if (!activeLesson) return;
     
     const updatedLesson = {
@@ -874,10 +908,16 @@ export default function App() {
     if (activeLesson.id.startsWith('preset-')) {
       const savedPresetsProgress = localStorage.getItem('eng_reading_presets_progress');
       const presetsProgress = savedPresetsProgress ? JSON.parse(savedPresetsProgress) : {};
-      presetsProgress[activeLesson.id] = { userAnswers, solvedAt: Date.now() };
+      presetsProgress[activeLesson.id] = {
+        userAnswers,
+        solvedAt: Date.now(),
+        firstAttemptScore: activeLesson.firstAttemptScore,
+        retryHistory: activeLesson.retryHistory
+      };
       localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
     } else {
-      saveLessonToHistory(updatedLesson);
+      const savedLesson = await saveLessonToHistory(updatedLesson);
+      setActiveLesson(savedLesson);
     }
   };
 
