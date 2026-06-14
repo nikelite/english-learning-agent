@@ -156,6 +156,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved'>('all');
 
   // 7.1 Cloud Sync State
   const [userId, setUserId] = useState<string>(() => {
@@ -931,6 +932,23 @@ export default function App() {
     saveLessonToHistory(updatedLesson);
   };
 
+  const filteredHistory = lessonsHistory.filter(item => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
+    if (!matchesSearch) return false;
+
+    if (filterMode === 'solved') {
+      return !!item.userAnswers;
+    }
+    if (filterMode === 'unsolved') {
+      return !item.userAnswers;
+    }
+    return true;
+  });
+
+  const solvedCount = lessonsHistory.filter(item => item.userAnswers).length;
+  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers).length;
+
   return (
     <div className="app-container">
       {/* Universal header */}
@@ -1166,6 +1184,58 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Status Filters */}
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setFilterMode('all')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'all' ? '1px solid var(--secondary)' : '1px solid var(--border-color)',
+                    background: filterMode === 'all' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'all' ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'all' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  전체 ({lessonsHistory.length})
+                </button>
+                <button
+                  onClick={() => setFilterMode('unsolved')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'unsolved' ? '1px solid var(--secondary)' : '1px solid var(--border-color)',
+                    background: filterMode === 'unsolved' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'unsolved' ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'unsolved' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  미풀이 ({unsolvedCount})
+                </button>
+                <button
+                  onClick={() => setFilterMode('solved')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'solved' ? '1px solid var(--secondary)' : '1px solid var(--border-color)',
+                    background: filterMode === 'solved' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'solved' ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'solved' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  풀이 완료 ({solvedCount})
+                </button>
+              </div>
+
               <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 'calc(100vh - 280px)', minHeight: '480px', paddingRight: '0.25rem', overflowY: 'auto', overflowX: 'hidden' }}>
                 {lessonsHistory.length === 0 ? (
                   <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border-color)', borderRadius: '12px', marginTop: '1rem' }}>
@@ -1179,16 +1249,8 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                ) : lessonsHistory.filter(item => {
-                  const q = searchQuery.toLowerCase().trim();
-                  if (!q) return true;
-                  return item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
-                }).length > 0 ? (
-                  lessonsHistory.filter(item => {
-                    const q = searchQuery.toLowerCase().trim();
-                    if (!q) return true;
-                    return item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
-                  }).map((item) => (
+                ) : filteredHistory.length > 0 ? (
+                  filteredHistory.map((item) => (
                     <div
                       key={item.id}
                       onClick={() => handleStartLesson(item)}

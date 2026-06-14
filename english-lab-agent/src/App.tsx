@@ -154,6 +154,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'correction'>('all');
 
   // 5. Spaced Repetition Notebook Databases
   const [wrongAnswers, setWrongAnswers] = useState<WrongLabAnswer[]>(() => {
@@ -1069,10 +1070,29 @@ export default function App() {
     return list;
   })();
 
-  const filteredHistory = lessonsHistory.filter(lesson => 
-    lesson.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    lesson.sourceText.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredHistory = lessonsHistory.filter(lesson => {
+    const matchesSearch = lesson.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lesson.sourceText.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    const hasQuiz = (lesson.quizzes || []).length > 0;
+    const isSolved = lesson.userAnswers !== undefined;
+
+    if (filterMode === 'solved') {
+      return isSolved;
+    }
+    if (filterMode === 'unsolved') {
+      return !isSolved && hasQuiz;
+    }
+    if (filterMode === 'correction') {
+      return !hasQuiz;
+    }
+    return true;
+  });
+
+  const solvedCount = lessonsHistory.filter(l => l.userAnswers !== undefined).length;
+  const unsolvedCount = lessonsHistory.filter(l => !l.userAnswers && (l.quizzes || []).length > 0).length;
+  const correctionCount = lessonsHistory.filter(l => !(l.quizzes || []).length).length;
 
   return (
     <div className="app-container">
@@ -1780,6 +1800,74 @@ export default function App() {
                           style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem 0.4rem 1.8rem', borderRadius: '6px' }}
                         />
                       </div>
+                    </div>
+
+                    {/* Status Filters */}
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setFilterMode('all')}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '8px',
+                          border: filterMode === 'all' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: filterMode === 'all' ? 'var(--primary-glow)' : 'rgba(255, 255, 255, 0.02)',
+                          color: filterMode === 'all' ? 'white' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: filterMode === 'all' ? '700' : '500',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        전체 ({lessonsHistory.length})
+                      </button>
+                      <button
+                        onClick={() => setFilterMode('unsolved')}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '8px',
+                          border: filterMode === 'unsolved' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: filterMode === 'unsolved' ? 'var(--primary-glow)' : 'rgba(255, 255, 255, 0.02)',
+                          color: filterMode === 'unsolved' ? 'white' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: filterMode === 'unsolved' ? '700' : '500',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        미풀이 ({unsolvedCount})
+                      </button>
+                      <button
+                        onClick={() => setFilterMode('solved')}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '8px',
+                          border: filterMode === 'solved' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: filterMode === 'solved' ? 'var(--primary-glow)' : 'rgba(255, 255, 255, 0.02)',
+                          color: filterMode === 'solved' ? 'white' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: filterMode === 'solved' ? '700' : '500',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        풀이 완료 ({solvedCount})
+                      </button>
+                      <button
+                        onClick={() => setFilterMode('correction')}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '8px',
+                          border: filterMode === 'correction' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: filterMode === 'correction' ? 'var(--primary-glow)' : 'rgba(255, 255, 255, 0.02)',
+                          color: filterMode === 'correction' ? 'white' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: filterMode === 'correction' ? '700' : '500',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        교정 전용 ({correctionCount})
+                      </button>
                     </div>
 
                     {filteredHistory.length === 0 ? (
