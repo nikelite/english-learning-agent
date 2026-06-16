@@ -47,6 +47,14 @@ export default function App() {
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved'>('all');
+  const [userEmail, setUserEmail] = useState<string>(() => {
+    return localStorage.getItem('eng_user_email') || '';
+  });
+
+  const handleSaveUserEmail = (email: string) => {
+    setUserEmail(email);
+    localStorage.setItem('eng_user_email', email);
+  };
 
   // 7.1 Cloud Sync State
   const [userId, setUserId] = useState<string>(() => {
@@ -489,10 +497,19 @@ export default function App() {
           }
 
           logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats);
+          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
+
+          const getEmailText = (id: string, custom?: string) => {
+            if (custom && custom.trim()) return custom.trim();
+            const trimmed = id.trim().toLowerCase();
+            if (trimmed === 'nikelite') return 'nikelite+quiz@gmail.com';
+            if (trimmed === 'junhu') return 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
+            return 'nikelite@gmail.com';
+          };
+          const resolvedEmail = getEmailText(userId, userEmail);
 
           setTimeout(() => {
-            alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 nikelite@gmail.com 으로 학습 결과 리포트 메일이 발송 대기열에 추가되었습니다!`);
+            alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 ${resolvedEmail} 으로 학습 결과 리포트 메일이 발송 대기열에 추가되었습니다!`);
           }, 500);
         }
 
@@ -611,6 +628,8 @@ export default function App() {
         onSaveApiKey={handleSaveApiKey}
         userId={userId}
         onSaveUserId={handleSaveUserId}
+        userEmail={userEmail}
+        onSaveUserEmail={handleSaveUserEmail}
       />
 
       {/* Main Workspace Dashboard */}

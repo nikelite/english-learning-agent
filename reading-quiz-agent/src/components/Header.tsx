@@ -12,6 +12,8 @@ interface HeaderProps {
   userId: string;
   onSaveUserId: (id: string) => void;
   isSharedQuiz: boolean;
+  userEmail: string;
+  onSaveUserEmail: (email: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,18 +25,29 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveApiKey,
   userId,
   onSaveUserId,
-  isSharedQuiz
+  isSharedQuiz,
+  userEmail,
+  onSaveUserEmail
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempUserId, setTempUserId] = useState(userId);
+  const [tempUserEmail, setTempUserEmail] = useState(userEmail);
   const [showKey, setShowKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
+
+  const getEmailPlaceholder = (id: string) => {
+    const trimmed = id.trim().toLowerCase();
+    if (trimmed === 'nikelite') return '기본값: nikelite+quiz@gmail.com';
+    if (trimmed === 'junhu') return '기본값: nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
+    return '기본값: nikelite@gmail.com';
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveApiKey(tempKey.trim());
     onSaveUserId(tempUserId.trim());
+    onSaveUserEmail(tempUserEmail.trim());
     
     setIsSavedAlert(true);
     setTimeout(() => {
@@ -127,6 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => {
             setTempKey(apiKey);
             setTempUserId(userId);
+            setTempUserEmail(userEmail);
             setIsModalOpen(true);
           }}
           title="서비스 설정"
@@ -194,6 +208,23 @@ export const Header: React.FC<HeaderProps> = ({
                 />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.4', margin: 0 }}>
                   * ID를 설정하면 로컬 학습 보관함이 클라우드와 자동으로 양방향 동기화(Sync)되며, 기기 변경이나 캐시 초기화 시에도 학습 기록을 보존할 수 있습니다. 또한, 이 ID를 통해 다른 사용자가 링크 없이 내 보관함으로 학습 자료를 다이렉트 전송할 수 있습니다. (영문/숫자/_/- 만 허용)
+                </p>
+              </div>
+
+              {/* Recipient Email Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600' }}>
+                  결과 리포트 수신 이메일 (Recipient Email)
+                </label>
+                <input
+                  type="text"
+                  value={tempUserEmail}
+                  onChange={(e) => setTempUserEmail(e.target.value)}
+                  placeholder={getEmailPlaceholder(tempUserId)}
+                  className="input-glow"
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.4', margin: 0 }}>
+                  * 빈칸으로 둘 경우 사용자 ID 기준 기본 이메일로 전송됩니다. 여러 개의 이메일은 쉼표(,)로 구분하여 입력하세요.
                 </p>
               </div>
 

@@ -299,7 +299,8 @@ export async function sendEmailReport(
   correctCount: number,
   totalCount: number,
   questionsList: any[],
-  stats: AppStats
+  stats: AppStats,
+  customEmail?: string | null
 ): Promise<void> {
   try {
     const percentage = Math.round((correctCount / totalCount) * 100);
@@ -434,9 +435,19 @@ export async function sendEmailReport(
       </html>
     `;
 
+    const trimmedId = userId.trim().toLowerCase();
+    let toEmail = 'nikelite@gmail.com';
+    if (customEmail && customEmail.trim()) {
+      toEmail = customEmail.trim();
+    } else if (trimmedId === 'nikelite') {
+      toEmail = 'nikelite+quiz@gmail.com';
+    } else if (trimmedId === 'junhu') {
+      toEmail = 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
+    }
+
     const mailCollection = collection(db, 'mail');
     await addDoc(mailCollection, {
-      to: 'nikelite@gmail.com',
+      to: toEmail,
       message: {
         subject: `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
         html: emailHtml

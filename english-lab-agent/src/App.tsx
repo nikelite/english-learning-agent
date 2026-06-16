@@ -155,6 +155,14 @@ export default function App() {
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'correction'>('all');
+  const [userEmail, setUserEmail] = useState<string>(() => {
+    return localStorage.getItem('lab_user_email') || '';
+  });
+
+  const handleSaveUserEmail = (email: string) => {
+    setUserEmail(email);
+    localStorage.setItem('lab_user_email', email);
+  };
 
   // 5. Spaced Repetition Notebook Databases
   const [wrongAnswers, setWrongAnswers] = useState<WrongLabAnswer[]>(() => {
@@ -935,10 +943,19 @@ export default function App() {
           }
 
           logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats);
+          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
+
+          const getEmailText = (id: string, custom?: string) => {
+            if (custom && custom.trim()) return custom.trim();
+            const trimmed = id.trim().toLowerCase();
+            if (trimmed === 'nikelite') return 'nikelite+quiz@gmail.com';
+            if (trimmed === 'junhu') return 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
+            return 'nikelite@gmail.com';
+          };
+          const resolvedEmail = getEmailText(userId, userEmail);
 
           setTimeout(() => {
-            alert(`🧪 [LAB.AGENT 리포트 알림]\n\n실전 퀴즈 결과가 클라우드에 연동되었습니다.\n📧 nikelite@gmail.com 메일로 분석 리포트(정답/오답 해설 및 종합 점수)가 발송 대기열에 들어갔습니다!`);
+            alert(`🧪 [LAB.AGENT 리포트 알림]\n\n실전 퀴즈 결과가 클라우드에 연동되었습니다.\n📧 ${resolvedEmail} 메일로 분석 리포트(정답/오답 해설 및 종합 점수)가 발송 대기열에 들어갔습니다!`);
           }, 500);
         }
 
@@ -1110,6 +1127,8 @@ export default function App() {
         onSaveApiKey={handleSaveApiKey}
         userId={userId}
         onSaveUserId={handleSaveUserId}
+        userEmail={userEmail}
+        onSaveUserEmail={handleSaveUserEmail}
       />
 
       <main style={{ padding: '1.5rem 0' }}>
