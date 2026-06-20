@@ -170,11 +170,18 @@ export default function App() {
       let forgotten = 0;
       
       allCards.forEach(card => {
+        card.mochiForgetCount = 0;
+        card.mochiReviewedInPeriod = false;
+
         if (!card.reviews || !Array.isArray(card.reviews)) return;
         const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date, selectedMochiStartDate, selectedMochiEndDate));
         if (reviewsInPeriod.length > 0) {
+          card.mochiReviewedInPeriod = true;
           reviewed++;
-          if (reviewsInPeriod.some((r: any) => isForgotten(r))) {
+          
+          const failedReviews = reviewsInPeriod.filter((r: any) => isForgotten(r));
+          if (failedReviews.length > 0) {
+            card.mochiForgetCount = failedReviews.length;
             forgotten++;
           }
         }
@@ -184,19 +191,15 @@ export default function App() {
       setMochiTotalForgotten(forgotten);
 
       // We should only display cards that WERE reviewed within the selected period.
-      let filtered = allCards.filter(card => {
-        if (!card.reviews || !Array.isArray(card.reviews)) return false;
-        return card.reviews.some((review: any) => isWithinDateRangeLocal(review.date, selectedMochiStartDate, selectedMochiEndDate));
-      });
+      let filtered = allCards.filter(card => card.mochiReviewedInPeriod);
 
       // Filter further by incorrect reviews if filterIncorrectOnly is true
       if (filterIncorrectOnly) {
-        filtered = filtered.filter(card => {
-          return card.reviews.some((review: any) => {
-            return isWithinDateRangeLocal(review.date, selectedMochiStartDate, selectedMochiEndDate) && isForgotten(review);
-          });
-        });
+        filtered = filtered.filter(card => card.mochiForgetCount > 0);
       }
+
+      // Sort: cards with higher mochiForgetCount appear first
+      filtered.sort((a, b) => (b.mochiForgetCount || 0) - (a.mochiForgetCount || 0));
 
       setMochiCards(filtered);
       if (filtered.length === 0) {
@@ -1514,8 +1517,27 @@ export default function App() {
                                 }}
                               />
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, overflow: 'hidden' }}>
-                                <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                                  {cardPreview}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', width: '100%' }}>
+                                  <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
+                                    {cardPreview}
+                                  </div>
+                                  {card.mochiForgetCount > 0 && (
+                                    <span 
+                                      style={{ 
+                                        fontSize: '0.7rem', 
+                                        color: '#f43f5e', 
+                                        background: 'rgba(244, 63, 94, 0.12)', 
+                                        padding: '0.15rem 0.45rem', 
+                                        borderRadius: '6px', 
+                                        fontWeight: '700',
+                                        flexShrink: 0,
+                                        border: '1px solid rgba(244, 63, 94, 0.3)',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      ❌ 틀림 {card.mochiForgetCount}회
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </label>
