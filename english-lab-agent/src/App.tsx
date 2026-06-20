@@ -29,8 +29,9 @@ import {
 } from './firebaseService';
 import { 
   Sparkles, Info, BookOpen, Trash2, Calendar, Edit2, Search, PlusCircle, Check,
-  MessageSquare, Mic, MicOff
+  MessageSquare, Mic, MicOff, X
 } from 'lucide-react';
+import { fetchMochiDecks, fetchMochiCards } from './mochiService';
 
 interface PresetSituation extends ConversationSituation {
   id: string;
@@ -162,6 +163,139 @@ export default function App() {
   const handleSaveUserEmail = (email: string) => {
     setUserEmail(email);
     localStorage.setItem('lab_user_email', email);
+  };
+
+  // Mochi Integration States
+  const [mochiApiKey, setMochiApiKey] = useState<string>(() => {
+    return localStorage.getItem('mochi_api_key') || '';
+  });
+
+  const handleSaveMochiApiKey = (key: string) => {
+    setMochiApiKey(key);
+    localStorage.setItem('mochi_api_key', key);
+  };
+
+  const [isMochiModalOpen, setIsMochiModalOpen] = useState(false);
+  const [mochiDecks, setMochiDecks] = useState<any[]>([]);
+  const [selectedMochiDeck, setSelectedMochiDeck] = useState<string>('all');
+  const [selectedMochiDate, setSelectedMochiDate] = useState<string>(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
+  const [mochiCards, setMochiCards] = useState<any[]>([]);
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [isMochiLoading, setIsMochiLoading] = useState(false);
+  const [mochiError, setMochiError] = useState<string | null>(null);
+
+  const handleOpenMochiModal = async () => {
+    setIsMochiModalOpen(true);
+    setMochiError(null);
+    setMochiCards([]);
+    setSelectedCardIds(new Set());
+    
+    if (!mochiApiKey.trim()) {
+      return;
+    }
+
+    setIsMochiLoading(true);
+    try {
+      const decks = await fetchMochiDecks(mochiApiKey);
+      setMochiDecks(decks);
+    } catch (err: any) {
+      setMochiError(err.message || 'Mochi 덱 목록을 불러오지 못했습니다.');
+    } finally {
+      setIsMochiLoading(false);
+    }
+  };
+
+  const handleSearchMochiCards = async () => {
+    if (!mochiApiKey.trim()) return;
+    setIsMochiLoading(true);
+    setMochiError(null);
+    setMochiCards([]);
+    setSelectedCardIds(new Set());
+
+    try {
+      const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
+      
+      const isSameDayLocal = (reviewDateObj: any, targetDateStr: string) => {
+        if (!reviewDateObj) return false;
+        let dateStr = '';
+        if (typeof reviewDateObj === 'string') {
+          dateStr = reviewDateObj;
+        } else if (reviewDateObj && typeof reviewDateObj === 'object') {
+          if (reviewDateObj.$date) {
+            dateStr = reviewDateObj.$date;
+          } else if (reviewDateObj.date) {
+            dateStr = reviewDateObj.date;
+          }
+        }
+        
+        if (!dateStr) return false;
+        try {
+          const reviewDate = new Date(dateStr);
+          if (isNaN(reviewDate.getTime())) return false;
+          
+          const year = reviewDate.getFullYear();
+          const month = String(reviewDate.getMonth() + 1).padStart(2, '0');
+          const day = String(reviewDate.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}` === targetDateStr;
+        } catch (e) {
+          return false;
+        }
+      };
+
+      const isForgotten = (review: any) => {
+        const remembered = review.remembered !== undefined ? review.remembered : review['remembered?'];
+        return remembered === false;
+      };
+
+      const filtered = allCards.filter(card => {
+        if (!card.reviews || !Array.isArray(card.reviews)) return false;
+        return card.reviews.some((review: any) => {
+          return isSameDayLocal(review.date, selectedMochiDate) && isForgotten(review);
+        });
+      });
+
+      setMochiCards(filtered);
+      if (filtered.length === 0) {
+        setMochiError(`${selectedMochiDate} 날짜에 틀린 퀴즈/복습 카드가 존재하지 않습니다.`);
+      }
+    } catch (err: any) {
+      setMochiError(err.message || 'Mochi 카드를 불러오는 중 에러가 발생했습니다.');
+    } finally {
+      setIsMochiLoading(false);
+    }
+  };
+
+  const handleImportSelectedCards = () => {
+    if (selectedCardIds.size === 0) return;
+    
+    const selectedContents = mochiCards
+      .filter(card => selectedCardIds.has(card.id))
+      .map(card => {
+        if (card.content) return card.content;
+        if (card.fields) {
+          return Object.values(card.fields)
+            .map((f: any) => f.value)
+            .filter(Boolean)
+            .join('\n');
+        }
+        return '';
+      })
+      .filter(Boolean);
+
+    if (selectedContents.length === 0) return;
+
+    setInputText(prev => {
+      const prefix = prev.trim() ? prev + '\n\n' : '';
+      return prefix + selectedContents.join('\n\n');
+    });
+
+    setIsMochiModalOpen(false);
   };
 
   // 5. Spaced Repetition Notebook Databases
@@ -1129,6 +1263,8 @@ export default function App() {
         onSaveUserId={handleSaveUserId}
         userEmail={userEmail}
         onSaveUserEmail={handleSaveUserEmail}
+        mochiApiKey={mochiApiKey}
+        onSaveMochiApiKey={handleSaveMochiApiKey}
       />
 
       <main style={{ padding: '1.5rem 0' }}>
@@ -1288,7 +1424,18 @@ export default function App() {
 
                     <form onSubmit={handleGenerateCorrection} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-primary)' }}>교정할 영어 문장 / 에세이</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-primary)' }}>교정할 영어 문장 / 에세이</label>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                            onClick={handleOpenMochiModal}
+                            disabled={isLoading}
+                          >
+                            ⚡ Mochi에서 가져오기
+                          </button>
+                        </div>
                         <textarea
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
@@ -2057,6 +2204,207 @@ export default function App() {
       }}>
         Version: {(import.meta.env as any).VITE_BUILD_TIME || 'dev'}
       </footer>
+
+      {/* Mochi Import Modal */}
+      {isMochiModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsMochiModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '650px' }} onClick={(e) => e.stopPropagation()}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.25rem', borderRadius: '50%' }}
+              onClick={() => setIsMochiModalOpen(false)}
+            >
+              <X size={16} />
+            </button>
+
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Sparkles size={20} style={{ color: 'var(--primary)' }} />
+              Mochi 오답 카드 가져오기
+            </h3>
+
+            {!mochiApiKey.trim() ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center', padding: '2rem 1rem' }}>
+                <span style={{ fontSize: '2.5rem' }}>🔒</span>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Mochi API Key가 등록되어 있지 않습니다.<br />
+                  우측 상단의 설정(⚙️) 아이콘을 눌러 API Key를 먼저 입력해 주세요.
+                </p>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setIsMochiModalOpen(false)}
+                  style={{ marginTop: '0.5rem' }}
+                >
+                  확인
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {/* Search Settings */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
+                    <select
+                      value={selectedMochiDeck}
+                      onChange={(e) => setSelectedMochiDeck(e.target.value)}
+                      className="input-glow select-glow"
+                      style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)', height: '40px', padding: '0.5rem' }}
+                      disabled={isMochiLoading}
+                    >
+                      <option value="all">모든 덱 (All Decks)</option>
+                      {mochiDecks.map((deck) => (
+                        <option key={deck.id} value={deck.id}>
+                          {deck.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>복습 날짜 (Date)</label>
+                    <input
+                      type="date"
+                      value={selectedMochiDate}
+                      onChange={(e) => setSelectedMochiDate(e.target.value)}
+                      className="input-glow"
+                      style={{ height: '40px' }}
+                      disabled={isMochiLoading}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleSearchMochiCards}
+                    disabled={isMochiLoading}
+                    style={{ height: '40px', padding: '0 1.25rem' }}
+                  >
+                    {isMochiLoading ? '조회 중...' : '오답 카드 조회'}
+                  </button>
+                </div>
+
+                {mochiError && (
+                  <div style={{ color: 'var(--accent)', background: 'rgba(244, 63, 94, 0.1)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                    {mochiError}
+                  </div>
+                )}
+
+                {/* Card List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                      조회된 오답 카드 ({mochiCards.length}개)
+                    </span>
+                    {mochiCards.length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                          onClick={() => setSelectedCardIds(new Set(mochiCards.map(c => c.id)))}
+                        >
+                          전체 선택
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                          onClick={() => setSelectedCardIds(new Set())}
+                        >
+                          전체 해제
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div 
+                    style={{ 
+                      maxHeight: '260px', 
+                      overflowY: 'auto', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '10px', 
+                      background: 'var(--bg-input)',
+                      padding: '0.5rem'
+                    }}
+                  >
+                    {mochiCards.length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        {!mochiError && '복습 날짜를 선택한 후 조회해 주세요.'}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        {mochiCards.map((card) => {
+                          const isSelected = selectedCardIds.has(card.id);
+                          const cardPreview = card.content 
+                            ? card.content.split('---')[0].trim() 
+                            : (card.fields ? Object.values(card.fields).map((f: any) => f.value).filter(Boolean)[0] || '내용 없음' : '내용 없음');
+
+                          return (
+                            <label
+                              key={card.id}
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'flex-start', 
+                                gap: '0.5rem', 
+                                padding: '0.6rem 0.75rem', 
+                                borderRadius: '8px', 
+                                background: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid',
+                                borderColor: isSelected ? 'var(--primary)' : 'transparent',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                style={{ marginTop: '0.2rem', accentColor: 'var(--primary)' }}
+                                onChange={() => {
+                                  setSelectedCardIds(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(card.id)) {
+                                      next.delete(card.id);
+                                    } else {
+                                      next.add(card.id);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, overflow: 'hidden' }}>
+                                <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                  {cardPreview}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    onClick={() => setIsMochiModalOpen(false)}
+                  >
+                    취소
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    disabled={selectedCardIds.size === 0}
+                    onClick={handleImportSelectedCards}
+                  >
+                    선택한 카드 가져오기 ({selectedCardIds.size}개)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

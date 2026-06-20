@@ -13,6 +13,8 @@ interface HeaderProps {
   onSaveUserId: (id: string) => void;
   userEmail: string;
   onSaveUserEmail: (email: string) => void;
+  mochiApiKey: string;
+  onSaveMochiApiKey: (key: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,13 +27,17 @@ export const Header: React.FC<HeaderProps> = ({
   userId,
   onSaveUserId,
   userEmail,
-  onSaveUserEmail
+  onSaveUserEmail,
+  mochiApiKey,
+  onSaveMochiApiKey
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempUserId, setTempUserId] = useState(userId);
   const [tempUserEmail, setTempUserEmail] = useState(userEmail);
+  const [tempMochiApiKey, setTempMochiApiKey] = useState(mochiApiKey);
   const [showKey, setShowKey] = useState(false);
+  const [showMochiKey, setShowMochiKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
 
   const getEmailPlaceholder = (id: string) => {
@@ -46,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
     onSaveApiKey(tempKey.trim());
     onSaveUserId(tempUserId.trim());
     onSaveUserEmail(tempUserEmail.trim());
+    onSaveMochiApiKey(tempMochiApiKey.trim());
     
     setIsSavedAlert(true);
     setTimeout(() => {
@@ -126,6 +133,7 @@ export const Header: React.FC<HeaderProps> = ({
             setTempKey(apiKey);
             setTempUserId(userId);
             setTempUserEmail(userEmail);
+            setTempMochiApiKey(mochiApiKey);
             setIsModalOpen(true);
           }}
           title="서비스 설정"
@@ -210,6 +218,33 @@ export const Header: React.FC<HeaderProps> = ({
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                   * 빈칸으로 둘 경우 사용자 ID 기준 기본 이메일로 전송됩니다. 여러 개의 이메일은 쉼표(,)로 구분하여 입력하세요.
+                </span>
+              </div>
+
+              {/* Mochi API Key Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                  Mochi API Key
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showMochiKey ? 'text' : 'password'}
+                    value={tempMochiApiKey}
+                    onChange={(e) => setTempMochiApiKey(e.target.value)}
+                    placeholder="Mochi API Key를 입력하세요"
+                    className="input-glow"
+                    style={{ paddingRight: '2.5rem' }}
+                  />
+                  <button
+                    type="button"
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                    onClick={() => setShowMochiKey(!showMochiKey)}
+                  >
+                    {showMochiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  * Mochi 카드의 오답 노트를 가져오기 위해 필요한 API Key입니다. 설정 화면에서 키를 생성하여 붙여넣으세요.
                 </span>
               </div>
 
