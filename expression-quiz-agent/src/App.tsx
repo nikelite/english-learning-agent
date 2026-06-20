@@ -171,9 +171,15 @@ export default function App() {
       
       allCards.forEach(card => {
         card.mochiForgetCount = 0;
+        card.mochiTotalForgetCount = 0;
         card.mochiReviewedInPeriod = false;
 
         if (!card.reviews || !Array.isArray(card.reviews)) return;
+        
+        // Compute total overall forgets in entire history
+        const allFailedReviews = card.reviews.filter((r: any) => isForgotten(r));
+        card.mochiTotalForgetCount = allFailedReviews.length;
+
         const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date, selectedMochiStartDate, selectedMochiEndDate));
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
@@ -1521,21 +1527,23 @@ export default function App() {
                                   <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
                                     {cardPreview}
                                   </div>
-                                  {card.mochiForgetCount > 0 && (
+                                  {(card.mochiForgetCount > 0 || card.mochiTotalForgetCount > 0) && (
                                     <span 
                                       style={{ 
                                         fontSize: '0.7rem', 
-                                        color: '#f43f5e', 
-                                        background: 'rgba(244, 63, 94, 0.12)', 
+                                        color: card.mochiForgetCount > 0 ? '#f43f5e' : '#9ca3af', 
+                                        background: card.mochiForgetCount > 0 ? 'rgba(244, 63, 94, 0.12)' : 'rgba(255, 255, 255, 0.05)', 
                                         padding: '0.15rem 0.45rem', 
                                         borderRadius: '6px', 
                                         fontWeight: '700',
                                         flexShrink: 0,
-                                        border: '1px solid rgba(244, 63, 94, 0.3)',
+                                        border: card.mochiForgetCount > 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid var(--border-color)',
                                         whiteSpace: 'nowrap'
                                       }}
                                     >
-                                      ❌ 틀림 {card.mochiForgetCount}회
+                                      {card.mochiForgetCount > 0 
+                                        ? `❌ 기간 ${card.mochiForgetCount}회 / 누적 ${card.mochiTotalForgetCount}회`
+                                        : `누적 ${card.mochiTotalForgetCount}회`}
                                     </span>
                                   )}
                                 </div>
