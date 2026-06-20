@@ -27,6 +27,33 @@ export async function fetchMochiDecks(apiKey: string): Promise<MochiDeckInfo[]> 
   return data.docs || [];
 }
 
+export async function fetchMochiDueCards(
+  apiKey: string,
+  dateISO: string,
+  deckId?: string
+): Promise<any[]> {
+  let url = `${BASE_URL}/due`;
+  if (deckId && deckId !== 'all') {
+    url += `/${deckId}`;
+  }
+  url += `?date=${encodeURIComponent(dateISO)}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': getAuthHeader(apiKey),
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Mochi Due 카드 조회 실패: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.cards || [];
+}
+
 export async function fetchMochiCards(
   apiKey: string,
   deckId?: string

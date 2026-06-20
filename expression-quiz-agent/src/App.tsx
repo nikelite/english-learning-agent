@@ -21,7 +21,7 @@ import {
   sendEmailReport
 } from './firebaseService';
 import { ShareModal } from './components/ShareModal';
-import { fetchMochiDecks, fetchMochiCards } from './mochiService';
+import { fetchMochiDecks, fetchMochiDueCards } from './mochiService';
 
 export default function App() {
   // 1. API Key State
@@ -82,6 +82,7 @@ export default function App() {
   const [isMochiLoading, setIsMochiLoading] = useState(false);
   const [mochiError, setMochiError] = useState<string | null>(null);
   const [mochiImportCallback, setMochiImportCallback] = useState<((text: string) => void) | null>(null);
+  const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
 
   const handleOpenMochiModal = async (onImport: (text: string) => void) => {
     setMochiImportCallback(() => onImport);
@@ -113,7 +114,10 @@ export default function App() {
     setSelectedCardIds(new Set());
 
     try {
-      const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
+      // Convert selected date to ISO string for GET /due API parameter
+      const dateISO = new Date(selectedMochiDate).toISOString();
+
+      const dueCards = await fetchMochiDueCards(mochiApiKey, dateISO, selectedMochiDeck);
       
       const isSameDayLocal = (reviewDateObj: any, targetDateStr: string) => {
         if (!reviewDateObj) return false;
@@ -147,16 +151,20 @@ export default function App() {
         return remembered === false;
       };
 
-      const filtered = allCards.filter(card => {
-        if (!card.reviews || !Array.isArray(card.reviews)) return false;
-        return card.reviews.some((review: any) => {
-          return isSameDayLocal(review.date, selectedMochiDate) && isForgotten(review);
+      // Filter by incorrect reviews if filterIncorrectOnly is true
+      let filtered = dueCards;
+      if (filterIncorrectOnly) {
+        filtered = dueCards.filter(card => {
+          if (!card.reviews || !Array.isArray(card.reviews)) return false;
+          return card.reviews.some((review: any) => {
+            return isSameDayLocal(review.date, selectedMochiDate) && isForgotten(review);
+          });
         });
-      });
+      }
 
       setMochiCards(filtered);
       if (filtered.length === 0) {
-        setMochiError(`${selectedMochiDate} 날짜에 틀린 퀴즈/복습 카드가 존재하지 않습니다.`);
+        setMochiError(`${selectedMochiDate} 날짜에 ${filterIncorrectOnly ? '틀린 ' : ''}복습 카드가 존재하지 않습니다.`);
       }
     } catch (err: any) {
       setMochiError(err.message || 'Mochi 카드를 불러오는 중 에러가 발생했습니다.');
@@ -1257,46 +1265,59 @@ export default function App() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* Search Settings */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
-                    <select
-                      value={selectedMochiDeck}
-                      onChange={(e) => setSelectedMochiDeck(e.target.value)}
-                      className="input-glow select-glow"
-                      style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)', height: '40px', padding: '0.5rem' }}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
+                      <select
+                        value={selectedMochiDeck}
+                        onChange={(e) => setSelectedMochiDeck(e.target.value)}
+                        className="input-glow select-glow"
+                        style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)', height: '40px', padding: '0.5rem' }}
+                        disabled={isMochiLoading}
+                      >
+                        <option value="all">모든 덱 (All Decks)</option>
+                        {mochiDecks.map((deck) => (
+                          <option key={deck.id} value={deck.id}>
+                            {deck.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>복습 날짜 (Date)</label>
+                      <input
+                        type="date"
+                        value={selectedMochiDate}
+                        onChange={(e) => setSelectedMochiDate(e.target.value)}
+                        className="input-glow"
+                        style={{ height: '40px' }}
+                        disabled={isMochiLoading}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleSearchMochiCards}
                       disabled={isMochiLoading}
+                      style={{ height: '40px', padding: '0 1.25rem' }}
                     >
-                      <option value="all">모든 덱 (All Decks)</option>
-                      {mochiDecks.map((deck) => (
-                        <option key={deck.id} value={deck.id}>
-                          {deck.name}
-                        </option>
-                      ))}
-                    </select>
+                      {isMochiLoading ? '조회 중...' : '카드 조회'}
+                    </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>복습 날짜 (Date)</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
                     <input
-                      type="date"
-                      value={selectedMochiDate}
-                      onChange={(e) => setSelectedMochiDate(e.target.value)}
-                      className="input-glow"
-                      style={{ height: '40px' }}
+                      type="checkbox"
+                      checked={filterIncorrectOnly}
+                      onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
                       disabled={isMochiLoading}
+                      style={{ accentColor: 'var(--primary)' }}
                     />
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleSearchMochiCards}
-                    disabled={isMochiLoading}
-                    style={{ height: '40px', padding: '0 1.25rem' }}
-                  >
-                    {isMochiLoading ? '조회 중...' : '오답 카드 조회'}
-                  </button>
+                    <span>해당 날짜에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
+                  </label>
                 </div>
 
                 {mochiError && (
