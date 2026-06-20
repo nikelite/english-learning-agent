@@ -70,7 +70,14 @@ export default function App() {
   const [isMochiModalOpen, setIsMochiModalOpen] = useState(false);
   const [mochiDecks, setMochiDecks] = useState<any[]>([]);
   const [selectedMochiDeck, setSelectedMochiDeck] = useState<string>('all');
-  const [selectedMochiDate, setSelectedMochiDate] = useState<string>(() => {
+  const [selectedMochiStartDate, setSelectedMochiStartDate] = useState<string>(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
+  const [selectedMochiEndDate, setSelectedMochiEndDate] = useState<string>(() => {
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -111,6 +118,10 @@ export default function App() {
 
   const handleSearchMochiCards = async () => {
     if (!mochiApiKey.trim()) return;
+    if (selectedMochiStartDate > selectedMochiEndDate) {
+      setMochiError("시작 날짜는 종료 날짜보다 이전이어야 합니다.");
+      return;
+    }
     setIsMochiLoading(true);
     setMochiError(null);
     setMochiCards([]);
@@ -121,7 +132,7 @@ export default function App() {
     try {
       const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
       
-      const isSameDayLocal = (reviewDateObj: any, targetDateStr: string) => {
+      const isWithinDateRangeLocal = (reviewDateObj: any, start: string, end: string) => {
         if (!reviewDateObj) return false;
         let dateStr = '';
         if (typeof reviewDateObj === 'string') {
@@ -142,7 +153,8 @@ export default function App() {
           const year = reviewDate.getFullYear();
           const month = String(reviewDate.getMonth() + 1).padStart(2, '0');
           const day = String(reviewDate.getDate()).padStart(2, '0');
-          return `${year}-${month}-${day}` === targetDateStr;
+          const localDateStr = `${year}-${month}-${day}`;
+          return localDateStr >= start && localDateStr <= end;
         } catch (e) {
           return false;
         }
@@ -159,10 +171,10 @@ export default function App() {
       
       allCards.forEach(card => {
         if (!card.reviews || !Array.isArray(card.reviews)) return;
-        const reviewsOnDate = card.reviews.filter((r: any) => isSameDayLocal(r.date, selectedMochiDate));
-        if (reviewsOnDate.length > 0) {
+        const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date, selectedMochiStartDate, selectedMochiEndDate));
+        if (reviewsInPeriod.length > 0) {
           reviewed++;
-          if (reviewsOnDate.some((r: any) => isForgotten(r))) {
+          if (reviewsInPeriod.some((r: any) => isForgotten(r))) {
             forgotten++;
           }
         }
@@ -171,24 +183,27 @@ export default function App() {
       setMochiTotalReviewed(reviewed);
       setMochiTotalForgotten(forgotten);
 
-      // We should only display cards that WERE reviewed on the selected date.
+      // We should only display cards that WERE reviewed within the selected period.
       let filtered = allCards.filter(card => {
         if (!card.reviews || !Array.isArray(card.reviews)) return false;
-        return card.reviews.some((review: any) => isSameDayLocal(review.date, selectedMochiDate));
+        return card.reviews.some((review: any) => isWithinDateRangeLocal(review.date, selectedMochiStartDate, selectedMochiEndDate));
       });
 
       // Filter further by incorrect reviews if filterIncorrectOnly is true
       if (filterIncorrectOnly) {
         filtered = filtered.filter(card => {
           return card.reviews.some((review: any) => {
-            return isSameDayLocal(review.date, selectedMochiDate) && isForgotten(review);
+            return isWithinDateRangeLocal(review.date, selectedMochiStartDate, selectedMochiEndDate) && isForgotten(review);
           });
         });
       }
 
       setMochiCards(filtered);
       if (filtered.length === 0) {
-        setMochiError(`${selectedMochiDate} 날짜에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
+        const periodStr = selectedMochiStartDate === selectedMochiEndDate 
+          ? selectedMochiStartDate 
+          : `${selectedMochiStartDate} ~ ${selectedMochiEndDate}`;
+        setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
       }
     } catch (err: any) {
       setMochiError(err.message || 'Mochi 카드를 불러오는 중 에러가 발생했습니다.');
@@ -1321,7 +1336,7 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* Search Settings */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
                       <select
@@ -1341,11 +1356,23 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>복습 날짜 (Date)</label>
+                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>시작 날짜 (Start)</label>
                       <input
                         type="date"
-                        value={selectedMochiDate}
-                        onChange={(e) => setSelectedMochiDate(e.target.value)}
+                        value={selectedMochiStartDate}
+                        onChange={(e) => setSelectedMochiStartDate(e.target.value)}
+                        className="input-glow"
+                        style={{ height: '40px' }}
+                        disabled={isMochiLoading}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>종료 날짜 (End)</label>
+                      <input
+                        type="date"
+                        value={selectedMochiEndDate}
+                        onChange={(e) => setSelectedMochiEndDate(e.target.value)}
                         className="input-glow"
                         style={{ height: '40px' }}
                         disabled={isMochiLoading}
@@ -1371,13 +1398,13 @@ export default function App() {
                       disabled={isMochiLoading}
                       style={{ accentColor: 'var(--primary)' }}
                     />
-                    <span>해당 날짜에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
+                    <span>선택한 기간에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
                   </label>
                 </div>
 
                 {mochiTotalReviewed > 0 && (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.03)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>📊 선택일 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.</span>
+                    <span>📊 선택 기간 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.</span>
                     {mochiTotalForgotten > 0 && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: '700' }}>오답률 {Math.round((mochiTotalForgotten / mochiTotalReviewed) * 100)}%</span>
                     )}
