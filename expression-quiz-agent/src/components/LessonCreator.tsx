@@ -9,6 +9,7 @@ interface LessonCreatorProps {
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
+  onOpenMochiImport: (onImport: (importedText: string) => void) => void;
 }
 
 export const LessonCreator: React.FC<LessonCreatorProps> = ({
@@ -16,7 +17,8 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
   onGenerate,
   onLoadPreset,
   isLoading,
-  activeLesson
+  activeLesson,
+  onOpenMochiImport
 }) => {
   const [inputText, setInputText] = useState('');
   const [titleInput, setTitleInput] = useState('');
@@ -54,17 +56,38 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
     }
   };
 
+  const handleMochiImportClick = () => {
+    onOpenMochiImport((importedText) => {
+      setInputText(prev => {
+        const prefix = prev.trim() ? prev + '\n\n' : '';
+        return prefix + importedText;
+      });
+    });
+  };
+
   return (
     <div className="sidebar-panel glass-panel">
-      <div>
-        <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-          AI 학습 어시스턴트
-        </h3>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          틀린 퀴즈 해설, 단어, 혹은 영어 문장을 붙여넣으세요. AI가 심층 학습 자료를 생성합니다.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ flex: 1, minWidth: '150px' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+            AI 학습 어시스턴트
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+            틀린 퀴즈 해설, 단어, 혹은 영어 문장을 붙여넣으세요. AI가 심층 학습 자료를 생성합니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}
+          onClick={handleMochiImportClick}
+          disabled={isLoading}
+        >
+          ⚡ Mochi에서 가져오기
+        </button>
       </div>
+
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div>
