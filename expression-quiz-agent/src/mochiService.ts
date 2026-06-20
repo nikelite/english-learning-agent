@@ -60,7 +60,7 @@ export async function fetchMochiCards(
 ): Promise<any[]> {
   let allCards: any[] = [];
   let bookmark: string | null = null;
-  const maxPages = 15;
+  const maxPages = 50;
   let page = 0;
 
   do {

@@ -9,7 +9,7 @@ interface LessonCreatorProps {
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
-  onOpenMochiImport: (onImport: (importedText: string) => void) => void;
+  onOpenMochiImport: () => void;
 }
 
 export const LessonCreator: React.FC<LessonCreatorProps> = ({
@@ -57,12 +57,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
   };
 
   const handleMochiImportClick = () => {
-    onOpenMochiImport((importedText) => {
-      setInputText(prev => {
-        const prefix = prev.trim() ? prev + '\n\n' : '';
-        return prefix + importedText;
-      });
-    });
+    onOpenMochiImport();
   };
 
   return (

@@ -21,7 +21,7 @@ import {
   sendEmailReport
 } from './firebaseService';
 import { ShareModal } from './components/ShareModal';
-import { fetchMochiDecks, fetchMochiDueCards } from './mochiService';
+import { fetchMochiDecks, fetchMochiCards } from './mochiService';
 
 export default function App() {
   // 1. API Key State
@@ -81,15 +81,18 @@ export default function App() {
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [isMochiLoading, setIsMochiLoading] = useState(false);
   const [mochiError, setMochiError] = useState<string | null>(null);
-  const [mochiImportCallback, setMochiImportCallback] = useState<((text: string) => void) | null>(null);
   const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
+  const [mochiTotalReviewed, setMochiTotalReviewed] = useState<number>(0);
+  const [mochiTotalForgotten, setMochiTotalForgotten] = useState<number>(0);
+  const [mochiImportingProgress, setMochiImportingProgress] = useState<{current: number, total: number} | null>(null);
 
-  const handleOpenMochiModal = async (onImport: (text: string) => void) => {
-    setMochiImportCallback(() => onImport);
+  const handleOpenMochiModal = async () => {
     setIsMochiModalOpen(true);
     setMochiError(null);
     setMochiCards([]);
     setSelectedCardIds(new Set());
+    setMochiTotalReviewed(0);
+    setMochiTotalForgotten(0);
     
     if (!mochiApiKey.trim()) {
       return;
@@ -112,12 +115,11 @@ export default function App() {
     setMochiError(null);
     setMochiCards([]);
     setSelectedCardIds(new Set());
+    setMochiTotalReviewed(0);
+    setMochiTotalForgotten(0);
 
     try {
-      // Convert selected date to ISO string for GET /due API parameter
-      const dateISO = new Date(selectedMochiDate).toISOString();
-
-      const dueCards = await fetchMochiDueCards(mochiApiKey, dateISO, selectedMochiDeck);
+      const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
       
       const isSameDayLocal = (reviewDateObj: any, targetDateStr: string) => {
         if (!reviewDateObj) return false;
@@ -151,11 +153,33 @@ export default function App() {
         return remembered === false;
       };
 
-      // Filter by incorrect reviews if filterIncorrectOnly is true
-      let filtered = dueCards;
+      // Calculate reviewed and forgotten stats from allCards list
+      let reviewed = 0;
+      let forgotten = 0;
+      
+      allCards.forEach(card => {
+        if (!card.reviews || !Array.isArray(card.reviews)) return;
+        const reviewsOnDate = card.reviews.filter((r: any) => isSameDayLocal(r.date, selectedMochiDate));
+        if (reviewsOnDate.length > 0) {
+          reviewed++;
+          if (reviewsOnDate.some((r: any) => isForgotten(r))) {
+            forgotten++;
+          }
+        }
+      });
+
+      setMochiTotalReviewed(reviewed);
+      setMochiTotalForgotten(forgotten);
+
+      // We should only display cards that WERE reviewed on the selected date.
+      let filtered = allCards.filter(card => {
+        if (!card.reviews || !Array.isArray(card.reviews)) return false;
+        return card.reviews.some((review: any) => isSameDayLocal(review.date, selectedMochiDate));
+      });
+
+      // Filter further by incorrect reviews if filterIncorrectOnly is true
       if (filterIncorrectOnly) {
-        filtered = dueCards.filter(card => {
-          if (!card.reviews || !Array.isArray(card.reviews)) return false;
+        filtered = filtered.filter(card => {
           return card.reviews.some((review: any) => {
             return isSameDayLocal(review.date, selectedMochiDate) && isForgotten(review);
           });
@@ -164,7 +188,7 @@ export default function App() {
 
       setMochiCards(filtered);
       if (filtered.length === 0) {
-        setMochiError(`${selectedMochiDate} 날짜에 ${filterIncorrectOnly ? '틀린 ' : ''}복습 카드가 존재하지 않습니다.`);
+        setMochiError(`${selectedMochiDate} 날짜에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
       }
     } catch (err: any) {
       setMochiError(err.message || 'Mochi 카드를 불러오는 중 에러가 발생했습니다.');
@@ -173,31 +197,64 @@ export default function App() {
     }
   };
 
-  const handleImportSelectedCards = () => {
+  const handleImportSelectedCards = async () => {
     if (selectedCardIds.size === 0) return;
-    
-    const selectedContents = mochiCards
-      .filter(card => selectedCardIds.has(card.id))
-      .map(card => {
-        if (card.content) return card.content;
-        if (card.fields) {
-          return Object.values(card.fields)
-            .map((f: any) => f.value)
-            .filter(Boolean)
-            .join('\n');
-        }
-        return '';
-      })
-      .filter(Boolean);
-
-    if (selectedContents.length === 0) return;
-
-    const importedText = selectedContents.join('\n\n');
-    if (mochiImportCallback) {
-      mochiImportCallback(importedText);
+    if (!apiKey) {
+      setMochiError("오답 학습 세트를 생성하려면 설정(⚙️)에서 Gemini API Key를 먼저 입력해야 합니다.");
+      return;
     }
 
-    setIsMochiModalOpen(false);
+    const selectedCardsList = mochiCards.filter(card => selectedCardIds.has(card.id));
+    if (selectedCardsList.length === 0) return;
+
+    setIsMochiLoading(true);
+    setMochiError(null);
+    setMochiImportingProgress({ current: 0, total: selectedCardsList.length });
+
+    try {
+      let lastGeneratedLesson: Lesson | null = null;
+      
+      const savedCount = localStorage.getItem('last_expr_question_count');
+      const qCount = savedCount ? Number(savedCount) : 5;
+
+      for (let i = 0; i < selectedCardsList.length; i++) {
+        const card = selectedCardsList[i];
+        setMochiImportingProgress({ current: i + 1, total: selectedCardsList.length });
+
+        const text = card.content 
+          ? card.content 
+          : (card.fields ? Object.values(card.fields).map((f: any) => f.value).filter(Boolean).join('\n') : '');
+
+        if (!text.trim()) continue;
+
+        // Generate lesson via Gemini API
+        const generated = await generateLessonFromText(text, apiKey, qCount);
+        
+        // Extract title from card content preview
+        const firstLine = text.split('\n')[0].replace(/[#*`]/g, '').trim().substring(0, 25);
+        generated.title = `[Mochi] ${firstLine || '가져온 오답 카드'}...`;
+
+        // Save directly to lessons history library
+        const saved = await saveLessonToHistory(generated);
+        lastGeneratedLesson = saved;
+      }
+
+      if (selectedCardsList.length === 1 && lastGeneratedLesson) {
+        setActiveLesson(lastGeneratedLesson);
+        setViewMode('study');
+        setActiveStudyTab('eli5');
+      } else {
+        // If multiple cards are imported, show the library list so they can see all of them
+        setActiveLesson(null);
+      }
+      
+      setIsMochiModalOpen(false);
+    } catch (err: any) {
+      setMochiError(err.message || 'AI 학습 세트를 생성하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsMochiLoading(false);
+      setMochiImportingProgress(null);
+    }
   };
 
   // 7.1 Cloud Sync State
@@ -788,9 +845,7 @@ export default function App() {
             onLoadPreset={handleLoadPreset}
             isLoading={isLoading}
             activeLesson={activeLesson}
-            onOpenMochiImport={(onImport) => {
-              handleOpenMochiModal(onImport);
-            }}
+            onOpenMochiImport={handleOpenMochiModal}
           />
 
           {/* Right Column: Active Study tabs or Interactive Quiz Player */}
@@ -1320,6 +1375,27 @@ export default function App() {
                   </label>
                 </div>
 
+                {mochiTotalReviewed > 0 && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.03)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>📊 선택일 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.</span>
+                    {mochiTotalForgotten > 0 && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: '700' }}>오답률 {Math.round((mochiTotalForgotten / mochiTotalReviewed) * 100)}%</span>
+                    )}
+                  </div>
+                )}
+
+                {mochiImportingProgress && (
+                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: '600' }}>
+                      <span>📥 개별 학습 세트 생성 및 보관함 등록 중...</span>
+                      <span>{mochiImportingProgress.current} / {mochiImportingProgress.total}</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${(mochiImportingProgress.current / mochiImportingProgress.total) * 100}%`, height: '100%', background: 'var(--primary)', borderRadius: '3px', transition: 'width 0.3s ease' }}></div>
+                    </div>
+                  </div>
+                )}
+
                 {mochiError && (
                   <div style={{ color: 'var(--accent)', background: 'rgba(244, 63, 94, 0.1)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
                     {mochiError}
@@ -1332,7 +1408,7 @@ export default function App() {
                     <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
                       조회된 오답 카드 ({mochiCards.length}개)
                     </span>
-                    {mochiCards.length > 0 && (
+                    {mochiCards.length > 0 && !mochiImportingProgress && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button
                           type="button"
@@ -1388,13 +1464,15 @@ export default function App() {
                                 background: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.02)',
                                 border: '1px solid',
                                 borderColor: isSelected ? 'var(--primary)' : 'transparent',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
+                                cursor: isSelected ? 'pointer' : (mochiImportingProgress ? 'not-allowed' : 'pointer'),
+                                transition: 'all 0.2s ease',
+                                opacity: mochiImportingProgress ? 0.7 : 1
                               }}
                             >
                               <input
                                 type="checkbox"
                                 checked={isSelected}
+                                disabled={mochiImportingProgress !== null}
                                 style={{ marginTop: '0.2rem', accentColor: 'var(--primary)' }}
                                 onChange={() => {
                                   setSelectedCardIds(prev => {
@@ -1426,13 +1504,14 @@ export default function App() {
                     type="button" 
                     className="btn btn-secondary"
                     onClick={() => setIsMochiModalOpen(false)}
+                    disabled={isMochiLoading || mochiImportingProgress !== null}
                   >
                     취소
                   </button>
                   <button 
                     type="button" 
                     className="btn btn-primary"
-                    disabled={selectedCardIds.size === 0}
+                    disabled={selectedCardIds.size === 0 || isMochiLoading || mochiImportingProgress !== null}
                     onClick={handleImportSelectedCards}
                   >
                     선택한 카드 가져오기 ({selectedCardIds.size}개)
