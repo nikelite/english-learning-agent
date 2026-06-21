@@ -138,6 +138,37 @@ export async function removeLessonAssociation(docId: string, userId: string): Pr
   }
 }
 
+function mergeLessons(local: Lesson, cloud: Lesson): { merged: Lesson, needsUpload: boolean } {
+  const localSolved = !!local.userAnswers;
+  const cloudSolved = !!cloud.userAnswers;
+  
+  if (localSolved && !cloudSolved) {
+    return { merged: local, needsUpload: true };
+  }
+  
+  if (!localSolved && cloudSolved) {
+    return { merged: cloud, needsUpload: false };
+  }
+  
+  if (localSolved && cloudSolved) {
+    const localTime = local.solvedAt || 0;
+    const cloudTime = cloud.solvedAt || 0;
+    if (localTime >= cloudTime) {
+      return { merged: local, needsUpload: localTime > cloudTime };
+    } else {
+      return { merged: cloud, needsUpload: false };
+    }
+  }
+  
+  const localCreated = local.createdAt || 0;
+  const cloudCreated = cloud.createdAt || 0;
+  if (localCreated >= cloudCreated) {
+    return { merged: local, needsUpload: localCreated > cloudCreated };
+  } else {
+    return { merged: cloud, needsUpload: false };
+  }
+}
+
 /**
  * Bidirectionally synchronizes local storage history with cloud Firestore expression lessons
  * @param userId The User ID to sync
@@ -175,7 +206,15 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       
       const inCloud = cloudLessonsMap.get(localLesson.id);
       if (inCloud) {
-        syncedLessons.push(inCloud);
+        const { merged, needsUpload } = mergeLessons(localLesson, inCloud);
+        if (needsUpload) {
+          try {
+            await saveLessonToCloud(merged, userId);
+          } catch (err) {
+            console.warn("Failed to upload merged lesson during sync:", err);
+          }
+        }
+        syncedLessons.push(merged);
         cloudLessonsMap.delete(localLesson.id);
       } else {
         // Offline custom lesson: upload to cloud under this user
@@ -263,6 +302,36 @@ export async function loadWrongAnswersFromCloud(userId: string): Promise<WrongAn
     return null;
   } catch (error: any) {
     console.error("Firebase load wrong answers failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Saves preset lessons progress array to Firestore
+ */
+export async function savePresetsProgressToCloud(userId: string, progress: any): Promise<void> {
+  try {
+    const ref = doc(db, 'expression_presets_progress', userId);
+    await setDoc(ref, { progress });
+  } catch (error: any) {
+    console.error("Firebase save presets progress failed:", error);
+  }
+}
+
+/**
+ * Loads preset lessons progress array from Firestore
+ */
+export async function loadPresetsProgressFromCloud(userId: string): Promise<any | null> {
+  try {
+    const ref = doc(db, 'expression_presets_progress', userId);
+    const docSnap = await getDoc(ref);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.progress || null;
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Firebase load presets progress failed:", error);
     return null;
   }
 }

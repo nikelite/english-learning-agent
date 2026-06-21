@@ -17,6 +17,8 @@ import {
   loadStatsFromCloud,
   saveWrongAnswersToCloud,
   loadWrongAnswersFromCloud,
+  savePresetsProgressToCloud,
+  loadPresetsProgressFromCloud,
   logQuizAttempt,
   sendEmailReport
 } from './firebaseService';
@@ -385,6 +387,49 @@ export default function App() {
         });
       }
     }).catch(err => console.error("Cloud wrong answers load failed:", err));
+    
+    // Sync presets progress in parallel
+    loadPresetsProgressFromCloud(userId).then((cloudPresetsProgress) => {
+      if (isMounted) {
+        const localSaved = localStorage.getItem('eng_expression_presets_progress');
+        const localPresetsProgress = localSaved ? JSON.parse(localSaved) : {};
+        
+        const mergedPresetsProgress = { ...localPresetsProgress };
+        let hasChanges = false;
+        
+        if (cloudPresetsProgress) {
+          Object.keys(cloudPresetsProgress).forEach((presetId) => {
+            const localVal = localPresetsProgress[presetId];
+            const cloudVal = cloudPresetsProgress[presetId];
+            
+            if (!localVal) {
+              mergedPresetsProgress[presetId] = cloudVal;
+              hasChanges = true;
+            } else {
+              const localTime = localVal.solvedAt || 0;
+              const cloudTime = cloudVal.solvedAt || 0;
+              if (cloudTime > localTime) {
+                mergedPresetsProgress[presetId] = cloudVal;
+                hasChanges = true;
+              } else if (localTime > cloudTime) {
+                hasChanges = true;
+              }
+            }
+          });
+        }
+        
+        Object.keys(localPresetsProgress).forEach((presetId) => {
+          if (!cloudPresetsProgress || !cloudPresetsProgress[presetId]) {
+            hasChanges = true;
+          }
+        });
+        
+        if (hasChanges) {
+          localStorage.setItem('eng_expression_presets_progress', JSON.stringify(mergedPresetsProgress));
+          savePresetsProgressToCloud(userId, mergedPresetsProgress);
+        }
+      }
+    }).catch(err => console.error("Cloud presets progress load failed:", err));
     
     return () => {
       isMounted = false;
@@ -791,6 +836,9 @@ export default function App() {
           retryHistory: updatedLesson.retryHistory
         };
         localStorage.setItem('eng_expression_presets_progress', JSON.stringify(presetsProgress));
+        if (userId) {
+          savePresetsProgressToCloud(userId, presetsProgress);
+        }
       } else {
         const savedLesson = await saveLessonToHistory(updatedLesson);
         setActiveLesson(savedLesson);
@@ -818,6 +866,9 @@ export default function App() {
         retryHistory: activeLesson.retryHistory
       };
       localStorage.setItem('eng_expression_presets_progress', JSON.stringify(presetsProgress));
+      if (userId) {
+        savePresetsProgressToCloud(userId, presetsProgress);
+      }
     } else {
       const savedLesson = await saveLessonToHistory(updatedLesson);
       setActiveLesson(savedLesson);
