@@ -195,6 +195,11 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       }
     }
     
+    // 4. Add remaining cloud lessons (which exist in cloud but were not in local storage)
+    cloudLessonsMap.forEach((cloudLesson) => {
+      syncedLessons.push(cloudLesson);
+    });
+    
     // Sort by creation date descending
     return syncedLessons.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error: any) {
