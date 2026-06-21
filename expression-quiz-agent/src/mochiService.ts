@@ -90,7 +90,8 @@ export async function fetchMochiDueCards(
 
 export async function fetchMochiCards(
   apiKey: string,
-  deckId?: string
+  deckId?: string,
+  onProgress?: (loadedCount: number) => void
 ): Promise<any[]> {
   let allCards: any[] = [];
   let bookmark: string | null = null;
@@ -121,6 +122,9 @@ export async function fetchMochiCards(
     const data = await response.json();
     const docs = data.docs || [];
     allCards = [...allCards, ...docs];
+    if (onProgress) {
+      onProgress(allCards.length);
+    }
     bookmark = data.bookmark || null;
     page++;
   } while (bookmark && page < maxPages);

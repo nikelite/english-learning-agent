@@ -89,6 +89,7 @@ export default function App() {
   const [mochiCards, setMochiCards] = useState<any[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [isMochiLoading, setIsMochiLoading] = useState(false);
+  const [mochiLoadedCount, setMochiLoadedCount] = useState<number>(0);
   const [mochiError, setMochiError] = useState<string | null>(null);
   const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
   const [mochiTotalReviewed, setMochiTotalReviewed] = useState<number>(0);
@@ -102,6 +103,7 @@ export default function App() {
     setSelectedCardIds(new Set());
     setMochiTotalReviewed(0);
     setMochiTotalForgotten(0);
+    setMochiLoadedCount(0);
     
     if (!mochiApiKey.trim()) {
       return;
@@ -125,6 +127,7 @@ export default function App() {
       return;
     }
     setIsMochiLoading(true);
+    setMochiLoadedCount(0);
     setMochiError(null);
     setMochiCards([]);
     setSelectedCardIds(new Set());
@@ -132,7 +135,9 @@ export default function App() {
     setMochiTotalForgotten(0);
 
     try {
-      const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
+      const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck, (count) => {
+        setMochiLoadedCount(count);
+      });
       
       const startLocalTime = new Date(selectedMochiStartDate + 'T00:00:00').getTime();
       const endLocalTime = new Date(selectedMochiEndDate + 'T23:59:59.999').getTime();
@@ -1558,7 +1563,44 @@ export default function App() {
                       padding: '0.5rem'
                     }}
                   >
-                    {mochiCards.length === 0 ? (
+                    {isMochiLoading ? (
+                      <div style={{ 
+                        padding: '2.5rem 1.5rem', 
+                        textAlign: 'center', 
+                        color: 'var(--text-secondary)', 
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.75rem'
+                      }}>
+                        <div className="spinner" style={{ 
+                          width: '24px', 
+                          height: '24px', 
+                          borderRadius: '50%', 
+                          border: '2.5px solid rgba(255,255,255,0.08)', 
+                          borderTopColor: 'var(--primary)', 
+                          animation: 'spin 1s linear infinite' 
+                        }}></div>
+                        <div style={{ fontWeight: '600', color: 'white' }}>
+                          {mochiLoadedCount > 0 ? 'Mochi에서 카드 목록을 불러오는 중...' : 'Mochi 데이터를 불러오는 중...'}
+                        </div>
+                        {mochiLoadedCount > 0 && (
+                          <div style={{ 
+                            background: 'rgba(255, 255, 255, 0.05)', 
+                            padding: '0.35rem 0.75rem', 
+                            borderRadius: '20px', 
+                            fontSize: '0.75rem', 
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--primary)',
+                            fontWeight: '700'
+                          }}>
+                            ⚡ 현재 {mochiLoadedCount}개 카드 읽음
+                          </div>
+                        )}
+                      </div>
+                    ) : mochiCards.length === 0 ? (
                       <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         {!mochiError && '복습 날짜를 선택한 후 조회해 주세요.'}
                       </div>
