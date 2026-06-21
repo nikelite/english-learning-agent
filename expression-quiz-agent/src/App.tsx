@@ -134,7 +134,10 @@ export default function App() {
     try {
       const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck);
       
-      const isWithinDateRangeLocal = (reviewDateObj: any, start: string, end: string) => {
+      const startLocalTime = new Date(selectedMochiStartDate + 'T00:00:00').getTime();
+      const endLocalTime = new Date(selectedMochiEndDate + 'T23:59:59.999').getTime();
+      
+      const isWithinDateRangeLocal = (reviewDateObj: any) => {
         if (!reviewDateObj) return false;
         let dateStr = '';
         if (typeof reviewDateObj === 'string') {
@@ -149,14 +152,9 @@ export default function App() {
         
         if (!dateStr) return false;
         try {
-          const reviewDate = new Date(dateStr);
-          if (isNaN(reviewDate.getTime())) return false;
-          
-          const year = reviewDate.getFullYear();
-          const month = String(reviewDate.getMonth() + 1).padStart(2, '0');
-          const day = String(reviewDate.getDate()).padStart(2, '0');
-          const localDateStr = `${year}-${month}-${day}`;
-          return localDateStr >= start && localDateStr <= end;
+          const reviewTime = new Date(dateStr).getTime();
+          if (isNaN(reviewTime)) return false;
+          return reviewTime >= startLocalTime && reviewTime <= endLocalTime;
         } catch (e) {
           return false;
         }
@@ -182,7 +180,7 @@ export default function App() {
         const allFailedReviews = card.reviews.filter((r: any) => isForgotten(r));
         card.mochiTotalForgetCount = allFailedReviews.length;
 
-        const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date, selectedMochiStartDate, selectedMochiEndDate));
+        const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date));
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
           reviewed++;

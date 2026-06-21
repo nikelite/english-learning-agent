@@ -10,8 +10,42 @@ export interface MochiDeckInfo {
   parent?: string;
 }
 
+/**
+ * Fetch wrapper with exponential backoff for rate limits and temporary network/server issues.
+ */
+async function fetchWithBackoff(
+  url: string,
+  options: RequestInit,
+  retries = 5,
+  initialDelay = 1000
+): Promise<Response> {
+  let currentDelay = initialDelay;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      
+      // Retry on 429 (Rate Limit) or 5xx (Server Error)
+      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+        console.warn(`Mochi API returned status ${response.status}. Retrying in ${currentDelay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        currentDelay *= 2;
+        continue;
+      }
+      return response;
+    } catch (error) {
+      console.warn(`Mochi API network error: ${error}. Retrying in ${currentDelay}ms... (Attempt ${i + 1}/${retries})`);
+      if (i === retries - 1) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, currentDelay));
+      currentDelay *= 2;
+    }
+  }
+  return fetch(url, options);
+}
+
 export async function fetchMochiDecks(apiKey: string): Promise<MochiDeckInfo[]> {
-  const response = await fetch(`${BASE_URL}/decks`, {
+  const response = await fetchWithBackoff(`${BASE_URL}/decks`, {
     method: 'GET',
     headers: {
       'Authorization': getAuthHeader(apiKey),
@@ -38,7 +72,7 @@ export async function fetchMochiDueCards(
   }
   url += `?date=${encodeURIComponent(dateISO)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithBackoff(url, {
     method: 'GET',
     headers: {
       'Authorization': getAuthHeader(apiKey),
@@ -60,7 +94,7 @@ export async function fetchMochiCards(
 ): Promise<any[]> {
   let allCards: any[] = [];
   let bookmark: string | null = null;
-  const maxPages = 50;
+  const maxPages = 1000; // Supports up to 100,000 cards
   let page = 0;
 
   do {
@@ -72,7 +106,7 @@ export async function fetchMochiCards(
       url += `&bookmark=${bookmark}`;
     }
 
-    const response = await fetch(url, {
+    const response = await fetchWithBackoff(url, {
       method: 'GET',
       headers: {
         'Authorization': getAuthHeader(apiKey),
@@ -93,3 +127,4 @@ export async function fetchMochiCards(
 
   return allCards;
 }
+
