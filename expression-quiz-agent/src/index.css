@@ -627,3 +627,101 @@ h1, h2, h3, h4, h5 {
   to { transform: rotate(360deg); }
 }
 
+/* Responsive Improvements */
+@media (max-width: 1024px) {
+  /* Hide LessonCreator sidebar when active lesson is open to allow full viewport width */
+  .has-active-lesson .sidebar-panel {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Center brand and stack nav elements vertically */
+  .app-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+    padding: 1rem 0 !important;
+  }
+  .app-brand {
+    justify-content: center !important;
+  }
+  .app-nav {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+  }
+  .app-nav .btn, .app-nav .glass-panel {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Modal Overlay/Content adjustments for mobile */
+  .modal-overlay {
+    padding: 0.75rem !important;
+  }
+  .modal-content {
+    padding: 1.25rem 1rem !important;
+    border-radius: 12px !important;
+  }
+  .main-panel {
+    padding: 1.25rem 1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* mistakes review grid layout */
+  .review-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .mochi-card-row-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.35rem !important;
+  }
+  .analytics-search-form {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  /* search controls in the library */
+  .library-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+  .library-header > div {
+    width: 100% !important;
+  }
+}
+
+/* Custom Responsive Styles for Mochi modal search options */
+.mochi-search-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+@media (max-width: 768px) {
+  .mochi-search-grid {
+    grid-template-columns: 1.2fr 1fr 1fr;
+  }
+  .mochi-search-grid button {
+    grid-column: span 3;
+    width: 100%;
+  }
+}
+
+@media (max-width: 580px) {
+  .mochi-search-grid {
+    grid-template-columns: 1fr;
+  }
+  .mochi-search-grid button {
+    grid-column: span 1;
+  }
+}
+
+

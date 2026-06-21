@@ -948,7 +948,7 @@ export default function App() {
 
       {/* Main Workspace Dashboard */}
       {activeTab === 'learn' && (
-        <div className="dashboard-grid">
+        <div className={`dashboard-grid ${activeLesson ? 'has-active-lesson' : ''}`}>
           {/* Left Column: Lesson creator & presets switcher */}
           <LessonCreator
             apiKey={apiKey}
@@ -1038,7 +1038,7 @@ export default function App() {
           ) : (
             /* Recent Library column */
             <main className="glass-panel main-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '480px', padding: '1.75rem', minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div className="library-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div style={{ textAlign: 'left' }}>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <BookOpen size={20} style={{ color: 'var(--primary)' }} />
@@ -1432,7 +1432,7 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* Search Settings */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
+                  <div className="mochi-search-grid">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
                       <select
@@ -1647,7 +1647,7 @@ export default function App() {
                                 }}
                               />
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, overflow: 'hidden' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', width: '100%' }}>
+                                <div className="mochi-card-row-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', width: '100%' }}>
                                   <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
                                     {cardPreview}
                                   </div>
