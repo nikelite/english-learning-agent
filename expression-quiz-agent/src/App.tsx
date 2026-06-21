@@ -173,6 +173,8 @@ export default function App() {
         card.mochiForgetCount = 0;
         card.mochiTotalForgetCount = 0;
         card.mochiReviewedInPeriod = false;
+        card.mochiLatestReviewTime = 0;
+        card.mochiLatestReviewDateStr = '';
 
         if (!card.reviews || !Array.isArray(card.reviews)) return;
         
@@ -190,6 +192,37 @@ export default function App() {
             card.mochiForgetCount = failedReviews.length;
             forgotten++;
           }
+
+          // Find the latest review within the period
+          const reviewsWithTime = reviewsInPeriod.map((r: any) => {
+            let t = 0;
+            let dateStr = '';
+            if (typeof r.date === 'string') {
+              dateStr = r.date;
+            } else if (r.date && typeof r.date === 'object') {
+              dateStr = r.date.$date || r.date.date || '';
+            }
+            if (dateStr) {
+              t = new Date(dateStr).getTime();
+            }
+            return { review: r, time: t, dateStr };
+          });
+          reviewsWithTime.sort((a, b) => b.time - a.time);
+
+          if (reviewsWithTime[0] && reviewsWithTime[0].time > 0) {
+            card.mochiLatestReviewTime = reviewsWithTime[0].time;
+            try {
+              const d = new Date(reviewsWithTime[0].time);
+              const yy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              const hh = String(d.getHours()).padStart(2, '0');
+              const min = String(d.getMinutes()).padStart(2, '0');
+              card.mochiLatestReviewDateStr = `${yy}-${mm}-${dd} ${hh}:${min}`;
+            } catch (e) {
+              card.mochiLatestReviewDateStr = reviewsWithTime[0].dateStr;
+            }
+          }
         }
       });
 
@@ -204,8 +237,8 @@ export default function App() {
         filtered = filtered.filter(card => card.mochiForgetCount > 0);
       }
 
-      // Sort: cards with higher mochiForgetCount appear first
-      filtered.sort((a, b) => (b.mochiForgetCount || 0) - (a.mochiForgetCount || 0));
+      // Sort: cards reviewed more recently (higher mochiLatestReviewTime) appear first
+      filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
 
       setMochiCards(filtered);
       if (filtered.length === 0) {
@@ -1596,6 +1629,11 @@ export default function App() {
                                     </span>
                                   )}
                                 </div>
+                                {card.mochiLatestReviewDateStr && (
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', marginTop: '0.1rem' }}>
+                                    <span>🕒 최근 복습: {card.mochiLatestReviewDateStr}</span>
+                                  </div>
+                                )}
                               </div>
                             </label>
                           );
