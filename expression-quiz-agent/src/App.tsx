@@ -88,6 +88,7 @@ export default function App() {
   });
   const [mochiCards, setMochiCards] = useState<any[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [mochiTotalMatches, setMochiTotalMatches] = useState<number>(0);
   const [isMochiLoading, setIsMochiLoading] = useState(false);
   const [mochiLoadedCount, setMochiLoadedCount] = useState<number>(0);
   const [mochiError, setMochiError] = useState<string | null>(null);
@@ -100,6 +101,7 @@ export default function App() {
     setIsMochiModalOpen(true);
     setMochiError(null);
     setMochiCards([]);
+    setMochiTotalMatches(0);
     setSelectedCardIds(new Set());
     setMochiTotalReviewed(0);
     setMochiTotalForgotten(0);
@@ -245,7 +247,8 @@ export default function App() {
       // Sort: cards reviewed more recently (higher mochiLatestReviewTime) appear first
       filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
 
-      setMochiCards(filtered);
+      setMochiTotalMatches(filtered.length);
+      setMochiCards(filtered.slice(0, 300));
       if (filtered.length === 0) {
         const periodStr = selectedMochiStartDate === selectedMochiEndDate 
           ? selectedMochiStartDate 
@@ -1529,7 +1532,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                      조회된 오답 카드 ({mochiCards.length}개)
+                      조회된 오답 카드 ({mochiTotalMatches > 300 ? `최근 복습 300개 표시 중 (총 ${mochiTotalMatches}개)` : `${mochiTotalMatches}개`})
                     </span>
                     {mochiCards.length > 0 && !mochiImportingProgress && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>

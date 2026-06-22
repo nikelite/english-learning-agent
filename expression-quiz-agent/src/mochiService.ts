@@ -121,6 +121,9 @@ export async function fetchMochiCards(
 
     const data = await response.json();
     const docs = data.docs || [];
+    if (docs.length === 0) {
+      break;
+    }
     allCards = [...allCards, ...docs];
     if (onProgress) {
       onProgress(allCards.length);
