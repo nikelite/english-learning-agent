@@ -189,6 +189,39 @@ export default function App() {
         const allFailedReviews = card.reviews.filter((r: any) => isForgotten(r));
         card.mochiTotalForgetCount = allFailedReviews.length;
 
+        // Compute overall latest review
+        let overallLatestTime = 0;
+        let overallLatestDateStr = '';
+        const allReviewsWithTime = card.reviews.map((r: any) => {
+          let t = 0;
+          let dateStr = '';
+          if (typeof r.date === 'string') {
+            dateStr = r.date;
+          } else if (r.date && typeof r.date === 'object') {
+            dateStr = r.date.$date || r.date.date || '';
+          }
+          if (dateStr) {
+            t = new Date(dateStr).getTime();
+          }
+          return { time: t, dateStr };
+        }).filter(item => item.time > 0);
+
+        if (allReviewsWithTime.length > 0) {
+          allReviewsWithTime.sort((a, b) => b.time - a.time);
+          overallLatestTime = allReviewsWithTime[0].time;
+          try {
+            const d = new Date(overallLatestTime);
+            const yy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const hh = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            overallLatestDateStr = `${yy}-${mm}-${dd} ${hh}:${min}`;
+          } catch (e) {
+            overallLatestDateStr = allReviewsWithTime[0].dateStr;
+          }
+        }
+
         const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date));
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
@@ -212,11 +245,11 @@ export default function App() {
             if (dateStr) {
               t = new Date(dateStr).getTime();
             }
-            return { review: r, time: t, dateStr };
-          });
-          reviewsWithTime.sort((a, b) => b.time - a.time);
+            return { time: t, dateStr };
+          }).filter(item => item.time > 0);
 
-          if (reviewsWithTime[0] && reviewsWithTime[0].time > 0) {
+          if (reviewsWithTime.length > 0) {
+            reviewsWithTime.sort((a, b) => b.time - a.time);
             card.mochiLatestReviewTime = reviewsWithTime[0].time;
             try {
               const d = new Date(reviewsWithTime[0].time);
@@ -231,18 +264,24 @@ export default function App() {
             }
           }
         }
+
+        // Fallback to overall latest review if not reviewed in the selected period (mainly for pinned cards)
+        if (!card.mochiLatestReviewTime && overallLatestTime > 0) {
+          card.mochiLatestReviewTime = overallLatestTime;
+          card.mochiLatestReviewDateStr = `${overallLatestDateStr} (기간 외)`;
+        }
       });
 
       setMochiTotalReviewed(reviewed);
       setMochiTotalForgotten(forgotten);
 
-      // We should only display cards that WERE reviewed within the selected period.
-      let filtered = allCards.filter(card => card.mochiReviewedInPeriod);
+      // Display cards reviewed in the selected period OR pinned cards (regardless of period)
+      const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
 
-      // Filter further by incorrect reviews if filterIncorrectOnly is true
-      if (filterIncorrectOnly) {
-        filtered = filtered.filter(card => card.mochiForgetCount > 0);
-      }
+      let filtered = allCards.filter(card => {
+        const matchesPeriod = card.mochiReviewedInPeriod && (!filterIncorrectOnly || card.mochiForgetCount > 0);
+        return matchesPeriod || isCardPinned(card);
+      });
 
       // Sort: cards reviewed more recently (higher mochiLatestReviewTime) appear first
       filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
@@ -1611,6 +1650,7 @@ export default function App() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         {mochiCards.map((card) => {
                           const isSelected = selectedCardIds.has(card.id);
+                          const isCardPinned = card.pinned === true || card['pinned?'] === true;
                           const cardPreview = card.content 
                             ? card.content.split('---')[0].trim() 
                             : (card.fields ? Object.values(card.fields).map((f: any) => f.value).filter(Boolean)[0] || '내용 없음' : '내용 없음');
@@ -1652,6 +1692,7 @@ export default function App() {
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, overflow: 'hidden' }}>
                                 <div className="mochi-card-row-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', width: '100%' }}>
                                   <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
+                                    {isCardPinned && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }}>📌</span>}
                                     {cardPreview}
                                   </div>
                                   {(card.mochiForgetCount > 0 || card.mochiTotalForgetCount > 0) && (
