@@ -95,6 +95,7 @@ export default function App() {
   const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
   const [mochiTotalReviewed, setMochiTotalReviewed] = useState<number>(0);
   const [mochiTotalForgotten, setMochiTotalForgotten] = useState<number>(0);
+  const [mochiTotalPinnedCount, setMochiTotalPinnedCount] = useState<number>(0);
   const [mochiImportingProgress, setMochiImportingProgress] = useState<{current: number, total: number} | null>(null);
 
   const handleOpenMochiModal = async () => {
@@ -105,6 +106,7 @@ export default function App() {
     setSelectedCardIds(new Set());
     setMochiTotalReviewed(0);
     setMochiTotalForgotten(0);
+    setMochiTotalPinnedCount(0);
     setMochiLoadedCount(0);
     
     if (!mochiApiKey.trim()) {
@@ -287,6 +289,7 @@ export default function App() {
       filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
 
       setMochiTotalMatches(filtered.length);
+      setMochiTotalPinnedCount(filtered.filter(isCardPinned).length);
       setMochiCards(filtered.slice(0, 300));
       if (filtered.length === 0) {
         const periodStr = selectedMochiStartDate === selectedMochiEndDate 
@@ -1540,10 +1543,16 @@ export default function App() {
                   </label>
                 </div>
 
-                {mochiTotalReviewed > 0 && (
+                {(mochiTotalReviewed > 0 || mochiTotalPinnedCount > 0) && (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.03)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>📊 선택 기간 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.</span>
-                    {mochiTotalForgotten > 0 && (
+                    <span>
+                      📊 {mochiTotalReviewed > 0 ? (
+                        <>선택 기간 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.{mochiTotalPinnedCount > 0 && <> (고정 카드 <strong>{mochiTotalPinnedCount}개</strong> 포함)</>}</>
+                      ) : (
+                        <>고정 카드 <strong>{mochiTotalPinnedCount}개</strong>를 가져왔습니다.</>
+                      )}
+                    </span>
+                    {mochiTotalReviewed > 0 && mochiTotalForgotten > 0 && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: '700' }}>오답률 {Math.round((mochiTotalForgotten / mochiTotalReviewed) * 100)}%</span>
                     )}
                   </div>
