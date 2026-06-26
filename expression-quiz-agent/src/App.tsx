@@ -93,9 +93,12 @@ export default function App() {
   const [mochiLoadedCount, setMochiLoadedCount] = useState<number>(0);
   const [mochiError, setMochiError] = useState<string | null>(null);
   const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
+  const [includePinned, setIncludePinned] = useState(true);
+  const [includeNewToReview, setIncludeNewToReview] = useState(true);
   const [mochiTotalReviewed, setMochiTotalReviewed] = useState<number>(0);
   const [mochiTotalForgotten, setMochiTotalForgotten] = useState<number>(0);
   const [mochiTotalPinnedCount, setMochiTotalPinnedCount] = useState<number>(0);
+  const [mochiTotalNewToReviewCount, setMochiTotalNewToReviewCount] = useState<number>(0);
   const [mochiImportingProgress, setMochiImportingProgress] = useState<{current: number, total: number} | null>(null);
 
   const handleOpenMochiModal = async () => {
@@ -107,6 +110,7 @@ export default function App() {
     setMochiTotalReviewed(0);
     setMochiTotalForgotten(0);
     setMochiTotalPinnedCount(0);
+    setMochiTotalNewToReviewCount(0);
     setMochiLoadedCount(0);
     
     if (!mochiApiKey.trim()) {
@@ -137,6 +141,8 @@ export default function App() {
     setSelectedCardIds(new Set());
     setMochiTotalReviewed(0);
     setMochiTotalForgotten(0);
+    setMochiTotalPinnedCount(0);
+    setMochiTotalNewToReviewCount(0);
 
     try {
       const allCards = await fetchMochiCards(mochiApiKey, selectedMochiDeck, (count) => {
@@ -224,6 +230,18 @@ export default function App() {
           }
         }
 
+        // Compute overall earliest review (first review ever)
+        let overallEarliestTime = 0;
+        if (allReviewsWithTime.length > 0) {
+          const sortedChronological = [...allReviewsWithTime].sort((a, b) => a.time - b.time);
+          overallEarliestTime = sortedChronological[0].time;
+        }
+
+        card.mochiNewToReviewInPeriod = false;
+        if (overallEarliestTime > 0) {
+          card.mochiNewToReviewInPeriod = overallEarliestTime >= startLocalTime && overallEarliestTime <= endLocalTime;
+        }
+
         const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date));
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
@@ -277,12 +295,14 @@ export default function App() {
       setMochiTotalReviewed(reviewed);
       setMochiTotalForgotten(forgotten);
 
-      // Display cards reviewed in the selected period OR pinned cards (regardless of period)
+      // Display cards reviewed in the selected period OR pinned cards OR new to review cards
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
 
       let filtered = allCards.filter(card => {
         const matchesPeriod = card.mochiReviewedInPeriod && (!filterIncorrectOnly || card.mochiForgetCount > 0);
-        return matchesPeriod || isCardPinned(card);
+        const matchesPinned = includePinned && isCardPinned(card);
+        const matchesNewToReview = includeNewToReview && card.mochiNewToReviewInPeriod;
+        return matchesPeriod || matchesPinned || matchesNewToReview;
       });
 
       // Sort: cards reviewed more recently (higher mochiLatestReviewTime) appear first
@@ -290,6 +310,7 @@ export default function App() {
 
       setMochiTotalMatches(filtered.length);
       setMochiTotalPinnedCount(filtered.filter(isCardPinned).length);
+      setMochiTotalNewToReviewCount(filtered.filter(c => c.mochiNewToReviewInPeriod).length);
       setMochiCards(filtered.slice(0, 300));
       if (filtered.length === 0) {
         const periodStr = selectedMochiStartDate === selectedMochiEndDate 
@@ -1531,25 +1552,66 @@ export default function App() {
                     </button>
                   </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={filterIncorrectOnly}
-                      onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
-                      disabled={isMochiLoading}
-                      style={{ accentColor: 'var(--primary)' }}
-                    />
-                    <span>선택한 기간에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
-                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.25rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={filterIncorrectOnly}
+                        onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
+                        disabled={isMochiLoading}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span>선택한 기간에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={includePinned}
+                        onChange={(e) => setIncludePinned(e.target.checked)}
+                        disabled={isMochiLoading}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span>고정 카드(📌) 항상 포함 (선택 기간 무관)</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={includeNewToReview}
+                        onChange={(e) => setIncludeNewToReview(e.target.checked)}
+                        disabled={isMochiLoading}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span>신규 복습 진입 카드(🌱) 포함 (선택 기간 내 첫 복습 진행)</span>
+                    </label>
+                  </div>
                 </div>
 
-                {(mochiTotalReviewed > 0 || mochiTotalPinnedCount > 0) && (
+                {(mochiTotalReviewed > 0 || mochiTotalPinnedCount > 0 || mochiTotalNewToReviewCount > 0) && (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.03)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>
                       📊 {mochiTotalReviewed > 0 ? (
-                        <>선택 기간 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.{mochiTotalPinnedCount > 0 && <> (고정 카드 <strong>{mochiTotalPinnedCount}개</strong> 포함)</>}</>
+                        <>
+                          선택 기간 복습 진행 <strong>{mochiTotalReviewed}개</strong> 중 <strong>{mochiTotalForgotten}개</strong> 틀렸습니다.
+                          {(mochiTotalPinnedCount > 0 || mochiTotalNewToReviewCount > 0) && (
+                            <>
+                              {' '}
+                              (
+                              {mochiTotalPinnedCount > 0 && <>고정 <strong>{mochiTotalPinnedCount}개</strong></>}
+                              {mochiTotalPinnedCount > 0 && mochiTotalNewToReviewCount > 0 && <>, </>}
+                              {mochiTotalNewToReviewCount > 0 && <>신규 진입 <strong>{mochiTotalNewToReviewCount}개</strong></>}
+                              {' 포함)'}
+                            </>
+                          )}
+                        </>
                       ) : (
-                        <>고정 카드 <strong>{mochiTotalPinnedCount}개</strong>를 가져왔습니다.</>
+                        <>
+                          {mochiTotalPinnedCount > 0 && <>고정 카드 <strong>{mochiTotalPinnedCount}개</strong></>}
+                          {mochiTotalPinnedCount > 0 && mochiTotalNewToReviewCount > 0 && <> 및 </>}
+                          {mochiTotalNewToReviewCount > 0 && <>신규 진입 카드 <strong>{mochiTotalNewToReviewCount}개</strong></>}
+                          {'를 가져왔습니다.'}
+                        </>
                       )}
                     </span>
                     {mochiTotalReviewed > 0 && mochiTotalForgotten > 0 && (
@@ -1701,7 +1763,8 @@ export default function App() {
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, overflow: 'hidden' }}>
                                 <div className="mochi-card-row-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', width: '100%' }}>
                                   <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
-                                    {isCardPinned && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }}>📌</span>}
+                                    {isCardPinned && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }} title="고정 카드">📌</span>}
+                                    {card.mochiNewToReviewInPeriod && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }} title="신규 복습 진입">🌱</span>}
                                     {cardPreview}
                                   </div>
                                   {(card.mochiForgetCount > 0 || card.mochiTotalForgetCount > 0) && (
