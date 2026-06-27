@@ -49,7 +49,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'draft'>('all');
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('eng_user_email') || '';
   });
@@ -101,6 +101,10 @@ export default function App() {
   const [mochiTotalNewToReviewCount, setMochiTotalNewToReviewCount] = useState<number>(0);
   const [mochiImportingProgress, setMochiImportingProgress] = useState<{current: number, total: number} | null>(null);
   const [isMochiSearchExpanded, setIsMochiSearchExpanded] = useState<boolean>(true);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set());
+  const [isBulkGenerating, setIsBulkGenerating] = useState<boolean>(false);
+  const [bulkProgress, setBulkProgress] = useState<{current: number, total: number} | null>(null);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState<boolean>(false);
 
   const handleOpenMochiModal = async () => {
     setIsMochiModalOpen(true);
@@ -332,10 +336,6 @@ export default function App() {
 
   const handleImportSelectedCards = async () => {
     if (selectedCardIds.size === 0) return;
-    if (!apiKey) {
-      setMochiError("오답 학습 세트를 생성하려면 설정(⚙️)에서 Gemini API Key를 먼저 입력해야 합니다.");
-      return;
-    }
 
     const selectedCardsList = mochiCards.filter(card => selectedCardIds.has(card.id));
     if (selectedCardsList.length === 0) return;
@@ -345,10 +345,7 @@ export default function App() {
     setMochiImportingProgress({ current: 0, total: selectedCardsList.length });
 
     try {
-      let lastGeneratedLesson: Lesson | null = null;
-      
-      const savedCount = localStorage.getItem('last_expr_question_count');
-      const qCount = savedCount ? Number(savedCount) : 5;
+      let lastImportedLesson: Lesson | null = null;
 
       for (let i = 0; i < selectedCardsList.length; i++) {
         const card = selectedCardsList[i];
@@ -360,20 +357,29 @@ export default function App() {
 
         if (!text.trim()) continue;
 
-        // Generate lesson via Gemini API
-        const generated = await generateLessonFromText(text, apiKey, qCount);
-        
         // Extract title from card content preview
         const firstLine = text.split('\n')[0].replace(/[#*`]/g, '').trim().substring(0, 25);
-        generated.title = `[Mochi] ${firstLine || '가져온 오답 카드'}...`;
+        const title = `[Mochi] ${firstLine || '가져온 오답 카드'}...`;
+
+        const draftLesson: Lesson = {
+          id: 'mochi_' + card.id + '_' + Date.now(),
+          title: title,
+          sourceText: text,
+          createdAt: Date.now(),
+          isDraft: true,
+          eli5: { explanation: '', analogy: '', example: '', exampleContext: '' },
+          memoryTips: { tipFormula: '', conceptA: '', conceptADesc: '', conceptB: '', conceptBDesc: '', visualImage: '' },
+          pronunciation: { wordOrPhrase: '', phoneticRespelling: '', koreanPhonetic: '', stressGuide: '' },
+          quizzes: []
+        };
 
         // Save directly to lessons history library
-        const saved = await saveLessonToHistory(generated);
-        lastGeneratedLesson = saved;
+        const saved = await saveLessonToHistory(draftLesson);
+        lastImportedLesson = saved;
       }
 
-      if (selectedCardsList.length === 1 && lastGeneratedLesson) {
-        setActiveLesson(lastGeneratedLesson);
+      if (selectedCardsList.length === 1 && lastImportedLesson) {
+        setActiveLesson(lastImportedLesson);
         setViewMode('study');
         setActiveStudyTab('eli5');
       } else {
@@ -383,10 +389,73 @@ export default function App() {
       
       setIsMochiModalOpen(false);
     } catch (err: any) {
-      setMochiError(err.message || 'AI 학습 세트를 생성하는 중 오류가 발생했습니다.');
+      setMochiError(err.message || '카드를 보관함에 가져오는 중 오류가 발생했습니다.');
     } finally {
       setIsMochiLoading(false);
       setMochiImportingProgress(null);
+    }
+  };
+
+  const handleGenerateSingleDraft = async () => {
+    if (!apiKey) {
+      alert("AI 학습 세트를 생성하려면 설정(⚙️)에서 Gemini API Key를 먼저 등록해 주세요.");
+      return;
+    }
+    if (!activeLesson) return;
+
+    setIsGeneratingDraft(true);
+    try {
+      const savedCount = localStorage.getItem('last_expr_question_count');
+      const qCount = savedCount ? Number(savedCount) : 5;
+
+      const generated = await generateLessonFromText(activeLesson.sourceText, apiKey, qCount);
+      generated.id = activeLesson.id; // Keep original ID
+      generated.title = activeLesson.title;
+
+      const saved = await saveLessonToHistory(generated);
+      setActiveLesson(saved);
+    } catch (err: any) {
+      alert(err.message || 'AI 학습 세트 생성에 실패했습니다.');
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  };
+
+  const handleBulkGenerateQuizzes = async () => {
+    if (!apiKey) {
+      alert("AI 학습 세트를 생성하려면 설정(⚙️)에서 Gemini API Key를 먼저 등록해 주세요.");
+      return;
+    }
+    const idsToGenerate = Array.from(selectedDraftIds);
+    if (idsToGenerate.length === 0) return;
+
+    setIsBulkGenerating(true);
+    setBulkProgress({ current: 0, total: idsToGenerate.length });
+
+    try {
+      const savedCount = localStorage.getItem('last_expr_question_count');
+      const qCount = savedCount ? Number(savedCount) : 5;
+
+      for (let i = 0; i < idsToGenerate.length; i++) {
+        const lessonId = idsToGenerate[i];
+        setBulkProgress({ current: i + 1, total: idsToGenerate.length });
+
+        const draftLesson = lessonsHistory.find(item => item.id === lessonId);
+        if (!draftLesson) continue;
+
+        const generated = await generateLessonFromText(draftLesson.sourceText, apiKey, qCount);
+        generated.id = draftLesson.id;
+        generated.title = draftLesson.title;
+
+        await saveLessonToHistory(generated);
+      }
+
+      setSelectedDraftIds(new Set());
+    } catch (err: any) {
+      alert(err.message || '일괄 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsBulkGenerating(false);
+      setBulkProgress(null);
     }
   };
 
@@ -982,22 +1051,26 @@ export default function App() {
     }
   };
 
+  const solvedCount = lessonsHistory.filter(item => item.userAnswers && !item.isDraft).length;
+  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers && !item.isDraft).length;
+  const draftCount = lessonsHistory.filter(item => item.isDraft).length;
+
   const filteredHistory = lessonsHistory.filter(item => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.sourceText.toLowerCase().includes(q);
     if (!matchesSearch) return false;
 
     if (filterMode === 'solved') {
-      return !!item.userAnswers;
+      return !!item.userAnswers && !item.isDraft;
     }
     if (filterMode === 'unsolved') {
-      return !item.userAnswers;
+      return !item.userAnswers && !item.isDraft;
+    }
+    if (filterMode === 'draft') {
+      return !!item.isDraft;
     }
     return true;
   });
-
-  const solvedCount = lessonsHistory.filter(item => item.userAnswers).length;
-  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers).length;
 
   return (
     <div className="app-container">
@@ -1060,35 +1133,78 @@ export default function App() {
                       className="btn btn-secondary"
                       onClick={() => setIsShareOpen(true)}
                       style={{ padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}
+                      disabled={activeLesson.isDraft}
                     >
                       <Share2 size={15} style={{ color: 'var(--secondary)' }} />
                       공유하기
                     </button>
                   )}
 
-                  {viewMode === 'study' ? (
-                    <button
-                      className="btn btn-accent"
-                      onClick={() => setViewMode('quiz')}
-                      style={{ padding: '0.6rem 1.25rem' }}
-                    >
-                      <GraduationCap size={16} />
-                      인터랙티브 퀴즈 풀기
-                    </button>
-                  ) : (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setViewMode('study')}
-                      style={{ padding: '0.6rem 1.25rem' }}
-                    >
-                      학습자료 다시보기
-                    </button>
+                  {!activeLesson.isDraft && (
+                    viewMode === 'study' ? (
+                      <button
+                        className="btn btn-accent"
+                        onClick={() => setViewMode('quiz')}
+                        style={{ padding: '0.6rem 1.25rem' }}
+                      >
+                        <GraduationCap size={16} />
+                        인터랙티브 퀴즈 풀기
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setViewMode('study')}
+                        style={{ padding: '0.6rem 1.25rem' }}
+                      >
+                        학습자료 다시보기
+                      </button>
+                    )
                   )}
                 </div>
               </div>
 
               {/* Toggle views between Learn tabs and Quiz panel */}
-              {viewMode === 'study' ? (
+              {activeLesson.isDraft ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '3rem 1.5rem', alignItems: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: '12px', marginTop: '1rem' }}>
+                  <span style={{ fontSize: '3rem' }}>🌱</span>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white' }}>AI 학습자료 미생성 상태</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '440px', lineHeight: '1.6', margin: 0 }}>
+                    이 카드는 Mochi에서 가져온 원본 텍스트만 저장된 상태입니다.<br />
+                    아래 버튼을 눌러 AI 퀴즈, 문장 해설, 발음 가이드 및 메모리 팁을 즉시 생성할 수 있습니다.
+                  </p>
+
+                  <div style={{ width: '100%', maxWidth: '520px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '1rem', textAlign: 'left' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>카드 원본 텍스트</label>
+                    <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: '150px', overflowY: 'auto', paddingRight: '0.25rem' }} className="custom-scrollbar">
+                      {activeLesson.sourceText}
+                    </div>
+                  </div>
+
+                  {isGeneratingDraft ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
+                      <div className="spinner" style={{ width: '28px', height: '28px', borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.08)', borderTopColor: 'var(--primary)', animation: 'spin 1s linear infinite' }}></div>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>AI 학습 세트를 생성하는 중... (약 5~10초 소요)</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '280px', marginTop: '1rem' }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleGenerateSingleDraft}
+                        style={{ width: '100%', padding: '0.75rem', fontWeight: '700' }}
+                      >
+                        ✨ AI 학습자료 생성하기
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setActiveLesson(null)}
+                        style={{ width: '100%', padding: '0.75rem' }}
+                      >
+                        목록으로 돌아가기
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : viewMode === 'study' ? (
                 <StudyTabs
                   lesson={activeLesson}
                   activeStudyTab={activeStudyTab}
@@ -1215,7 +1331,87 @@ export default function App() {
                 >
                   풀이 완료 ({solvedCount})
                 </button>
+                <button
+                  onClick={() => setFilterMode('draft')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'draft' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                    background: filterMode === 'draft' ? 'var(--primary-glow)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'draft' ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'draft' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  AI 미생성 ({draftCount})
+                </button>
               </div>
+
+              {/* Bulk action panel for draft generation */}
+              {selectedDraftIds.size > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(139, 92, 246, 0.08)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '8px',
+                  marginBottom: '0.75rem',
+                  fontSize: '0.85rem'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600' }}>
+                    대기 카드 {selectedDraftIds.size}개 선택됨
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSelectedDraftIds(new Set())}
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                    >
+                      선택 해제
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleBulkGenerateQuizzes}
+                      disabled={isBulkGenerating}
+                      style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
+                    >
+                      {isBulkGenerating ? '생성 중...' : '✨ AI 일괄 생성'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bulkProgress && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border-color)',
+                  padding: '0.85rem 1rem',
+                  borderRadius: '8px',
+                  marginBottom: '0.75rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '600' }}>
+                    <span style={{ color: 'var(--primary)' }}>⚡ AI 학습 세트 일괄 생성 중...</span>
+                    <span style={{ color: 'white' }}>{bulkProgress.current} / {bulkProgress.total}</span>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                      background: 'var(--primary)',
+                      transition: 'width 0.2s ease'
+                    }}></div>
+                  </div>
+                </div>
+              )}
 
               <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 'calc(100vh - 280px)', minHeight: '480px', paddingRight: '0.25rem', overflowY: 'auto', overflowX: 'hidden' }}>
                 {lessonsHistory.length === 0 ? (
@@ -1250,7 +1446,7 @@ export default function App() {
                         padding: '1rem',
                         background: 'rgba(255,255,255,0.02)',
                         borderLeftWidth: '4px',
-                        borderLeftColor: 'var(--secondary)',
+                        borderLeftColor: item.isDraft ? '#f59e0b' : 'var(--secondary)',
                         transition: 'transform 0.15s ease, background 0.15s ease',
                         borderRadius: '0 8px 8px 0',
                         overflow: 'hidden',
@@ -1265,14 +1461,44 @@ export default function App() {
                         e.currentTarget.style.transform = 'none';
                       }}
                     >
+                      {item.isDraft && (
+                        <div 
+                          style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedDraftIds.has(item.id)}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                            onChange={() => {
+                              setSelectedDraftIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(item.id)) {
+                                  next.delete(item.id);
+                                } else {
+                                  next.add(item.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+
                       <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                             📅 {new Date(item.createdAt).toLocaleDateString()}
                           </span>
-                           <span style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
-                            📝 {item.quizzes.length} 문항
-                          </span>
+                          {item.isDraft ? (
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '700' }}>
+                              ⚡ AI 미생성
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
+                              📝 {item.quizzes.length} 문항
+                            </span>
+                          )}
                           {item.userAnswers ? (() => {
                             const firstScore = item.firstAttemptScore 
                               ? `${item.firstAttemptScore.score} / ${item.firstAttemptScore.total}`

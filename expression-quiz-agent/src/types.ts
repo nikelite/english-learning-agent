@@ -39,6 +39,7 @@ export interface Lesson {
   memoryTips: MemoryTipData;
   pronunciation: PronunciationData;
   quizzes: QuizItem[];
+  isDraft?: boolean;
   ownerId?: string | null;
   sharedWith?: string[];
   userAnswers?: Record<string, number>;
