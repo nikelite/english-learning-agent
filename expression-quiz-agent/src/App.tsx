@@ -1465,7 +1465,7 @@ export default function App() {
       {/* Mochi Import Modal */}
       {isMochiModalOpen && (
         <div className="modal-overlay" onClick={() => setIsMochiModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: '650px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '650px', maxHeight: 'calc(100vh - 2rem)', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <button 
               className="btn btn-secondary" 
               style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.25rem', borderRadius: '50%' }}
@@ -1495,9 +1495,10 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {/* Search Settings */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflowY: 'auto', paddingRight: '0.25rem' }} className="custom-scrollbar">
+                  {/* Search Settings */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div className="mochi-search-grid">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
@@ -1801,7 +1802,9 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem', flexShrink: 0 }}>
                   <button 
                     type="button" 
                     className="btn btn-secondary"
