@@ -1055,6 +1055,32 @@ export default function App() {
   const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers && !item.isDraft).length;
   const draftCount = lessonsHistory.filter(item => item.isDraft).length;
 
+  const getNextUnsolvedLesson = (): Lesson | null => {
+    if (!activeLesson) return null;
+    const currentIndex = lessonsHistory.findIndex(item => item.id === activeLesson.id);
+    if (currentIndex === -1) return null;
+
+    // Search forward
+    for (let i = currentIndex + 1; i < lessonsHistory.length; i++) {
+      const item = lessonsHistory[i];
+      if (!item.userAnswers && !item.isDraft) {
+        return item;
+      }
+    }
+
+    // Wrap around and search backward
+    for (let i = 0; i < currentIndex; i++) {
+      const item = lessonsHistory[i];
+      if (!item.userAnswers && !item.isDraft) {
+        return item;
+      }
+    }
+
+    return null;
+  };
+
+  const nextUnsolvedLesson = getNextUnsolvedLesson();
+
   const filteredHistory = lessonsHistory.filter(item => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.sourceText.toLowerCase().includes(q);
@@ -1219,6 +1245,11 @@ export default function App() {
                   onBackToStudy={() => setViewMode('study')}
                   injectedQuizzes={injectedQuizzes}
                   onGraduateReview={handleGraduateReview}
+                  onLoadNextUnsolvedLesson={nextUnsolvedLesson ? () => {
+                    setActiveLesson(nextUnsolvedLesson);
+                    setViewMode('study');
+                    setActiveStudyTab('eli5');
+                  } : undefined}
                 />
               )}
             </main>

@@ -10,6 +10,7 @@ interface QuizPanelProps {
   onBackToStudy: () => void;
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
+  onLoadNextUnsolvedLesson?: () => void;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
@@ -19,7 +20,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   onProgressUpdate,
   onBackToStudy,
   injectedQuizzes,
-  onGraduateReview
+  onGraduateReview,
+  onLoadNextUnsolvedLesson
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
@@ -245,6 +247,16 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {onLoadNextUnsolvedLesson && (
+            <button 
+              className="btn btn-accent" 
+              onClick={onLoadNextUnsolvedLesson}
+              style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 15px rgba(16,185,129,0.2)', fontWeight: '700' }}
+            >
+              ➡️ 다음 미풀이 학습 풀기
+            </button>
+          )}
+
           <button className="btn btn-secondary" onClick={onBackToStudy}>
             학습자료 다시보기
           </button>
