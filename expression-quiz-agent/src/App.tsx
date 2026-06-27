@@ -100,6 +100,7 @@ export default function App() {
   const [mochiTotalPinnedCount, setMochiTotalPinnedCount] = useState<number>(0);
   const [mochiTotalNewToReviewCount, setMochiTotalNewToReviewCount] = useState<number>(0);
   const [mochiImportingProgress, setMochiImportingProgress] = useState<{current: number, total: number} | null>(null);
+  const [isMochiSearchExpanded, setIsMochiSearchExpanded] = useState<boolean>(true);
 
   const handleOpenMochiModal = async () => {
     setIsMochiModalOpen(true);
@@ -112,6 +113,7 @@ export default function App() {
     setMochiTotalPinnedCount(0);
     setMochiTotalNewToReviewCount(0);
     setMochiLoadedCount(0);
+    setIsMochiSearchExpanded(true);
     
     if (!mochiApiKey.trim()) {
       return;
@@ -317,6 +319,9 @@ export default function App() {
           ? selectedMochiStartDate 
           : `${selectedMochiStartDate} ~ ${selectedMochiEndDate}`;
         setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
+        setIsMochiSearchExpanded(true);
+      } else {
+        setIsMochiSearchExpanded(false);
       }
     } catch (err: any) {
       setMochiError(err.message || 'Mochi 카드를 불러오는 중 에러가 발생했습니다.');
@@ -1498,96 +1503,129 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflowY: 'auto', paddingRight: '0.25rem' }} className="custom-scrollbar">
                   {/* Search Settings */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div className="mochi-search-grid">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
-                      <select
-                        value={selectedMochiDeck}
-                        onChange={(e) => setSelectedMochiDeck(e.target.value)}
-                        className="input-glow select-glow"
-                        style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)', height: '40px', padding: '0.5rem' }}
-                        disabled={isMochiLoading}
+                  {isMochiSearchExpanded ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div className="mochi-search-grid">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
+                          <select
+                            value={selectedMochiDeck}
+                            onChange={(e) => setSelectedMochiDeck(e.target.value)}
+                            className="input-glow select-glow"
+                            style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)', height: '40px', padding: '0.5rem' }}
+                            disabled={isMochiLoading}
+                          >
+                            <option value="all">모든 덱 (All Decks)</option>
+                            {mochiDecks.map((deck) => (
+                              <option key={deck.id} value={deck.id}>
+                                {deck.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>시작 날짜 (Start)</label>
+                          <input
+                            type="date"
+                            value={selectedMochiStartDate}
+                            onChange={(e) => setSelectedMochiStartDate(e.target.value)}
+                            className="input-glow"
+                            style={{ height: '40px' }}
+                            disabled={isMochiLoading}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>종료 날짜 (End)</label>
+                          <input
+                            type="date"
+                            value={selectedMochiEndDate}
+                            onChange={(e) => setSelectedMochiEndDate(e.target.value)}
+                            className="input-glow"
+                            style={{ height: '40px' }}
+                            disabled={isMochiLoading}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={handleSearchMochiCards}
+                          disabled={isMochiLoading}
+                          style={{ height: '40px', padding: '0 1.25rem' }}
+                        >
+                          {isMochiLoading ? '조회 중...' : '카드 조회'}
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.25rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={filterIncorrectOnly}
+                            onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
+                            disabled={isMochiLoading}
+                            style={{ accentColor: 'var(--primary)' }}
+                          />
+                          <span>선택한 기간에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
+                        </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={includePinned}
+                            onChange={(e) => setIncludePinned(e.target.checked)}
+                            disabled={isMochiLoading}
+                            style={{ accentColor: 'var(--primary)' }}
+                          />
+                          <span>고정 카드(📌) 항상 포함 (선택 기간 무관)</span>
+                        </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={includeNewToReview}
+                            onChange={(e) => setIncludeNewToReview(e.target.checked)}
+                            disabled={isMochiLoading}
+                            style={{ accentColor: 'var(--primary)' }}
+                          />
+                          <span>신규 복습 진입 카드(🌱) 포함 (선택 기간 내 첫 복습 진행)</span>
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      background: 'rgba(255, 255, 255, 0.03)', 
+                      border: '1px solid var(--border-color)', 
+                      padding: '0.5rem 0.75rem', 
+                      borderRadius: '8px',
+                      fontSize: '0.8rem'
+                    }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 0.6rem', alignItems: 'center', color: 'var(--text-secondary)' }}>
+                        <span style={{ color: 'var(--primary)', fontWeight: '700' }}>🔍 {mochiDecks.find(d => d.id === selectedMochiDeck)?.name || '모든 덱'}</span>
+                        <span style={{ opacity: 0.3 }}>|</span>
+                        <span>{selectedMochiStartDate === selectedMochiEndDate ? selectedMochiStartDate : `${selectedMochiStartDate} ~ ${selectedMochiEndDate}`}</span>
+                        <span style={{ opacity: 0.3 }}>|</span>
+                        <span style={{ opacity: 0.75 }}>
+                          {filterIncorrectOnly ? '❌ 틀린 카드만' : '전체 복습 카드'}
+                        </span>
+                        {includePinned && mochiTotalPinnedCount > 0 && <span style={{ opacity: 0.75 }}>📌 고정 포함</span>}
+                        {includeNewToReview && mochiTotalNewToReviewCount > 0 && <span style={{ opacity: 0.75 }}>🌱 신규 포함</span>}
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                        onClick={() => setIsMochiSearchExpanded(true)}
                       >
-                        <option value="all">모든 덱 (All Decks)</option>
-                        {mochiDecks.map((deck) => (
-                          <option key={deck.id} value={deck.id}>
-                            {deck.name}
-                          </option>
-                        ))}
-                      </select>
+                        조건 변경
+                      </button>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>시작 날짜 (Start)</label>
-                      <input
-                        type="date"
-                        value={selectedMochiStartDate}
-                        onChange={(e) => setSelectedMochiStartDate(e.target.value)}
-                        className="input-glow"
-                        style={{ height: '40px' }}
-                        disabled={isMochiLoading}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>종료 날짜 (End)</label>
-                      <input
-                        type="date"
-                        value={selectedMochiEndDate}
-                        onChange={(e) => setSelectedMochiEndDate(e.target.value)}
-                        className="input-glow"
-                        style={{ height: '40px' }}
-                        disabled={isMochiLoading}
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleSearchMochiCards}
-                      disabled={isMochiLoading}
-                      style={{ height: '40px', padding: '0 1.25rem' }}
-                    >
-                      {isMochiLoading ? '조회 중...' : '카드 조회'}
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.25rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={filterIncorrectOnly}
-                        onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
-                        disabled={isMochiLoading}
-                        style={{ accentColor: 'var(--primary)' }}
-                      />
-                      <span>선택한 기간에 복습 시 틀린 카드(Forgot)만 필터링하여 표시</span>
-                    </label>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={includePinned}
-                        onChange={(e) => setIncludePinned(e.target.checked)}
-                        disabled={isMochiLoading}
-                        style={{ accentColor: 'var(--primary)' }}
-                      />
-                      <span>고정 카드(📌) 항상 포함 (선택 기간 무관)</span>
-                    </label>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={includeNewToReview}
-                        onChange={(e) => setIncludeNewToReview(e.target.checked)}
-                        disabled={isMochiLoading}
-                        style={{ accentColor: 'var(--primary)' }}
-                      />
-                      <span>신규 복습 진입 카드(🌱) 포함 (선택 기간 내 첫 복습 진행)</span>
-                    </label>
-                  </div>
-                </div>
+                  )}
 
                 {(mochiTotalReviewed > 0 || mochiTotalPinnedCount > 0 || mochiTotalNewToReviewCount > 0) && (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.03)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1669,7 +1707,7 @@ export default function App() {
 
                   <div 
                     style={{ 
-                      maxHeight: '260px', 
+                      maxHeight: !isMochiSearchExpanded ? '400px' : '200px', 
                       overflowY: 'auto', 
                       border: '1px solid var(--border-color)', 
                       borderRadius: '10px', 
