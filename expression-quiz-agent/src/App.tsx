@@ -1380,6 +1380,35 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Draft selection controls */}
+              {filterMode === 'draft' && draftCount > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        const visibleDraftIds = filteredHistory.filter(item => item.isDraft).map(item => item.id);
+                        setSelectedDraftIds(new Set(visibleDraftIds));
+                      }}
+                    >
+                      전체 선택 ({filteredHistory.length}개)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        setSelectedDraftIds(new Set());
+                      }}
+                    >
+                      전체 해제
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Bulk action panel for draft generation */}
               {selectedDraftIds.size > 0 && (
                 <div style={{
