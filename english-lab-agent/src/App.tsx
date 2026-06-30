@@ -149,6 +149,7 @@ export default function App() {
     return saved ? Number(saved) : 5;
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [isRegisterDraft, setIsRegisterDraft] = useState(false);
 
   // 4. History Log Library
   const [lessonsHistory, setLessonsHistory] = useState<LabLesson[]>(() => {
@@ -156,7 +157,10 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'correction'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'correction' | 'draft'>('all');
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set());
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('lab_user_email') || '';
   });
@@ -784,12 +788,6 @@ export default function App() {
       return;
     }
 
-    if (!apiKey) {
-      setFormError("우측 상단 설정(⚙️) 아이콘을 눌러 Gemini API Key를 먼저 입력하시거나, 우측의 프리셋 자료를 선택해 체험해 보세요!");
-      return;
-    }
-
-    setIsLoading(true);
     const chosenPersona = personaType === 'custom' ? customPersona.trim() : personaType;
     
     if (personaType === 'custom' && customPersona.trim()) {
@@ -804,6 +802,56 @@ export default function App() {
       }
       setPersonaType(newCustom);
     }
+
+    if (isRegisterDraft) {
+      const chunks = text.split(/\n\s*\n/).map(c => c.trim()).filter(Boolean);
+      if (chunks.length === 0) {
+        setFormError("교정할 영문 텍스트를 입력해 주세요.");
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const draftLessons: LabLesson[] = [];
+        for (let idx = 0; idx < chunks.length; idx++) {
+          const chunk = chunks[idx];
+          const draftLesson: LabLesson = {
+            id: `lab-pending-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+            title: chunk.substring(0, 30).replace(/\n/g, ' ') + (chunk.length > 30 ? '...' : ''),
+            sourceText: chunk,
+            correctedText: "",
+            overallFeedback: "",
+            createdAt: Date.now() - idx * 1000,
+            persona: chosenPersona || "일반 원어민 튜터",
+            style: writingStyle,
+            corrections: [],
+            quizzes: [],
+            isDraft: true
+          };
+
+          await saveLessonToHistory(draftLesson);
+          draftLessons.push(draftLesson);
+        }
+
+        setInputText('');
+        setContextText('');
+        setCustomPersona('');
+        setFilterMode('draft');
+        alert(`📥 ${chunks.length}개의 영어 문장이 미생성 초안 상태로 등록되었습니다!`);
+      } catch (err: any) {
+        setFormError(err.message || "초안 등록에 실패했습니다.");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (!apiKey) {
+      setFormError("우측 상단 설정(⚙️) 아이콘을 눌러 Gemini API Key를 먼저 입력하시거나, 우측의 프리셋 자료를 선택해 체험해 보세요!");
+      return;
+    }
+
+    setIsLoading(true);
     
     try {
       const result = await generateCorrection(
@@ -825,6 +873,59 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Batch generate correction analysis for selected drafts
+  const handleBulkGenerateQuizzes = async () => {
+    if (selectedDraftIds.size === 0) return;
+    if (!apiKey) {
+      alert("AI 일괄 생성을 진행하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+      return;
+    }
+
+    setIsBulkGenerating(true);
+    setBulkProgress({ completed: 0, total: selectedDraftIds.size });
+
+    const idsToGenerate = Array.from(selectedDraftIds);
+    let completedCount = 0;
+
+    for (const lessonId of idsToGenerate) {
+      try {
+        const lesson = lessonsHistory.find(item => item.id === lessonId);
+        if (lesson && lesson.isDraft) {
+          const result = await generateCorrection(
+            lesson.sourceText,
+            lesson.persona,
+            lesson.style,
+            "",
+            questionCount,
+            apiKey
+          );
+
+          const completedLesson: LabLesson = {
+            ...lesson,
+            correctedText: result.correctedText,
+            overallFeedback: result.overallFeedback,
+            corrections: result.corrections,
+            quizzes: result.quizzes,
+            isDraft: false
+          };
+
+          await saveLessonToHistory(completedLesson);
+        }
+      } catch (error) {
+        console.error(`Failed to generate correction for lesson ${lessonId}:`, error);
+      } finally {
+        completedCount++;
+        setBulkProgress(prev => ({ ...prev, completed: completedCount }));
+        // Add a small delay between lessons to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+
+    setSelectedDraftIds(new Set());
+    setIsBulkGenerating(false);
+    alert(`🎉 AI 일괄 생성이 완료되었습니다! (${completedCount}개 학습자료 빌드 완료)`);
   };
 
   const handleLoadPreset = (preset: LabLesson) => {
@@ -1151,20 +1252,24 @@ export default function App() {
     const isSolved = lesson.userAnswers !== undefined;
 
     if (filterMode === 'solved') {
-      return isSolved;
+      return isSolved && !lesson.isDraft;
     }
     if (filterMode === 'unsolved') {
-      return !isSolved && hasQuiz;
+      return !isSolved && hasQuiz && !lesson.isDraft;
     }
     if (filterMode === 'correction') {
-      return !hasQuiz;
+      return !hasQuiz && !lesson.isDraft;
+    }
+    if (filterMode === 'draft') {
+      return !!lesson.isDraft;
     }
     return true;
   });
 
-  const solvedCount = lessonsHistory.filter(l => l.userAnswers !== undefined).length;
-  const unsolvedCount = lessonsHistory.filter(l => !l.userAnswers && (l.quizzes || []).length > 0).length;
-  const correctionCount = lessonsHistory.filter(l => !(l.quizzes || []).length).length;
+  const solvedCount = lessonsHistory.filter(l => l.userAnswers !== undefined && !l.isDraft).length;
+  const unsolvedCount = lessonsHistory.filter(l => !l.userAnswers && (l.quizzes || []).length > 0 && !l.isDraft).length;
+  const correctionCount = lessonsHistory.filter(l => !(l.quizzes || []).length && !l.isDraft).length;
+  const draftCount = lessonsHistory.filter(l => l.isDraft).length;
 
   return (
     <div className="app-container">
@@ -1202,47 +1307,114 @@ export default function App() {
         )}
 
         {/* Tab 1: Learn & Correction Room */}
+        {/* Tab 1: Learn & Correction Room */}
         {activeTab === 'learn' && (
           activeLesson ? (
-            /* Active correction analysis & practice room */
-            <div className="animate-fade-in">
-              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center' }}>
-                <button 
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveLesson(null)}
-                >
-                  ◀ 새로운 영작 첨삭하기
-                </button>
-                
-                <button 
-                  className="btn btn-secondary btn-sm"
-                  style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.2)' }}
-                  onClick={() => setIsShareOpen(true)}
-                >
-                  🔗 학습 세트 공유
-                </button>
+            activeLesson.isDraft ? (
+              /* Draft Lesson Generation Screen */
+              <div className="animate-fade-in text-center" style={{ maxWidth: '640px', margin: '2rem auto', padding: '2rem' }}>
+                <div className="glass-panel" style={{ padding: '2.5rem 1.5rem', borderRadius: '16px' }}>
+                  <Sparkles className="pulse-glow" style={{ color: 'var(--primary)', width: '48px', height: '48px', margin: '0 auto 1.5rem auto' }} />
+                  <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', fontFamily: 'var(--font-display)', color: 'white' }}>
+                    AI 첨삭 미생성 상태
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.75rem', lineHeight: '1.6' }}>
+                    "{activeLesson.title}"<br/>
+                    이 문장은 초안으로 등록되어 아직 AI 피드백과 퀴즈가 생성되지 않았습니다.<br/>
+                    지금 바로 AI 분석을 시작하시겠습니까?
+                  </p>
+
+                  <div className="eli5-analogy-box" style={{ textAlign: 'left', background: 'rgba(255, 255, 255, 0.015)', borderStyle: 'dashed', padding: '1rem', borderRadius: '8px', marginBottom: '1.75rem' }}>
+                    <strong style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>등록된 원문:</strong>
+                    <span style={{ fontSize: '0.9rem', color: 'white', whiteSpace: 'pre-wrap' }}>{activeLesson.sourceText}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                    <button className="btn btn-secondary" onClick={() => setActiveLesson(null)}>
+                      목록으로 돌아가기
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={async () => {
+                        if (!apiKey) {
+                          alert("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+                          return;
+                        }
+                        setIsLoading(true);
+                        try {
+                          const result = await generateCorrection(
+                            activeLesson.sourceText,
+                            activeLesson.persona,
+                            activeLesson.style,
+                            "",
+                            questionCount,
+                            apiKey
+                          );
+                          const completedLesson: LabLesson = {
+                            ...activeLesson,
+                            correctedText: result.correctedText,
+                            overallFeedback: result.overallFeedback,
+                            corrections: result.corrections,
+                            quizzes: result.quizzes,
+                            isDraft: false
+                          };
+                          await saveLessonToHistory(completedLesson);
+                          setActiveLesson(completedLesson);
+                        } catch (err: any) {
+                          alert(err.message || "AI 첨삭 생성에 실패했습니다.");
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                      disabled={isLoading}
+                      style={{ background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)', fontWeight: '700' }}
+                    >
+                      {isLoading ? "분석 중..." : "✨ AI 첨삭 & 퀴즈 생성"}
+                    </button>
+                  </div>
+                </div>
               </div>
+            ) : (
+              /* Active correction analysis & practice room */
+              <div className="animate-fade-in">
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center' }}>
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setActiveLesson(null)}
+                  >
+                    ◀ 새로운 영작 첨삭하기
+                  </button>
+                  
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.2)' }}
+                    onClick={() => setIsShareOpen(true)}
+                  >
+                    🔗 학습 세트 공유
+                  </button>
+                </div>
 
-              <CorrectionRoom
-                lesson={{
-                  ...activeLesson,
-                  quizzes: injectedQuizzes
-                }}
-                apiKey={apiKey}
-                onAddWrongAnswer={handleAddWrongAnswer}
-                onQuizCompleted={handleQuizCompleted}
-                onProgressUpdate={handleProgressUpdate}
-                onGraduateReview={handleGraduateReview}
-                onLessonUpdate={handleLessonUpdate}
-                onClose={() => setActiveLesson(null)}
-              />
+                <CorrectionRoom
+                  lesson={{
+                    ...activeLesson,
+                    quizzes: injectedQuizzes
+                  }}
+                  apiKey={apiKey}
+                  onAddWrongAnswer={handleAddWrongAnswer}
+                  onQuizCompleted={handleQuizCompleted}
+                  onProgressUpdate={handleProgressUpdate}
+                  onGraduateReview={handleGraduateReview}
+                  onLessonUpdate={handleLessonUpdate}
+                  onClose={() => setActiveLesson(null)}
+                />
 
-              <ShareModal
-                lesson={activeLesson}
-                isOpen={isShareOpen}
-                onClose={() => setIsShareOpen(false)}
-              />
-            </div>
+                <ShareModal
+                  lesson={activeLesson}
+                  isOpen={isShareOpen}
+                  onClose={() => setIsShareOpen(false)}
+                />
+              </div>
+            )
           ) : (
             /* Dashboard home screen */
             <div className="dashboard-grid animate-fade-in">
@@ -1438,6 +1610,29 @@ export default function App() {
                         </select>
                       </div>
 
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.25rem', justifyContent: 'flex-start' }}>
+                        <input
+                          type="checkbox"
+                          id="isRegisterDraftCheckbox"
+                          checked={isRegisterDraft}
+                          onChange={(e) => setIsRegisterDraft(e.target.checked)}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                          disabled={isLoading}
+                        />
+                        <label 
+                          htmlFor="isRegisterDraftCheckbox" 
+                          style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          ⚡ AI 미생성 초안으로 우선 등록
+                        </label>
+                      </div>
+
+                      {isRegisterDraft && (
+                        <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', margin: '0 0 0.25rem 0', lineHeight: '1.4', textAlign: 'left' }}>
+                          💡 빈 줄(엔터 2번)로 구분하여 여러 개 입력 시, 한 번에 여러 개의 초안 학습 카드가 보관함에 동시에 등록됩니다!
+                        </p>
+                      )}
+
                       {formError && (
                         <div style={{ display: 'flex', gap: '0.4rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.08)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(239, 68, 68, 0.15)', alignItems: 'center' }}>
                           <Info size={16} style={{ flexShrink: 0 }} />
@@ -1451,7 +1646,15 @@ export default function App() {
                         style={{ padding: '0.85rem' }}
                         disabled={isLoading}
                       >
-                        🚀 첨삭 분석 &amp; 퀴즈 생성
+                        {isRegisterDraft ? (
+                          <>
+                            📥 AI 미생성 초안으로 보관함 등록
+                          </>
+                        ) : (
+                          <>
+                            🚀 첨삭 분석 &amp; 퀴즈 생성
+                          </>
+                        )}
                       </button>
                     </form>
 
@@ -1942,7 +2145,114 @@ export default function App() {
                       >
                         교정 전용 ({correctionCount})
                       </button>
+                      <button
+                        onClick={() => setFilterMode('draft')}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '8px',
+                          border: filterMode === 'draft' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: filterMode === 'draft' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                          color: filterMode === 'draft' ? '#fbbf24' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: filterMode === 'draft' ? '700' : '500',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        AI 미생성 ({draftCount})
+                      </button>
                     </div>
+
+                    {/* Bulk generation progress bar */}
+                    {isBulkGenerating && (
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '10px',
+                        padding: '1rem',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem', fontWeight: '600' }}>
+                          <span>✨ AI 일괄 첨삭 진행 중...</span>
+                          <span>{bulkProgress.completed} / {bulkProgress.total} 완료</span>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.05)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{
+                            background: 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
+                            height: '100%',
+                            width: `${(bulkProgress.completed / bulkProgress.total) * 100}%`,
+                            transition: 'width 0.3s ease'
+                          }}></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Draft selection controls */}
+                    {filterMode === 'draft' && draftCount > 0 && (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                            onClick={() => {
+                              const visibleDraftIds = filteredHistory.filter(item => item.isDraft).map(item => item.id);
+                              setSelectedDraftIds(new Set(visibleDraftIds));
+                            }}
+                          >
+                            전체 선택 ({filteredHistory.length}개)
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                            onClick={() => {
+                              setSelectedDraftIds(new Set());
+                            }}
+                          >
+                            전체 해제
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bulk action panel for draft generation */}
+                    {selectedDraftIds.size > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'rgba(139, 92, 246, 0.08)',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '8px',
+                        marginBottom: '0.75rem',
+                        fontSize: '0.85rem'
+                      }}>
+                        <span style={{ color: 'white', fontWeight: '600' }}>
+                          대기 카드 {selectedDraftIds.size}개 선택됨
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setSelectedDraftIds(new Set())}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                          >
+                            선택 해제
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={handleBulkGenerateQuizzes}
+                            disabled={isBulkGenerating}
+                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
+                          >
+                            {isBulkGenerating ? '생성 중...' : '✨ AI 일괄 생성'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {filteredHistory.length === 0 ? (
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: '4rem 1rem' }}>
@@ -1962,22 +2272,58 @@ export default function App() {
                               key={lesson.id}
                               className="history-item-container"
                               onClick={() => handleLoadPreset(lesson)}
-                              style={{ cursor: 'pointer' }}
+                              style={{ 
+                                cursor: 'pointer',
+                                borderLeftWidth: '4px',
+                                borderLeftColor: lesson.isDraft ? '#f59e0b' : 'var(--secondary)'
+                              }}
                             >
+                              {lesson.isDraft && (
+                                <div 
+                                  style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDraftIds.has(lesson.id)}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                                    onChange={() => {
+                                      setSelectedDraftIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(lesson.id)) {
+                                          next.delete(lesson.id);
+                                        } else {
+                                          next.add(lesson.id);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              )}
+
                               <div style={{ flex: 1, overflow: 'hidden', marginRight: '1rem', minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap', minWidth: 0 }}>
-                                  <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
-                                    {lesson.style === 'spoken' ? '구어' : '문어'}
-                                  </span>
-                                  {lesson.writingLevel && (
-                                    <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
-                                      Level {lesson.writingLevel}
+                                  {lesson.isDraft ? (
+                                    <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '700' }}>
+                                      ⚡ AI 미생성
                                     </span>
-                                  )}
-                                  {lesson.chatHistory && lesson.chatHistory.length > 0 && (
-                                    <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700' }}>
-                                      💬 대화 피드백
-                                    </span>
+                                  ) : (
+                                    <>
+                                      <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
+                                        {lesson.style === 'spoken' ? '구어' : '문어'}
+                                      </span>
+                                      {lesson.writingLevel && (
+                                        <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
+                                          Level {lesson.writingLevel}
+                                        </span>
+                                      )}
+                                      {lesson.chatHistory && lesson.chatHistory.length > 0 && (
+                                        <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700' }}>
+                                          💬 대화 피드백
+                                        </span>
+                                      )}
+                                    </>
                                   )}
                                   
                                   {editingTitleId === lesson.id ? (
@@ -2017,7 +2363,7 @@ export default function App() {
 
                                 {/* Solved Status and Cloud Chips Row */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.25rem', marginBottom: '0.35rem' }}>
-                                  {score !== null ? (() => {
+                                  {lesson.isDraft ? null : score !== null ? (() => {
                                     const firstScore = lesson.firstAttemptScore 
                                       ? `${lesson.firstAttemptScore.score}/${lesson.firstAttemptScore.total}`
                                       : `${score}/${(lesson.quizzes || []).length}`;

@@ -47,6 +47,7 @@ export interface LabLesson {
   retryHistory?: Array<{ score: number; total: number; solvedAt: number }>;
   chatHistory?: LabMessage[];
   writingLevel?: string;
+  isDraft?: boolean;
 }
 
 export interface WrongLabAnswer {
