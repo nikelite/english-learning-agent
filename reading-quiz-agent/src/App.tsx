@@ -158,7 +158,10 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'pending'>('all');
+  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('eng_user_email') || '';
   });
@@ -374,6 +377,56 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('last_reading_sentence_limit', String(sentenceLimit));
   }, [sentenceLimit]);
+
+  // Batch generate quizzes for selected pending lessons
+  const handleBulkGenerateQuizzes = async () => {
+    if (selectedPendingIds.size === 0) return;
+    if (!apiKey) {
+      alert("AI 일괄 생성을 진행하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+      return;
+    }
+
+    setIsBulkGenerating(true);
+    setBulkProgress({ completed: 0, total: selectedPendingIds.size });
+
+    const idsToGenerate = Array.from(selectedPendingIds);
+    let completedCount = 0;
+
+    for (const lessonId of idsToGenerate) {
+      try {
+        const lesson = lessonsHistory.find(item => item.id === lessonId);
+        if (lesson && lesson.isPending) {
+          const generated = await generateReadingLesson(
+            lesson.passageText,
+            apiKey,
+            comprehensionCount,
+            vocabCount
+          );
+
+          const completedLesson: ReadingLesson = {
+            ...lesson,
+            paragraphs: generated.paragraphs,
+            vocabulary: generated.vocabulary,
+            quizzes: generated.quizzes,
+            isPending: false
+          };
+
+          await saveLessonToHistory(completedLesson);
+        }
+      } catch (error) {
+        console.error(`Failed to generate quizzes for lesson ${lessonId}:`, error);
+      } finally {
+        completedCount++;
+        setBulkProgress(prev => ({ ...prev, completed: completedCount }));
+        // Add a small delay between lessons to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+
+    setSelectedPendingIds(new Set());
+    setIsBulkGenerating(false);
+    alert(`🎉 AI 일괄 생성이 완료되었습니다! (${completedCount}개 학습자료 빌드 완료)`);
+  };
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
   const saveLessonToHistory = async (lesson: ReadingLesson): Promise<ReadingLesson> => {
@@ -1000,22 +1053,52 @@ export default function App() {
     saveLessonToHistory(updatedLesson);
   };
 
+  const getNextUnsolvedLesson = (): ReadingLesson | null => {
+    if (!activeLesson) return null;
+    const currentIndex = lessonsHistory.findIndex(item => item.id === activeLesson.id);
+    if (currentIndex === -1) return null;
+
+    // Search forward
+    for (let i = currentIndex + 1; i < lessonsHistory.length; i++) {
+      const item = lessonsHistory[i];
+      if (!item.userAnswers && !item.isPending) {
+        return item;
+      }
+    }
+
+    // Wrap around and search backward
+    for (let i = 0; i < currentIndex; i++) {
+      const item = lessonsHistory[i];
+      if (!item.userAnswers && !item.isPending) {
+        return item;
+      }
+    }
+
+    return null;
+  };
+
+  const nextUnsolvedLesson = getNextUnsolvedLesson();
+
   const filteredHistory = lessonsHistory.filter(item => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
     if (!matchesSearch) return false;
 
     if (filterMode === 'solved') {
-      return !!item.userAnswers;
+      return !!item.userAnswers && !item.isPending;
     }
     if (filterMode === 'unsolved') {
-      return !item.userAnswers;
+      return !item.userAnswers && !item.isPending;
+    }
+    if (filterMode === 'pending') {
+      return !!item.isPending;
     }
     return true;
   });
 
-  const solvedCount = lessonsHistory.filter(item => item.userAnswers).length;
-  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers).length;
+  const solvedCount = lessonsHistory.filter(item => item.userAnswers && !item.isPending).length;
+  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers && !item.isPending).length;
+  const pendingCount = lessonsHistory.filter(item => item.isPending).length;
 
   return (
     <div className="app-container">
@@ -1304,7 +1387,114 @@ export default function App() {
                 >
                   풀이 완료 ({solvedCount})
                 </button>
+                <button
+                  onClick={() => setFilterMode('pending')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'pending' ? '1px solid var(--secondary)' : '1px solid var(--border-color)',
+                    background: filterMode === 'pending' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'pending' ? '#fbbf24' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'pending' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  분석 대기중 ({pendingCount})
+                </button>
               </div>
+
+              {/* Bulk generation progress bar */}
+              {isBulkGenerating && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  marginBottom: '1rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    <span>✨ AI 일괄 분석 진행 중...</span>
+                    <span>{bulkProgress.completed} / {bulkProgress.total} 완료</span>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.05)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{
+                      background: 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
+                      height: '100%',
+                      width: `${(bulkProgress.completed / bulkProgress.total) * 100}%`,
+                      transition: 'width 0.3s ease'
+                    }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Draft selection controls */}
+              {filterMode === 'pending' && pendingCount > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        const visiblePendingIds = filteredHistory.filter(item => item.isPending).map(item => item.id);
+                        setSelectedPendingIds(new Set(visiblePendingIds));
+                      }}
+                    >
+                      전체 선택 ({filteredHistory.length}개)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        setSelectedPendingIds(new Set());
+                      }}
+                    >
+                      전체 해제
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bulk action panel for pending generation */}
+              {selectedPendingIds.size > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(139, 92, 246, 0.08)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '8px',
+                  marginBottom: '0.75rem',
+                  fontSize: '0.85rem'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600' }}>
+                    대기 카드 {selectedPendingIds.size}개 선택됨
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSelectedPendingIds(new Set())}
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                    >
+                      선택 해제
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleBulkGenerateQuizzes}
+                      disabled={isBulkGenerating}
+                      style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
+                    >
+                      {isBulkGenerating ? '생성 중...' : '✨ AI 일괄 생성'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="scroll-y" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 'calc(100vh - 280px)', minHeight: '480px', paddingRight: '0.25rem', overflowY: 'auto', overflowX: 'hidden' }}>
                 {lessonsHistory.length === 0 ? (
@@ -1350,6 +1540,30 @@ export default function App() {
                         e.currentTarget.style.transform = 'none';
                       }}
                     >
+                      {item.isPending && (
+                        <div 
+                          style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPendingIds.has(item.id)}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                            onChange={() => {
+                              setSelectedPendingIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(item.id)) {
+                                  next.delete(item.id);
+                                } else {
+                                  next.add(item.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+
                       <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>

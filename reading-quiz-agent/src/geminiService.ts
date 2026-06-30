@@ -757,13 +757,19 @@ export async function analyzePassageSentences(
   const totalChunks = paragraphTasks.reduce((acc, t) => acc + t.chunks.length, 0);
   let completedChunks = 0;
 
-  // 3. Process each paragraph's chunks in parallel
+  // 3. Process each paragraph's chunks sequentially to prevent concurrent rate limit (429) errors
   const runParagraphAnalysis = async (task: typeof paragraphTasks[0]) => {
-    const { paragraph, chunks, sentences } = task;
+    const { paragraph, chunks } = task;
     const chunkResults: SentenceAnalysis[][] = new Array(chunks.length);
 
-    const chunkPromises = chunks.map(async (chunk, chunkIdx) => {
+    for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+      const chunk = chunks[chunkIdx];
       try {
+        // Add a small delay between requests to be rate-limit safe
+        if (completedChunks > 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
         const cResult = await analyzeParagraphChunkSentences(
           paragraph.id,
           chunkIdx,
@@ -789,9 +795,7 @@ export async function analyzePassageSentences(
           onProgress(completedChunks, totalChunks);
         }
       }
-    });
-
-    await Promise.all(chunkPromises);
+    }
 
     // Flatten chunk results in order and map to paragraph
     const pResult = chunkResults.flat();
@@ -802,8 +806,10 @@ export async function analyzePassageSentences(
     }
   };
 
-  // Run all paragraph analyses concurrently
-  await Promise.all(paragraphTasks.map(runParagraphAnalysis));
+  // Run all paragraph analyses sequentially
+  for (const task of paragraphTasks) {
+    await runParagraphAnalysis(task);
+  }
 
   return result;
 }
