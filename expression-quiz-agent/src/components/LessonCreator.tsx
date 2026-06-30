@@ -5,7 +5,7 @@ import { PRESET_LESSONS } from '../geminiService';
 
 interface LessonCreatorProps {
   apiKey: string;
-  onGenerate: (text: string, questionCount: number, title?: string) => Promise<void>;
+  onGenerate: (text: string, questionCount: number, title?: string, isDraft?: boolean) => Promise<void>;
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
@@ -27,6 +27,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
     return saved ? Number(saved) : 5;
   });
   const [error, setError] = useState<string | null>(null);
+  const [isRegisterDraft, setIsRegisterDraft] = useState(false);
 
   React.useEffect(() => {
     localStorage.setItem('last_expr_question_count', String(questionCount));
@@ -42,13 +43,13 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
       return;
     }
 
-    if (!apiKey) {
+    if (!isRegisterDraft && !apiKey) {
       setError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 먼저 입력하시거나, 아래 프리셋 학습 세트를 선택해 체험해 보세요!");
       return;
     }
 
     try {
-      await onGenerate(text, questionCount, titleInput.trim());
+      await onGenerate(text, questionCount, titleInput.trim(), isRegisterDraft);
       setInputText('');
       setTitleInput('');
     } catch (err: any) {
@@ -127,6 +128,29 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
           </select>
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.25rem', justifyContent: 'flex-start' }}>
+          <input
+            type="checkbox"
+            id="isRegisterDraftCheckbox"
+            checked={isRegisterDraft}
+            onChange={(e) => setIsRegisterDraft(e.target.checked)}
+            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+            disabled={isLoading}
+          />
+          <label 
+            htmlFor="isRegisterDraftCheckbox" 
+            style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}
+          >
+            ⚡ AI 미생성 초안으로 우선 등록
+          </label>
+        </div>
+
+        {isRegisterDraft && (
+          <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', margin: '0 0 0.25rem 0', lineHeight: '1.4', textAlign: 'left' }}>
+            💡 빈 줄(엔터 2번)로 구분하여 여러 개 입력 시, 한 번에 여러 개의 초안 학습 카드가 보관함에 동시에 등록됩니다!
+          </p>
+        )}
+
         {error && (
           <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(239, 68, 68, 0.2)', alignItems: 'flex-start' }}>
             <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -145,6 +169,10 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
               <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%' }}></span>
               AI가 심화 분석하는 중...
             </span>
+          ) : isRegisterDraft ? (
+            <>
+              📥 AI 미생성 초안으로 보관함 등록
+            </>
           ) : (
             <>
               <Sparkles size={16} />

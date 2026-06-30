@@ -829,7 +829,47 @@ export default function App() {
   };
 
   // AI custom generation trigger
-  const handleGenerateLesson = async (text: string, questionCount: number, customTitle?: string) => {
+  const handleGenerateLesson = async (text: string, questionCount: number, customTitle?: string, isDraft?: boolean) => {
+    if (isDraft) {
+      const chunks = text.split(/\n\s*\n/).map(c => c.trim()).filter(Boolean);
+      if (chunks.length === 0) return;
+
+      setIsLoading(true);
+      try {
+        const draftLessons: Lesson[] = [];
+        for (let idx = 0; idx < chunks.length; idx++) {
+          const chunk = chunks[idx];
+          const defaultTitle = chunk.replace(/[#*`]/g, '').trim().substring(0, 25) + (chunk.length > 25 ? '...' : '');
+          const title = chunks.length === 1 && customTitle && customTitle.trim()
+            ? customTitle.trim()
+            : defaultTitle;
+
+          const draftLesson: Lesson = {
+            id: `pending_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+            title: title,
+            sourceText: chunk,
+            createdAt: Date.now() - idx * 1000,
+            isDraft: true,
+            eli5: { explanation: '', analogy: '', example: '', exampleContext: '' },
+            memoryTips: { tipFormula: '', conceptA: '', conceptADesc: '', conceptB: '', conceptBDesc: '', visualImage: '' },
+            pronunciation: { wordOrPhrase: '', koreanPhonetic: '', stressGuide: '', phoneticRespelling: '' },
+            quizzes: []
+          };
+
+          const savedLesson = await saveLessonToHistory(draftLesson);
+          draftLessons.push(savedLesson);
+        }
+
+        setFilterMode('draft');
+        alert(`📥 ${chunks.length}개의 영어 문장이 미생성 초안 상태로 등록되었습니다!`);
+      } catch (error) {
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     setIsLoading(true);
     try {
       const generated = await generateLessonFromText(text, apiKey, questionCount);
