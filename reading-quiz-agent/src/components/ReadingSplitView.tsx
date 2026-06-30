@@ -129,6 +129,25 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     setSavedWrongId(null);
   }, [lesson.id, lesson.userAnswers, injectedQuizzes]);
 
+  const isAnalysisCacheValid = (cache: any): boolean => {
+    if (!cache || typeof cache !== 'object') return false;
+    const paragraphIds = Object.keys(cache);
+    if (paragraphIds.length === 0) return false;
+    for (const pId of paragraphIds) {
+      const list = cache[pId];
+      if (!Array.isArray(list) || list.length === 0) return false;
+      for (const item of list) {
+        if (!item || typeof item !== 'object') return false;
+        const grammar = item.grammar || '';
+        const context = item.context || '';
+        if (grammar.includes('생성하지 못했습니다') || context.includes('생성하지 못했습니다')) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   // Background auto-fetching and analysis effect
   useEffect(() => {
     if (!lesson.id || lesson.isPending) {
@@ -136,25 +155,6 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
 
     let isCurrent = true;
-
-    const isAnalysisCacheValid = (cache: any): boolean => {
-      if (!cache || typeof cache !== 'object') return false;
-      const paragraphIds = Object.keys(cache);
-      if (paragraphIds.length === 0) return false;
-      for (const pId of paragraphIds) {
-        const list = cache[pId];
-        if (!Array.isArray(list) || list.length === 0) return false;
-        for (const item of list) {
-          if (!item || typeof item !== 'object') return false;
-          const grammar = item.grammar || '';
-          const context = item.context || '';
-          if (grammar.includes('생성하지 못했습니다') || context.includes('생성하지 못했습니다')) {
-            return false;
-          }
-        }
-      }
-      return true;
-    };
 
     const runAutoAnalysis = async () => {
       // 1. Try LocalStorage cache first (instantaneous & offline friendly!)
@@ -230,10 +230,14 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           );
           if (isCurrent) {
             setAnalysisCache(fullResult);
-            // Save final results to both LocalStorage and Firestore
+            // Save final results to LocalStorage and conditionally to Firestore
             localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
-            await savePassageAnalysisToCloud(lesson.id, fullResult);
-            console.log("Auto-started passage analysis successfully cached!");
+            if (isAnalysisCacheValid(fullResult)) {
+              await savePassageAnalysisToCloud(lesson.id, fullResult);
+              console.log("Auto-started passage analysis successfully cached to cloud!");
+            } else {
+              console.warn("Auto-started passage analysis contains failures; skipping cloud save.");
+            }
           }
         } catch (bgErr) {
           console.warn("Auto background passage analysis failed:", bgErr);
@@ -311,7 +315,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       );
       setAnalysisCache(fullResult);
       localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
-      await savePassageAnalysisToCloud(lesson.id, fullResult);
+      if (isAnalysisCacheValid(fullResult)) {
+        await savePassageAnalysisToCloud(lesson.id, fullResult);
+      }
     } catch (err: any) {
       setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
       bgFetchTriggeredRef.current = false;
@@ -933,6 +939,19 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             {/* 3. Detailed Sentence Analysis Display */}
                             {sentenceAnalysis && (
                               <div className="sentence-analysis-box animate-slide-down" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {(sentenceAnalysis.grammar.includes('생성하지 못했습니다') || sentenceAnalysis.context.includes('생성하지 못했습니다')) && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.08)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontWeight: '500' }}>⚠️ 이전 분석 생성 실패 내역이 존재합니다. API 키 설정을 확인 후 다시 시도해 주세요.</span>
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: 'white', background: '#d97706', borderColor: '#d97706', cursor: 'pointer' }} 
+                                      onClick={(e) => { e.stopPropagation(); handleManualRetry(); }}
+                                      disabled={isAnalyzingBg}
+                                    >
+                                      {isAnalyzingBg ? "분석 중..." : "AI 재분석"}
+                                    </button>
+                                  </div>
+                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
 
 
