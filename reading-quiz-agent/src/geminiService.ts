@@ -20,7 +20,7 @@ export function splitIntoSentences(text: string): string[] {
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 5,
+  maxRetries = 7,
   initialDelay = 1000
 ): Promise<Response> {
   let delay = initialDelay;
