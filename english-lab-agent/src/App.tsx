@@ -1086,6 +1086,14 @@ export default function App() {
     }
   };
 
+  const handleUnarchiveWrongAnswer = (wrongId: string) => {
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: false } : wa));
+    setStats(prev => ({
+      ...prev,
+      masteredCount: Math.max(0, prev.masteredCount - 1)
+    }));
+  };
+
   const handlePushSingleQuizToMochi = async (quiz: LabQuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
       throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
@@ -1279,7 +1287,8 @@ ${quiz.rationale}`;
     let list = [...(activeLesson.quizzes || [])];
 
     if (wrongAnswers.length > 0) {
-      const oldestMistakes = [...wrongAnswers]
+      const oldestMistakes = wrongAnswers
+        .filter(wa => !wa.isArchived)
         .filter(wa => {
           if (wa.lessonId.startsWith('preset-')) {
             return wa.lessonId === activeLesson.id;
@@ -2505,6 +2514,7 @@ ${quiz.rationale}`;
             wrongAnswers={wrongAnswers}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
             onDeleteWrongAnswer={handleDeleteWrongAnswer}
+            onUnarchiveWrongAnswer={handleUnarchiveWrongAnswer}
             onClearAll={handleClearAllWrong}
             mochiApiKey={mochiApiKey}
             mochiQuizDeckId={mochiQuizDeckId}

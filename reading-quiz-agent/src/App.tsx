@@ -217,7 +217,8 @@ export default function App() {
     let list = [...activeLesson.quizzes];
 
     if (!isSharedQuiz && wrongAnswers.length > 0) {
-      const oldestMistakes = [...wrongAnswers]
+      const oldestMistakes = wrongAnswers
+        .filter(wa => !wa.isArchived)
         .filter(wa => {
           // If the wrong answer is from a preset, only inject it when studying that exact same preset
           if (wa.lessonId.startsWith('preset-')) {
@@ -935,6 +936,14 @@ export default function App() {
     if (window.confirm("이 오답 데이터를 오답노트에서 완전히 삭제하시겠습니까?")) {
       setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
     }
+  };
+
+  const handleUnarchiveWrongAnswer = (wrongId: string) => {
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: false } : wa));
+    setStats(prev => ({
+      ...prev,
+      masteredCount: Math.max(0, prev.masteredCount - 1)
+    }));
   };
 
   const handlePushSingleQuizToMochi = async (quiz: ReadingQuizItem) => {
@@ -1835,6 +1844,7 @@ ${quiz.rationale}`;
             wrongAnswers={wrongAnswers}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
             onDeleteWrongAnswer={handleDeleteWrongAnswer}
+            onUnarchiveWrongAnswer={handleUnarchiveWrongAnswer}
             onClearAll={handleClearAllWrong}
             mochiApiKey={mochiApiKey}
             mochiQuizDeckId={mochiQuizDeckId}

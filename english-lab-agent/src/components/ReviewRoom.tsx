@@ -6,6 +6,7 @@ interface ReviewRoomProps {
   wrongAnswers: WrongLabAnswer[];
   onRemoveWrongAnswer: (id: string) => void;
   onDeleteWrongAnswer: (id: string) => void;
+  onUnarchiveWrongAnswer: (id: string) => void;
   onClearAll: () => void;
   mochiApiKey: string;
   mochiQuizDeckId: string;
@@ -16,6 +17,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
   wrongAnswers,
   onRemoveWrongAnswer,
   onDeleteWrongAnswer,
+  onUnarchiveWrongAnswer,
   onClearAll,
   mochiApiKey,
   mochiQuizDeckId,
@@ -355,8 +357,25 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                       {addingToMochiIds.has(wrongId) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
                     </button>
 
+                    {wa.isArchived && (
+                      <button
+                        className="btn btn-secondary"
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.4rem 0.75rem',
+                          borderRadius: '6px',
+                          borderColor: 'var(--success)',
+                          color: 'var(--success)',
+                          background: 'transparent'
+                        }}
+                        onClick={() => onUnarchiveWrongAnswer(wrongId)}
+                      >
+                        활성 오답으로 복구
+                      </button>
+                    )}
+
                     {!isCorrect ? (
-                      userSelectedIdx !== null && userSelectedIdx !== undefined && (
+                      !wa.isArchived && userSelectedIdx !== null && userSelectedIdx !== undefined && (
                         <button
                           className="btn btn-secondary"
                           style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', borderRadius: '6px' }}
