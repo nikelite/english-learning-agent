@@ -195,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Settings Modal */}
       {isModalOpen && (
         <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' }}>
             <button 
               className="btn btn-secondary" 
               style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.25rem', borderRadius: '50%' }}

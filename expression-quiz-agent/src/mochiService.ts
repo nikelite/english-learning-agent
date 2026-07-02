@@ -150,7 +150,7 @@ export async function createMochiCard(
     body: JSON.stringify({
       'deck-id': deckId,
       content,
-      tags
+      'manual-tags': tags
     })
   });
 
