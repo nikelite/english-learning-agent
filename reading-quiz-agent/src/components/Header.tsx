@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, Flame, Settings, X, Eye, EyeOff, Check } from 'lucide-react';
 import { AppStats } from '../types';
+import { fetchMochiDecks } from '../mochiService';
 
 interface HeaderProps {
   stats: AppStats;
@@ -48,6 +49,46 @@ export const Header: React.FC<HeaderProps> = ({
   const [showKey, setShowKey] = useState(false);
   const [showMochiKey, setShowMochiKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
+
+  const [localDecks, setLocalDecks] = useState<any[]>(mochiDecks || []);
+  const [isFetchingDecks, setIsFetchingDecks] = useState(false);
+
+  useEffect(() => {
+    if (!tempMochiApiKey.trim()) {
+      setLocalDecks([]);
+      return;
+    }
+    
+    const delayDebounceFn = setTimeout(async () => {
+      setIsFetchingDecks(true);
+      try {
+        const decks = await fetchMochiDecks(tempMochiApiKey);
+        setLocalDecks(decks);
+      } catch (err) {
+        console.error("Failed to fetch Mochi decks in Header settings modal:", err);
+      } finally {
+        setIsFetchingDecks(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [tempMochiApiKey, isModalOpen]);
+
+  useEffect(() => {
+    if (localDecks.length > 0 && !tempMochiQuizDeckId) {
+      const smartDefault = localDecks.find(d => 
+        d.name.toLowerCase().includes('english') || 
+        d.name.toLowerCase().includes('영어') || 
+        d.name.toLowerCase().includes('quiz') || 
+        d.name.toLowerCase().includes('오답')
+      );
+      if (smartDefault) {
+        setTempMochiQuizDeckId(smartDefault.id);
+      } else {
+        setTempMochiQuizDeckId(localDecks[0].id);
+      }
+    }
+  }, [localDecks, tempMochiQuizDeckId]);
 
   const getEmailPlaceholder = (id: string) => {
     const trimmed = id.trim().toLowerCase();
@@ -270,30 +311,39 @@ export const Header: React.FC<HeaderProps> = ({
                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                    * Mochi 카드의 오답 노트를 가져오거나 퀴즈를 보낼 때 필요한 API Key입니다. 설정 화면에서 키를 생성하여 붙여넣으세요.
                  </span>
-
-                 {tempMochiApiKey.trim() && mochiDecks && mochiDecks.length > 0 && (
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
-                     <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
-                       🎯 오답/퀴즈 전송용 Mochi 덱
-                     </label>
-                     <select
-                       value={tempMochiQuizDeckId}
-                       onChange={(e) => setTempMochiQuizDeckId(e.target.value)}
-                       className="select-glow"
-                       style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
-                     >
-                       <option value="">-- 전송할 덱 선택 --</option>
-                       {mochiDecks.map((deck) => (
-                         <option key={deck.id} value={deck.id}>
-                           {deck.name}
-                         </option>
-                       ))}
-                     </select>
-                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                       * 학습 도중 또는 오답 노출방에서 Mochi 카드를 추가할 때 해당 덱으로 카드가 전송됩니다.
-                     </span>
-                   </div>
-                 )}
+                  {tempMochiApiKey.trim() && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                        🎯 오답/퀴즈 전송용 Mochi 덱
+                      </label>
+                      {isFetchingDecks ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          덱 목록 불러오는 중...
+                        </div>
+                      ) : localDecks.length > 0 ? (
+                        <select
+                          value={tempMochiQuizDeckId}
+                          onChange={(e) => setTempMochiQuizDeckId(e.target.value)}
+                          className="select-glow"
+                          style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
+                        >
+                          <option value="">-- 전송할 덱 선택 --</option>
+                          {localDecks.map((deck) => (
+                            <option key={deck.id} value={deck.id}>
+                              {deck.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>
+                          불러온 Mochi 덱이 없습니다. Mochi에 덱을 먼저 생성해 주세요.
+                        </div>
+                      )}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        * 학습 도중 또는 오답 노출방에서 Mochi 카드를 추가할 때 해당 덱으로 카드가 전송됩니다.
+                      </span>
+                    </div>
+                  )}
                </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
