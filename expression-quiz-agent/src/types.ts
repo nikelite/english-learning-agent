@@ -55,6 +55,7 @@ export interface WrongAnswer {
   quizItem: QuizItem;
   userAnswerIndex: number;
   timestamp: number;
+  isArchived?: boolean;
 }
 
 export interface AppStats {

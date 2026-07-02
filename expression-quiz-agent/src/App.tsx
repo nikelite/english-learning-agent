@@ -23,7 +23,7 @@ import {
   sendEmailReport
 } from './firebaseService';
 import { ShareModal } from './components/ShareModal';
-import { fetchMochiDecks, fetchMochiCards } from './mochiService';
+import { fetchMochiDecks, fetchMochiCards, createMochiCard } from './mochiService';
 
 export default function App() {
   // 1. API Key State
@@ -67,6 +67,15 @@ export default function App() {
   const handleSaveMochiApiKey = (key: string) => {
     setMochiApiKey(key);
     localStorage.setItem('mochi_api_key', key);
+  };
+
+  const [mochiQuizDeckId, setMochiQuizDeckId] = useState<string>(() => {
+    return localStorage.getItem('mochi_quiz_deck_id') || '';
+  });
+
+  const handleSaveMochiQuizDeckId = (deckId: string) => {
+    setMochiQuizDeckId(deckId);
+    localStorage.setItem('mochi_quiz_deck_id', deckId);
   };
 
   const [isMochiModalOpen, setIsMochiModalOpen] = useState(false);
@@ -457,6 +466,34 @@ export default function App() {
       setIsBulkGenerating(false);
       setBulkProgress(null);
     }
+  };
+
+  const handlePushSingleQuizToMochi = async (quiz: QuizItem) => {
+    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
+      throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
+    }
+    
+    const choiceLabels = ["A", "B", "C", "D", "E", "F"];
+    const choicesText = quiz.choices.map((c, i) => `${choiceLabels[i]}) ${c}`).join('\n');
+    const correctChoiceText = `${choiceLabels[quiz.correctIndex]}) ${quiz.choices[quiz.correctIndex]}`;
+
+    const content = `### Q. ${quiz.question}
+
+${choicesText}
+
+---
+
+**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceText}
+
+**풀이 및 해설**:
+${quiz.rationale}`;
+
+    await createMochiCard(
+      mochiApiKey,
+      mochiQuizDeckId,
+      content,
+      ["expression-agent", "quiz-review"]
+    );
   };
 
   // 7.1 Cloud Sync State
@@ -928,20 +965,27 @@ export default function App() {
   };
 
   const handleGraduateReview = (wrongId: string) => {
-    setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: true } : wa));
     setStats(prev => ({
       ...prev,
       masteredCount: prev.masteredCount + 1
     }));
   };
 
-  // Remove single wrong answer from mistakes notebook
+  // Archive single wrong answer from mistakes notebook
   const handleRemoveWrongAnswer = (wrongId: string) => {
-    setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: true } : wa));
     setStats(prev => ({
       ...prev,
       masteredCount: prev.masteredCount + 1
     }));
+  };
+
+  // Delete single wrong answer completely
+  const handleDeleteWrongAnswer = (wrongId: string) => {
+    if (window.confirm("이 오답 데이터를 오답노트에서 완전히 삭제하시겠습니까?")) {
+      setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    }
   };
 
   // Clear all mistakes
@@ -1154,6 +1198,9 @@ export default function App() {
         onSaveUserEmail={handleSaveUserEmail}
         mochiApiKey={mochiApiKey}
         onSaveMochiApiKey={handleSaveMochiApiKey}
+        mochiDecks={mochiDecks}
+        mochiQuizDeckId={mochiQuizDeckId}
+        onSaveMochiQuizDeckId={handleSaveMochiQuizDeckId}
       />
 
       {/* Main Workspace Dashboard */}
@@ -1290,6 +1337,9 @@ export default function App() {
                     setViewMode('study');
                     setActiveStudyTab('eli5');
                   } : undefined}
+                  mochiApiKey={mochiApiKey}
+                  mochiQuizDeckId={mochiQuizDeckId}
+                  onAddQuizToMochi={handlePushSingleQuizToMochi}
                 />
               )}
             </main>
@@ -1758,7 +1808,11 @@ export default function App() {
           <ReviewRoom
             wrongAnswers={wrongAnswers}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
+            onDeleteWrongAnswer={handleDeleteWrongAnswer}
             onClearAll={handleClearAllWrong}
+            mochiApiKey={mochiApiKey}
+            mochiQuizDeckId={mochiQuizDeckId}
+            onAddQuizToMochi={handlePushSingleQuizToMochi}
           />
         </div>
       )}

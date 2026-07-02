@@ -15,6 +15,9 @@ interface CorrectionRoomProps {
   onGraduateReview: (wrongId: string) => void;
   onLessonUpdate: (updatedLesson: LabLesson) => void;
   onClose: () => void;
+  mochiApiKey: string;
+  mochiQuizDeckId: string;
+  onAddQuizToMochi: (quiz: LabQuizItem) => Promise<void>;
 }
 
 export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
@@ -25,7 +28,10 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
   onProgressUpdate,
   onGraduateReview,
   onLessonUpdate,
-  onClose
+  onClose,
+  mochiApiKey,
+  mochiQuizDeckId,
+  onAddQuizToMochi
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<LabQuizItem[]>(() => lesson.quizzes || []);
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
@@ -36,6 +42,29 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
+  const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+
+  const handlePushToMochi = async (quiz: LabQuizItem) => {
+    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
+      alert("우측 상단 서비스 설정(⚙️)에서 Mochi API Key와 오답/퀴즈 전송용 Mochi 덱을 먼저 설정해 주세요.");
+      return;
+    }
+    setAddingToMochiIds(prev => {
+      const next = new Set(prev);
+      next.add(quiz.id);
+      return next;
+    });
+    try {
+      await onAddQuizToMochi(quiz);
+    } catch (err: any) {
+      alert(err.message || "Mochi 카드 전송에 실패했습니다.");
+      setAddingToMochiIds(prev => {
+        const next = new Set(prev);
+        next.delete(quiz.id);
+        return next;
+      });
+    }
+  };
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -902,11 +931,22 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
                         borderRadius: '10px', 
                         padding: '1rem',
                       }}>
-                        <h5 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.4', display: 'flex', gap: '0.4rem' }}>
-                          <span style={{ color: isCorrect ? 'var(--success)' : 'var(--accent)', fontWeight: '900' }}>
-                            {isCorrect ? '✓' : '✗'}
-                          </span>
-                          Q{qIdx + 1}. {quiz.question}
+                        <h5 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.4', display: 'flex', gap: '0.4rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <span style={{ color: isCorrect ? 'var(--success)' : 'var(--accent)', fontWeight: '900' }}>
+                              {isCorrect ? '✓' : '✗'}
+                            </span>
+                            <span>Q{qIdx + 1}. {quiz.question}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
+                            onClick={() => handlePushToMochi(quiz)}
+                            disabled={addingToMochiIds.has(quiz.id)}
+                          >
+                            {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
+                          </button>
                         </h5>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
@@ -1050,14 +1090,27 @@ export const CorrectionRoom: React.FC<CorrectionRoomProps> = ({
               {/* Explanation Panel */}
               {isSubmitted && (
                 <div className="quiz-explanation-box" style={{ marginTop: '1rem', padding: '0.8rem', borderRadius: '8px', fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontWeight: '700', color: selectedAns === activeQuestion.correctIndex ? 'var(--success)' : 'var(--accent)' }}>
-                    {selectedAns === activeQuestion.correctIndex ? <Check size={16} /> : <AlertCircle size={16} />}
-                    <span>{selectedAns === activeQuestion.correctIndex ? '정답입니다!' : '오답입니다.'}</span>
-                    {selectedAns !== activeQuestion.correctIndex && savedWrongId === activeQuestion.id && (
-                      <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(239, 68, 68, 0.15)', color: 'var(--accent)', padding: '2px 6px', borderRadius: '4px' }}>
-                        오답 노트 보관됨 ✍️
-                      </span>
-                    )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontWeight: '700', color: selectedAns === activeQuestion.correctIndex ? 'var(--success)' : 'var(--accent)', justifyContent: 'space-between', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {selectedAns === activeQuestion.correctIndex ? <Check size={16} /> : <AlertCircle size={16} />}
+                      <span>{selectedAns === activeQuestion.correctIndex ? '정답입니다!' : '오답입니다.'}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        onClick={() => handlePushToMochi(activeQuestion)}
+                        disabled={addingToMochiIds.has(activeQuestion.id)}
+                      >
+                        {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
+                      </button>
+                      {selectedAns !== activeQuestion.correctIndex && savedWrongId === activeQuestion.id && (
+                        <span style={{ fontSize: '0.7rem', background: 'rgba(239, 68, 68, 0.15)', color: 'var(--accent)', padding: '2px 6px', borderRadius: '4px' }}>
+                          오답 노트 보관됨 ✍️
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p style={{ margin: 0, lineHeight: '1.5', whiteSpace: 'pre-line' }}>
                     {activeQuestion.rationale}

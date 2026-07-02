@@ -15,6 +15,9 @@ interface HeaderProps {
   onSaveUserEmail: (email: string) => void;
   mochiApiKey: string;
   onSaveMochiApiKey: (key: string) => void;
+  mochiDecks: any[];
+  mochiQuizDeckId: string;
+  onSaveMochiQuizDeckId: (deckId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,13 +32,17 @@ export const Header: React.FC<HeaderProps> = ({
   userEmail,
   onSaveUserEmail,
   mochiApiKey,
-  onSaveMochiApiKey
+  onSaveMochiApiKey,
+  mochiDecks,
+  mochiQuizDeckId,
+  onSaveMochiQuizDeckId
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempUserId, setTempUserId] = useState(userId);
   const [tempUserEmail, setTempUserEmail] = useState(userEmail);
   const [tempMochiApiKey, setTempMochiApiKey] = useState(mochiApiKey);
+  const [tempMochiQuizDeckId, setTempMochiQuizDeckId] = useState(mochiQuizDeckId);
   const [showKey, setShowKey] = useState(false);
   const [showMochiKey, setShowMochiKey] = useState(false);
   const [isSavedAlert, setIsSavedAlert] = useState(false);
@@ -53,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
     onSaveUserId(tempUserId.trim());
     onSaveUserEmail(tempUserEmail.trim());
     onSaveMochiApiKey(tempMochiApiKey.trim());
+    onSaveMochiQuizDeckId(tempMochiQuizDeckId);
     
     setIsSavedAlert(true);
     setTimeout(() => {
@@ -134,6 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
             setTempUserId(userId);
             setTempUserEmail(userEmail);
             setTempMochiApiKey(mochiApiKey);
+            setTempMochiQuizDeckId(mochiQuizDeckId);
             setIsModalOpen(true);
           }}
           title="서비스 설정"
@@ -246,6 +255,30 @@ export const Header: React.FC<HeaderProps> = ({
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   * Mochi 카드의 오답 노트를 가져오기 위해 필요한 API Key입니다. 설정 화면에서 키를 생성하여 붙여넣으세요.
                 </span>
+
+                {tempMochiApiKey.trim() && mochiDecks && mochiDecks.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                      🎯 오답/퀴즈 전송용 Mochi 덱
+                    </label>
+                    <select
+                      value={tempMochiQuizDeckId}
+                      onChange={(e) => setTempMochiQuizDeckId(e.target.value)}
+                      className="select-glow"
+                      style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
+                    >
+                      <option value="">-- 전송할 덱 선택 --</option>
+                      {mochiDecks.map((deck) => (
+                        <option key={deck.id} value={deck.id}>
+                          {deck.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      * 학습 도중 또는 오답 노출방에서 Mochi 카드를 추가할 때 해당 덱으로 카드가 전송됩니다.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>

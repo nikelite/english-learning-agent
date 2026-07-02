@@ -11,6 +11,9 @@ interface QuizPanelProps {
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
   onLoadNextUnsolvedLesson?: () => void;
+  mochiApiKey: string;
+  mochiQuizDeckId: string;
+  onAddQuizToMochi: (quiz: QuizItem) => Promise<void>;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
@@ -21,7 +24,10 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   onBackToStudy,
   injectedQuizzes,
   onGraduateReview,
-  onLoadNextUnsolvedLesson
+  onLoadNextUnsolvedLesson,
+  mochiApiKey,
+  mochiQuizDeckId,
+  onAddQuizToMochi
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
@@ -73,6 +79,29 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
+  const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+
+  const handlePushToMochi = async (quiz: QuizItem) => {
+    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
+      alert("우측 상단 서비스 설정(⚙️)에서 Mochi API Key와 오답/퀴즈 전송용 Mochi 덱을 먼저 설정해 주세요.");
+      return;
+    }
+    setAddingToMochiIds(prev => {
+      const next = new Set(prev);
+      next.add(quiz.id);
+      return next;
+    });
+    try {
+      await onAddQuizToMochi(quiz);
+    } catch (err: any) {
+      alert(err.message || "Mochi 카드 전송에 실패했습니다.");
+      setAddingToMochiIds(prev => {
+        const next = new Set(prev);
+        next.delete(quiz.id);
+        return next;
+      });
+    }
+  };
 
   const activeQuestion = activeQuizzes[currentIdx];
   const progressPercent = activeQuizzes.length > 0 ? (currentIdx / activeQuizzes.length) * 100 : 0;
@@ -296,14 +325,25 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 marginBottom: '1rem',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
               }}>
-                <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.5', display: 'flex', gap: '0.5rem' }}>
-                  <span style={{ 
-                    color: isCorrect ? 'var(--success)' : 'var(--accent)',
-                    fontWeight: '900'
-                  }}>
-                    {isCorrect ? '✓' : '✗'}
-                  </span>
-                  Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}
+                <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.5', display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <span style={{ 
+                      color: isCorrect ? 'var(--success)' : 'var(--accent)',
+                      fontWeight: '900'
+                    }}>
+                      {isCorrect ? '✓' : '✗'}
+                    </span>
+                    <span>Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
+                    onClick={() => handlePushToMochi(quiz)}
+                    disabled={addingToMochiIds.has(quiz.id)}
+                  >
+                    {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
+                  </button>
                 </h5>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -458,21 +498,43 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         {isSubmitted && (
           <div className="quiz-explanation-box">
             {selectedAns === activeQuestion.correctIndex ? (
-              <div className="explanation-heading success">
-                <BookmarkCheck size={20} />
-                <span>정답입니다! 🎉</span>
+              <div className="explanation-heading success" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <BookmarkCheck size={20} />
+                  <span>정답입니다! 🎉</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  onClick={() => handlePushToMochi(activeQuestion)}
+                  disabled={addingToMochiIds.has(activeQuestion.id)}
+                >
+                  {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
+                </button>
               </div>
             ) : (
-              <div className="explanation-heading error" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+              <div className="explanation-heading error" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <AlertCircle size={20} />
                   <span>아쉽게 틀렸습니다!</span>
                 </div>
-                {savedWrongId === activeQuestion.id && (
-                  <span style={{ fontSize: '0.75rem', background: 'rgba(244, 63, 94, 0.15)', color: 'var(--accent)', padding: '0.2rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
-                    오답 노트 자동 보관됨 ✍️
-                  </span>
-                )}
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    onClick={() => handlePushToMochi(activeQuestion)}
+                    disabled={addingToMochiIds.has(activeQuestion.id)}
+                  >
+                    {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
+                  </button>
+                  {savedWrongId === activeQuestion.id && (
+                    <span style={{ fontSize: '0.75rem', background: 'rgba(244, 63, 94, 0.15)', color: 'var(--accent)', padding: '0.2rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                      오답 노트 자동 보관됨 ✍️
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 

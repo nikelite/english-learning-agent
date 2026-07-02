@@ -4,6 +4,7 @@ import { ReadingSplitView } from './components/ReadingSplitView';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
+import { fetchMochiDecks, createMochiCard } from './mochiService';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
@@ -56,6 +57,33 @@ export default function App() {
   const [apiKey, setApiKey] = useState<string>(() => {
     return localStorage.getItem('eng_reading_api_key') || '';
   });
+
+  const [mochiApiKey, setMochiApiKey] = useState<string>(() => {
+    return localStorage.getItem('mochi_api_key') || '';
+  });
+
+  const handleSaveMochiApiKey = (key: string) => {
+    setMochiApiKey(key);
+    localStorage.setItem('mochi_api_key', key);
+  };
+
+  const [mochiQuizDeckId, setMochiQuizDeckId] = useState<string>(() => {
+    return localStorage.getItem('mochi_quiz_deck_id') || '';
+  });
+
+  const handleSaveMochiQuizDeckId = (deckId: string) => {
+    setMochiQuizDeckId(deckId);
+    localStorage.setItem('mochi_quiz_deck_id', deckId);
+  };
+
+  const [mochiDecks, setMochiDecks] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!mochiApiKey.trim()) return;
+    fetchMochiDecks(mochiApiKey)
+      .then(decks => setMochiDecks(decks))
+      .catch(err => console.error("Failed to fetch Mochi decks in reading-quiz-agent:", err));
+  }, [mochiApiKey]);
 
   // 2. Navigation Tab & Views
   const [activeTab, setActiveTab] = useState<string>('learn');
@@ -886,16 +914,55 @@ export default function App() {
 
   // Graduation from mistakes notebook (triggered when review question is answered correctly)
   const handleGraduateReview = (wrongId: string) => {
-    setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: true } : wa));
     setStats(prev => ({
       ...prev,
       masteredCount: prev.masteredCount + 1
     }));
   };
 
-  // Manual dismiss wrong answer from notebook
+  // Manual dismiss wrong answer from notebook (archiving)
   const handleRemoveWrongAnswer = (wrongId: string) => {
-    setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    setWrongAnswers(prev => prev.map(wa => wa.id === wrongId ? { ...wa, isArchived: true } : wa));
+    setStats(prev => ({
+      ...prev,
+      masteredCount: prev.masteredCount + 1
+    }));
+  };
+
+  // Delete single wrong answer completely
+  const handleDeleteWrongAnswer = (wrongId: string) => {
+    if (window.confirm("이 오답 데이터를 오답노트에서 완전히 삭제하시겠습니까?")) {
+      setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
+    }
+  };
+
+  const handlePushSingleQuizToMochi = async (quiz: ReadingQuizItem) => {
+    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
+      throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
+    }
+    
+    const choiceLabels = ["A", "B", "C", "D", "E", "F"];
+    const choicesText = quiz.choices.map((c, i) => `${choiceLabels[i]}) ${c}`).join('\n');
+    const correctChoiceText = `${choiceLabels[quiz.correctIndex]}) ${quiz.choices[quiz.correctIndex]}`;
+
+    const content = `### Q. ${quiz.question}
+
+${choicesText}
+
+---
+
+**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceText}
+
+**풀이 및 해설**:
+${quiz.rationale}`;
+
+    await createMochiCard(
+      mochiApiKey,
+      mochiQuizDeckId,
+      content,
+      ["reading-agent", "quiz-review"]
+    );
   };
 
   const handleClearAllWrong = () => {
@@ -1115,6 +1182,11 @@ export default function App() {
         isSharedQuiz={isSharedQuiz}
         userEmail={userEmail}
         onSaveUserEmail={handleSaveUserEmail}
+        mochiApiKey={mochiApiKey}
+        onSaveMochiApiKey={handleSaveMochiApiKey}
+        mochiDecks={mochiDecks}
+        mochiQuizDeckId={mochiQuizDeckId}
+        onSaveMochiQuizDeckId={handleSaveMochiQuizDeckId}
       />
 
       {/* Shared quiz exit warning overlay banner */}
@@ -1747,6 +1819,9 @@ export default function App() {
                 onGraduateReview={handleGraduateReview}
                 apiKey={apiKey}
                 onAddCustomVocabulary={handleAddCustomVocabulary}
+                mochiApiKey={mochiApiKey}
+                mochiQuizDeckId={mochiQuizDeckId}
+                onAddQuizToMochi={handlePushSingleQuizToMochi}
               />
             )}
           </div>
@@ -1759,7 +1834,11 @@ export default function App() {
           <ReviewRoom
             wrongAnswers={wrongAnswers}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
+            onDeleteWrongAnswer={handleDeleteWrongAnswer}
             onClearAll={handleClearAllWrong}
+            mochiApiKey={mochiApiKey}
+            mochiQuizDeckId={mochiQuizDeckId}
+            onAddQuizToMochi={handlePushSingleQuizToMochi}
           />
         </div>
       )}

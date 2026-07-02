@@ -135,3 +135,30 @@ export async function fetchMochiCards(
   return allCards;
 }
 
+export async function createMochiCard(
+  apiKey: string,
+  deckId: string,
+  content: string,
+  tags: string[]
+): Promise<any> {
+  const response = await fetchWithBackoff(`${BASE_URL}/cards`, {
+    method: 'POST',
+    headers: {
+      'Authorization': getAuthHeader(apiKey),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      'deck-id': deckId,
+      content,
+      tags
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Mochi 카드 생성 실패: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+

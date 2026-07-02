@@ -47,6 +47,7 @@ export interface WrongReadingAnswer {
   quizItem: ReadingQuizItem;
   userAnswerIndex: number;
   timestamp: number;
+  isArchived?: boolean;
 }
 
 export interface AppStats {

@@ -15,6 +15,9 @@ interface ReadingSplitViewProps {
   onGraduateReview: (wrongId: string) => void; // Call when review question is answered correctly
   apiKey: string;
   onAddCustomVocabulary: (newVocab: ReadingVocabulary) => void;
+  mochiApiKey: string;
+  mochiQuizDeckId: string;
+  onAddQuizToMochi: (quiz: ReadingQuizItem) => Promise<void>;
 }
 
 // Helper to match sentence text against SentenceAnalysis objects using exact, substring, and normalized comparisons
@@ -52,7 +55,10 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   injectedQuizzes,
   onGraduateReview,
   apiKey,
-  onAddCustomVocabulary
+  onAddCustomVocabulary,
+  mochiApiKey,
+  mochiQuizDeckId,
+  onAddQuizToMochi
 }) => {
   // Active questions under play (changes if user filters to 'retry incorrect')
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -265,6 +271,29 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
+  const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+
+  const handlePushToMochi = async (quiz: ReadingQuizItem) => {
+    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
+      alert("우측 상단 서비스 설정(⚙️)에서 Mochi API Key와 오답/퀴즈 전송용 Mochi 덱을 먼저 설정해 주세요.");
+      return;
+    }
+    setAddingToMochiIds(prev => {
+      const next = new Set(prev);
+      next.add(quiz.id);
+      return next;
+    });
+    try {
+      await onAddQuizToMochi(quiz);
+    } catch (err: any) {
+      alert(err.message || "Mochi 카드 전송에 실패했습니다.");
+      setAddingToMochiIds(prev => {
+        const next = new Set(prev);
+        next.delete(quiz.id);
+        return next;
+      });
+    }
+  };
 
   const handleSentenceClick = (paragraph: any, sentence: string) => {
     // If clicking already active sentence, close it
@@ -1136,14 +1165,25 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                           marginBottom: '1rem',
                           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                         }}>
-                          <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.5', display: 'flex', gap: '0.5rem' }}>
-                            <span style={{ 
-                              color: isCorrect ? 'var(--success)' : 'var(--accent)',
-                              fontWeight: '900'
-                            }}>
-                              {isCorrect ? '✓' : '✗'}
-                            </span>
-                            Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}
+                          <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.5', display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <span style={{ 
+                                color: isCorrect ? 'var(--success)' : 'var(--accent)',
+                                fontWeight: '900'
+                              }}>
+                                {isCorrect ? '✓' : '✗'}
+                              </span>
+                              <span>Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
+                              onClick={() => handlePushToMochi(quiz)}
+                              disabled={addingToMochiIds.has(quiz.id)}
+                            >
+                              {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
+                            </button>
                           </h5>
                           
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -1308,7 +1348,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     {/* Explanations rationale box */}
                     {isSubmitted && (
                       <div className="quiz-explanation-box">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem', alignItems: 'center' }}>
                           {selectedAns === activeQuestion.correctIndex ? (
                             <span className="explanation-heading success" style={{ fontSize: '0.9rem' }}>
                               <BookmarkCheck size={18} /> 정답입니다! {activeQuestion.isReview && "오답 노트 정복 완료! 🎉"}
@@ -1318,6 +1358,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                               <AlertCircle size={18} /> 오답입니다. 오답 자동 보관됨 ✍️
                             </span>
                           )}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                            onClick={() => handlePushToMochi(activeQuestion)}
+                            disabled={addingToMochiIds.has(activeQuestion.id)}
+                          >
+                            {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가됨" : "⚡ Mochi 카드 추가"}
+                          </button>
                         </div>
                         <div style={{ fontSize: '0.875rem', color: 'var(--text-primary)', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
                           {activeQuestion.rationale}
