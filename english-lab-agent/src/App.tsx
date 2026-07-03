@@ -2349,67 +2349,102 @@ ${quiz.rationale}`;
                           return (
                             <div
                               key={lesson.id}
-                              className="history-item-container"
+                              className="lesson-item-card"
                               onClick={() => handleLoadPreset(lesson)}
                               style={{ 
-                                cursor: 'pointer',
-                                borderLeftWidth: '4px',
                                 borderLeftColor: lesson.isDraft ? '#f59e0b' : 'var(--secondary)'
                               }}
                             >
-                              {lesson.isDraft && (
-                                <div 
-                                  style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedDraftIds.has(lesson.id)}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                                    onChange={() => {
-                                      setSelectedDraftIds(prev => {
-                                        const next = new Set(prev);
-                                        if (next.has(lesson.id)) {
-                                          next.delete(lesson.id);
-                                        } else {
-                                          next.add(lesson.id);
-                                        }
-                                        return next;
-                                      });
-                                    }}
-                                  />
-                                </div>
-                              )}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', flex: 1, minWidth: 0, gap: '0.75rem' }}>
+                                {lesson.isDraft && (
+                                  <div 
+                                    style={{ display: 'flex', alignItems: 'center', paddingTop: '0.2rem' }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDraftIds.has(lesson.id)}
+                                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                                      onChange={() => {
+                                        setSelectedDraftIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(lesson.id)) {
+                                            next.delete(lesson.id);
+                                          } else {
+                                            next.add(lesson.id);
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                )}
 
-                              <div style={{ flex: 1, overflow: 'hidden', marginRight: '1rem', minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap', minWidth: 0 }}>
-                                  {lesson.isDraft ? (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '700' }}>
-                                      ⚡ AI 미생성
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
-                                        {lesson.style === 'spoken' ? '구어' : '문어'}
+                                <div className="lesson-card-content">
+                                  <div className="lesson-card-badges">
+                                    {lesson.isDraft ? (
+                                      <span className="lesson-card-badge draft">
+                                        ⚡ AI 미생성
                                       </span>
-                                      {lesson.writingLevel && (
-                                        <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
-                                          Level {lesson.writingLevel}
+                                    ) : (
+                                      <>
+                                        <span className="lesson-card-badge quizzes" style={{ background: lesson.style === 'spoken' ? 'var(--primary)' : 'var(--secondary)' }}>
+                                          {lesson.style === 'spoken' ? '구어' : '문어'}
                                         </span>
-                                      )}
-                                      {lesson.chatHistory && lesson.chatHistory.length > 0 && (
-                                        <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700' }}>
-                                          💬 대화 피드백
+                                        {lesson.writingLevel && (
+                                          <span className="lesson-card-badge quizzes" style={{ background: '#3b82f6', color: 'white' }}>
+                                            Level {lesson.writingLevel}
+                                          </span>
+                                        )}
+                                        {lesson.chatHistory && lesson.chatHistory.length > 0 && (
+                                          <span className="lesson-card-badge quizzes" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
+                                            💬 대화 피드백
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                    
+                                    {lesson.isDraft ? null : score !== null ? (() => {
+                                      const firstScore = lesson.firstAttemptScore 
+                                        ? `${lesson.firstAttemptScore.score}/${lesson.firstAttemptScore.total}`
+                                        : `${score}/${(lesson.quizzes || []).length}`;
+                                      
+                                      const retryStr = lesson.retryHistory && lesson.retryHistory.length > 0
+                                        ? `, 재시도: ` + lesson.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
+                                        : '';
+
+                                      return (
+                                        <span className="lesson-card-badge solved">
+                                          ✅ 풀이 완료 ({firstScore}{retryStr})
                                         </span>
-                                      )}
-                                    </>
-                                  )}
+                                      );
+                                    })() : hasQuiz ? (
+                                      <span className="lesson-card-badge unsolved">
+                                        📖 미풀이
+                                      </span>
+                                    ) : (
+                                      <span className="lesson-card-badge unsolved" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', borderColor: 'rgba(99, 102, 241, 0.3)' }}>
+                                        ✏️ 교정 전용
+                                      </span>
+                                    )}
+
+                                    {lesson.ownerId && lesson.ownerId !== userId && (
+                                      <span className="lesson-card-badge shared">
+                                        📥 다른 사용자 공유
+                                      </span>
+                                    )}
+                                    {lesson.ownerId && lesson.ownerId === userId && (
+                                      <span className="lesson-card-badge cloud">
+                                        ☁️ My 클라우드
+                                      </span>
+                                    )}
+                                  </div>
                                   
                                   {editingTitleId === lesson.id ? (
                                     <form 
                                       onSubmit={(e) => handleSaveRename(e, lesson.id)} 
                                       onClick={(e) => e.stopPropagation()}
-                                      style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}
+                                      style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', marginTop: '0.25rem', marginBottom: '0.25rem' }}
                                     >
                                       <input
                                         type="text"
@@ -2424,74 +2459,38 @@ ${quiz.rationale}`;
                                       </button>
                                     </form>
                                   ) : (
-                                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: 'white', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
+                                    <h4 className="lesson-card-title">
                                       {lesson.title}
-                                    </span>
+                                    </h4>
                                   )}
                                   
-                                  {editingTitleId !== lesson.id && (
-                                    <button 
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ padding: '0.1rem 0.3rem', fontSize: '0.7rem', color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-                                      onClick={(e) => handleStartRename(e, lesson)}
-                                    >
-                                      <Edit2 size={10} />
-                                    </button>
-                                  )}
+                                  <p className="lesson-card-desc">
+                                    {lesson.sourceText}
+                                  </p>
                                 </div>
-
-                                {/* Solved Status and Cloud Chips Row */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.25rem', marginBottom: '0.35rem' }}>
-                                  {lesson.isDraft ? null : score !== null ? (() => {
-                                    const firstScore = lesson.firstAttemptScore 
-                                      ? `${lesson.firstAttemptScore.score}/${lesson.firstAttemptScore.total}`
-                                      : `${score}/${(lesson.quizzes || []).length}`;
-                                    
-                                    const retryStr = lesson.retryHistory && lesson.retryHistory.length > 0
-                                      ? `, 재시도: ` + lesson.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
-                                      : '';
-
-                                    return (
-                                      <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
-                                        ✅ 풀이 완료 ({firstScore}{retryStr})
-                                      </span>
-                                    );
-                                  })() : hasQuiz ? (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
-                                      📖 미풀이
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
-                                      ✏️ 교정 전용
-                                    </span>
-                                  )}
-
-                                  {lesson.ownerId && lesson.ownerId !== userId && (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
-                                      📥 다른 사용자 공유
-                                    </span>
-                                  )}
-                                  {lesson.ownerId && lesson.ownerId === userId && (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
-                                      ☁️ My 클라우드
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', margin: 0 }}>
-                                  {lesson.sourceText}
-                                </p>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                              <div className="lesson-card-actions-wrapper">
                                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                   <Calendar size={12} /> {new Date(lesson.createdAt).toLocaleDateString('ko-KR')}
                                 </span>
+
+                                {editingTitleId !== lesson.id && (
+                                  <button 
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '0.3rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}
+                                    onClick={(e) => handleStartRename(e, lesson)}
+                                    title="제목 수정"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                )}
 
                                 <button
                                   className="btn btn-danger btn-sm"
                                   style={{ padding: '0.3rem', borderRadius: '6px' }}
                                   onClick={(e) => handleDeleteHistory(e, lesson.id)}
+                                  title="삭제"
                                 >
                                   <Trash2 size={12} />
                                 </button>

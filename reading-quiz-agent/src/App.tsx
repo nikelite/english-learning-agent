@@ -1595,164 +1595,145 @@ ${quiz.rationale}`;
                     <div
                       key={item.id}
                       onClick={() => handleStartLesson(item)}
-                      className="eli5-analogy-box"
+                      className="lesson-item-card"
                       style={{
-                        margin: 0,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '1rem',
-                        background: 'rgba(255,255,255,0.02)',
-                        borderLeftWidth: '4px',
                         borderLeftColor: item.isPending ? 'var(--text-muted)' : 'var(--secondary)',
-                        transition: 'transform 0.15s ease, background 0.15s ease',
-                        borderRadius: '0 8px 8px 0',
-                        opacity: item.isPending ? 0.85 : 1,
-                        overflow: 'hidden',
-                        flexShrink: 0
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                        e.currentTarget.style.transform = 'translateX(2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                        e.currentTarget.style.transform = 'none';
+                        opacity: item.isPending ? 0.85 : 1
                       }}
                     >
-                      {item.isPending && (
-                        <div 
-                          style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedPendingIds.has(item.id)}
-                            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                            onChange={() => {
-                              setSelectedPendingIds(prev => {
-                                const next = new Set(prev);
-                                if (next.has(item.id)) {
-                                  next.delete(item.id);
-                                } else {
-                                  next.add(item.id);
-                                }
-                                return next;
-                              });
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div style={{ textAlign: 'left', flex: 1, minWidth: 0, marginRight: '1rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                            📅 {new Date(item.createdAt).toLocaleDateString()}
-                          </span>
-                          {!item.isPending && (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
-                              📝 {item.quizzes.length} 문항
-                            </span>
-                          )}
-                          {item.isPending ? (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
-                              ⏳ 분석 대기중
-                            </span>
-                          ) : item.userAnswers ? (() => {
-                            const firstScore = item.firstAttemptScore 
-                              ? `${item.firstAttemptScore.score} / ${item.firstAttemptScore.total}`
-                              : `${item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / ${item.quizzes.length}`;
-                            
-                            const retryStr = item.retryHistory && item.retryHistory.length > 0
-                              ? `, 재시도: ` + item.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
-                              : '';
-
-                            return (
-                              <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
-                                ✅ 풀이 완료 ({firstScore}{retryStr})
-                                {item.solvedAt && ` | 📅 ${new Date(item.solvedAt).toLocaleDateString()} ${new Date(item.solvedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
-                              </span>
-                            );
-                          })() : (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
-                              📖 미풀이
-                            </span>
-                          )}
-                          {item.ownerId && item.ownerId !== userId && (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
-                              📥 {item.ownerId}님 공유
-                            </span>
-                          )}
-                          {item.ownerId && item.ownerId === userId && (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
-                              ☁️ My 클라우드
-                            </span>
-                          )}
-                        </div>
-                        {editingLessonId === item.id ? (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', flex: 1, minWidth: 0, gap: '0.75rem' }}>
+                        {item.isPending && (
                           <div 
-                            style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem', marginBottom: '0.25rem' }} 
+                            style={{ display: 'flex', alignItems: 'center', paddingTop: '0.2rem' }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <input
-                              type="text"
-                              value={editTitleInput}
-                              onChange={(e) => setEditTitleInput(e.target.value)}
-                              className="input-glow"
-                              style={{
-                                padding: '0.25rem 0.5rem',
-                                fontSize: '0.8rem',
-                                borderRadius: '6px',
-                                border: '1px solid var(--secondary)',
-                                background: 'rgba(0,0,0,0.4)',
-                                color: 'white',
-                                width: '100%',
-                                maxWidth: '240px'
-                              }}
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleUpdateLessonTitle(item.id, editTitleInput);
-                                  setEditingLessonId(null);
-                                } else if (e.key === 'Escape') {
-                                  setEditingLessonId(null);
-                                }
+                              type="checkbox"
+                              checked={selectedPendingIds.has(item.id)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                              onChange={() => {
+                                setSelectedPendingIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(item.id)) {
+                                    next.delete(item.id);
+                                  } else {
+                                    next.add(item.id);
+                                  }
+                                  return next;
+                                });
                               }}
                             />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleUpdateLessonTitle(item.id, editTitleInput);
-                                setEditingLessonId(null);
-                              }}
-                              className="btn btn-primary"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              저장
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingLessonId(null);
-                              }}
-                              className="btn btn-secondary"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              취소
-                            </button>
                           </div>
-                        ) : (
-                          <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {item.title}
-                          </h4>
                         )}
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
-                          {item.passageText}
-                        </p>
+
+                        <div className="lesson-card-content" style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+                          <div className="lesson-card-badges" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                            <span className="lesson-card-badge date" style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                              📅 {new Date(item.createdAt).toLocaleDateString()}
+                            </span>
+                            {!item.isPending && (
+                              <span className="lesson-card-badge quizzes" style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '600' }}>
+                                📝 {item.quizzes.length} 문항
+                              </span>
+                            )}
+                            {item.isPending ? (
+                              <span className="lesson-card-badge draft" style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
+                                ⏳ 분석 대기중
+                              </span>
+                            ) : item.userAnswers ? (() => {
+                              const firstScore = item.firstAttemptScore 
+                                ? `${item.firstAttemptScore.score} / ${item.firstAttemptScore.total}`
+                                : `${item.quizzes.filter(q => item.userAnswers?.[q.id] === q.correctIndex).length} / ${item.quizzes.length}`;
+                              
+                              const retryStr = item.retryHistory && item.retryHistory.length > 0
+                                ? `, 재시도: ` + item.retryHistory.map(r => `${r.score}/${r.total}`).join(', ')
+                                : '';
+
+                              return (
+                                <span className="lesson-card-badge solved" style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }}>
+                                  ✅ 풀이 완료 ({firstScore}{retryStr})
+                                </span>
+                              );
+                            })() : (
+                              <span className="lesson-card-badge unsolved" style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.15)', padding: '0.125rem 0.45rem', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', fontWeight: '500' }}>
+                                📖 미풀이
+                              </span>
+                            )}
+                            {item.ownerId && item.ownerId !== userId && (
+                              <span className="lesson-card-badge shared" style={{ fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
+                                📥 {item.ownerId}님 공유
+                              </span>
+                            )}
+                            {item.ownerId && item.ownerId === userId && (
+                              <span className="lesson-card-badge cloud" style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.125rem 0.45rem', borderRadius: '9999px', fontWeight: '700', display: 'inline-flex', alignItems: 'center' }}>
+                                ☁️ My 클라우드
+                              </span>
+                            )}
+                          </div>
+                          {editingLessonId === item.id ? (
+                            <div 
+                              style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem', marginBottom: '0.25rem' }} 
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="text"
+                                value={editTitleInput}
+                                onChange={(e) => setEditTitleInput(e.target.value)}
+                                className="input-glow"
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  fontSize: '0.8rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--secondary)',
+                                  background: 'rgba(0,0,0,0.4)',
+                                  color: 'white',
+                                  width: '100%',
+                                  maxWidth: '240px'
+                                }}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdateLessonTitle(item.id, editTitleInput);
+                                    setEditingLessonId(null);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingLessonId(null);
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateLessonTitle(item.id, editTitleInput);
+                                  setEditingLessonId(null);
+                                }}
+                                className="btn btn-primary"
+                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                저장
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingLessonId(null);
+                                }}
+                                className="btn btn-secondary"
+                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <h4 className="lesson-card-title" style={{ fontSize: '0.9rem', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {item.title}
+                            </h4>
+                          )}
+                          <p className="lesson-card-desc" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '0.15rem' }}>
+                            {item.passageText}
+                          </p>
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                      <div className="lesson-card-actions-wrapper" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
