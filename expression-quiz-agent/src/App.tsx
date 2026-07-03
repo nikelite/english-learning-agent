@@ -689,23 +689,35 @@ ${quiz.rationale}`;
     if (userId) {
       try {
         setSyncStatus('syncing');
-        const docId = await saveLessonToCloud(lesson, userId);
-        const cloudLesson = {
-          ...lesson,
-          id: docId,
-          ownerId: userId,
-          sharedWith: lesson.sharedWith || []
-        };
-
-        if (docId !== lesson.id) {
-          setLessonsHistory(prev => {
-            const filtered = prev.filter(item => item.id !== lesson.id && item.id !== docId && item.title !== cloudLesson.title);
-            const updated = [cloudLesson, ...filtered];
-            localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
-            return updated;
+        
+        // If this is a shared lesson owned by someone else, save progress separately
+        if (lesson.ownerId && lesson.ownerId !== userId) {
+          const { saveSharedLessonProgress } = await import('./firebaseService');
+          await saveSharedLessonProgress(lesson.id, userId, {
+            userAnswers: lesson.userAnswers,
+            solvedAt: lesson.solvedAt,
+            firstAttemptScore: lesson.firstAttemptScore,
+            retryHistory: lesson.retryHistory
           });
+        } else {
+          const docId = await saveLessonToCloud(lesson, userId);
+          const cloudLesson = {
+            ...lesson,
+            id: docId,
+            ownerId: userId,
+            sharedWith: lesson.sharedWith || []
+          };
+
+          if (docId !== lesson.id) {
+            setLessonsHistory(prev => {
+              const filtered = prev.filter(item => item.id !== lesson.id && item.id !== docId && item.title !== cloudLesson.title);
+              const updated = [cloudLesson, ...filtered];
+              localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+              return updated;
+            });
+          }
+          updatedLesson = cloudLesson;
         }
-        updatedLesson = cloudLesson;
         setSyncStatus('synced');
       } catch (err: any) {
         console.error("Failed to upload lesson on save:", err);

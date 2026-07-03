@@ -794,13 +794,25 @@ export default function App() {
     if (userId) {
       try {
         setSyncStatus('syncing');
-        const docId = await saveLessonToCloud(lesson, userId);
-        updatedLesson = {
-          ...lesson,
-          id: docId,
-          ownerId: userId,
-          sharedWith: lesson.sharedWith || []
-        };
+        
+        // If this is a shared lesson owned by someone else, save progress separately
+        if (lesson.ownerId && lesson.ownerId !== userId) {
+          const { saveSharedLessonProgress } = await import('./firebaseService');
+          await saveSharedLessonProgress(lesson.id, userId, {
+            userAnswers: lesson.userAnswers,
+            solvedAt: lesson.solvedAt,
+            firstAttemptScore: lesson.firstAttemptScore,
+            retryHistory: lesson.retryHistory
+          });
+        } else {
+          const docId = await saveLessonToCloud(lesson, userId);
+          updatedLesson = {
+            ...lesson,
+            id: docId,
+            ownerId: userId,
+            sharedWith: lesson.sharedWith || []
+          };
+        }
         setSyncStatus('synced');
       } catch (err: any) {
         console.error("Failed to upload lesson to cloud on save:", err);

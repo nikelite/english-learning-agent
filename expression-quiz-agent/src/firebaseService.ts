@@ -50,7 +50,7 @@ export async function saveLessonToCloud(lesson: Lesson, userId?: string | null):
       createdAt: lesson.createdAt || Date.now()
     };
     
-    if (userId) {
+    if (userId && !docData.ownerId) {
       docData.ownerId = userId;
     }
     if (!docData.sharedWith) {
@@ -138,6 +138,61 @@ export async function removeLessonAssociation(docId: string, userId: string): Pr
   }
 }
 
+/**
+ * Saves student progress on a shared lesson separately
+ */
+export async function saveSharedLessonProgress(
+  lessonId: string, 
+  userId: string, 
+  progress: {
+    userAnswers?: Record<string, number>;
+    solvedAt?: number;
+    firstAttemptScore?: { score: number; total: number };
+    retryHistory?: any[];
+  }
+): Promise<void> {
+  try {
+    const docId = `${lessonId}_${userId}`;
+    const ref = doc(db, 'expression_shared_progress', docId);
+    await setDoc(ref, {
+      lessonId,
+      userId,
+      progress,
+      updatedAt: Date.now()
+    });
+  } catch (error: any) {
+    console.error("Failed to save shared lesson progress:", error);
+  }
+}
+
+/**
+ * Loads all shared lesson progress documents for a given user
+ */
+export async function loadSharedLessonsProgress(
+  userId: string
+): Promise<Record<string, {
+  userAnswers?: Record<string, number>;
+  solvedAt?: number;
+  firstAttemptScore?: { score: number; total: number };
+  retryHistory?: any[];
+}>> {
+  try {
+    const q = query(collection(db, 'expression_shared_progress'), where('userId', '==', userId));
+    const querySnap = await getDocs(q);
+    const progressMap: Record<string, any> = {};
+    querySnap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.lessonId && data.progress) {
+        progressMap[data.lessonId] = data.progress;
+      }
+    });
+    return progressMap;
+  } catch (error: any) {
+    console.error("Failed to load shared lessons progress:", error);
+    return {};
+  }
+}
+
 function mergeLessons(local: Lesson, cloud: Lesson): { merged: Lesson, needsUpload: boolean } {
   const localSolved = !!local.userAnswers;
   const cloudSolved = !!cloud.userAnswers;
@@ -192,15 +247,32 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       sharedLessons.push(docSnap.data() as Lesson);
     });
     
-    // Merge cloud lists
+    // 3. Query shared lessons progress for this student
+    const progressMap = await loadSharedLessonsProgress(userId);
+    
+    // Merge cloud lists and inject student progress for shared lessons
     const cloudLessonsMap = new Map<string, Lesson>();
-    [...ownerLessons, ...sharedLessons].forEach((lesson) => {
+    ownerLessons.forEach((lesson) => {
       cloudLessonsMap.set(lesson.id, lesson);
+    });
+    sharedLessons.forEach((lesson) => {
+      let mergedShared = { ...lesson };
+      const studentProgress = progressMap[lesson.id];
+      if (studentProgress) {
+        mergedShared = {
+          ...mergedShared,
+          userAnswers: studentProgress.userAnswers,
+          solvedAt: studentProgress.solvedAt,
+          firstAttemptScore: studentProgress.firstAttemptScore,
+          retryHistory: studentProgress.retryHistory
+        };
+      }
+      cloudLessonsMap.set(lesson.id, mergedShared);
     });
     
     const syncedLessons: Lesson[] = [];
     
-    // 3. Merge local lessons. If offline local lesson is not in cloud, upload it.
+    // 4. Merge local lessons. If offline local lesson is not in cloud, upload it.
     for (const localLesson of localLessons) {
       if (localLesson.id.startsWith('preset-')) continue;
       
@@ -209,9 +281,18 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
         const { merged, needsUpload } = mergeLessons(localLesson, inCloud);
         if (needsUpload) {
           try {
-            await saveLessonToCloud(merged, userId);
+            if (merged.ownerId && merged.ownerId !== userId) {
+              await saveSharedLessonProgress(merged.id, userId, {
+                userAnswers: merged.userAnswers,
+                solvedAt: merged.solvedAt,
+                firstAttemptScore: merged.firstAttemptScore,
+                retryHistory: merged.retryHistory
+              });
+            } else {
+              await saveLessonToCloud(merged, userId);
+            }
           } catch (err) {
-            console.warn("Failed to upload merged lesson during sync:", err);
+            console.warn("Failed to upload merged lesson/progress during sync:", err);
           }
         }
         syncedLessons.push(merged);
@@ -234,7 +315,7 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       }
     }
     
-    // 4. Add remaining cloud lessons (which exist in cloud but were not in local storage)
+    // 5. Add remaining cloud lessons (which exist in cloud but were not in local storage)
     cloudLessonsMap.forEach((cloudLesson) => {
       syncedLessons.push(cloudLesson);
     });
