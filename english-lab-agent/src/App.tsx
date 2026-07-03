@@ -236,6 +236,7 @@ export default function App() {
   const [isDesigningSituation, setIsDesigningSituation] = useState<boolean>(false);
 
   const recognitionRef = useRef<any>(null);
+  const isSyncingWrongAnswersRef = useRef(false);
 
   // Clean up Speech on unmount
   useEffect(() => {
@@ -548,7 +549,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('lab_agent_wrong_answers', JSON.stringify(wrongAnswers));
     if (userId) {
-      saveWrongAnswersToCloud(userId, wrongAnswers);
+      if (isSyncingWrongAnswersRef.current) {
+        isSyncingWrongAnswersRef.current = false;
+        saveWrongAnswersToCloud(userId, wrongAnswers, parseInt(localStorage.getItem('lab_wrong_answers_updated_at') || '0', 10));
+      } else {
+        const newTime = Date.now();
+        localStorage.setItem('lab_wrong_answers_updated_at', newTime.toString());
+        saveWrongAnswersToCloud(userId, wrongAnswers, newTime);
+      }
     }
   }, [wrongAnswers, userId]);
 
@@ -600,17 +608,29 @@ export default function App() {
     }).catch(err => console.error("Cloud stats load failed:", err));
 
     // Sync Wrong answers mistakes review list
-    loadWrongAnswersFromCloud(userId).then((cloudWrong) => {
-      if (cloudWrong && isMounted) {
-        setWrongAnswers(prev => {
-          const merged = [...prev];
-          cloudWrong.forEach(cw => {
-            if (!merged.some(w => w.quizItem.question === cw.quizItem.question)) {
-              merged.push(cw);
-            }
-          });
-          return merged;
-        });
+    loadWrongAnswersFromCloud(userId).then((cloudData) => {
+      if (isMounted) {
+        const localSavedTime = localStorage.getItem('lab_wrong_answers_updated_at');
+        const localTime = localSavedTime ? parseInt(localSavedTime, 10) : 0;
+        
+        if (!cloudData) {
+          // Initialize cloud
+          saveWrongAnswersToCloud(userId, wrongAnswers, localTime || Date.now());
+          if (!localSavedTime) {
+            localStorage.setItem('lab_wrong_answers_updated_at', (localTime || Date.now()).toString());
+          }
+        } else if (cloudData.updatedAt > localTime) {
+          isSyncingWrongAnswersRef.current = true;
+          setWrongAnswers(cloudData.list);
+          localStorage.setItem('lab_agent_wrong_answers', JSON.stringify(cloudData.list));
+          localStorage.setItem('lab_wrong_answers_updated_at', cloudData.updatedAt.toString());
+        } else if (localTime > cloudData.updatedAt) {
+          saveWrongAnswersToCloud(userId, wrongAnswers, localTime);
+        } else {
+          // Equal: set local just to sync lists, no update needed
+          isSyncingWrongAnswersRef.current = true;
+          setWrongAnswers(cloudData.list);
+        }
       }
     }).catch(err => console.error("Cloud wrong answers load failed:", err));
     

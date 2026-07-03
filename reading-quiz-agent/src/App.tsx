@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { ReadingSplitView } from './components/ReadingSplitView';
 import { ReviewRoom } from './components/ReviewRoom';
@@ -89,6 +89,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('learn');
   const [viewMode, setViewMode] = useState<'creator' | 'split'>('creator');
   
+  const isSyncingWrongAnswersRef = useRef(false);
+
   // 3. Spaced repetition storage state trees
   const [wrongAnswers, setWrongAnswers] = useState<WrongReadingAnswer[]>(() => {
     const saved = localStorage.getItem('eng_reading_wrong_answers');
@@ -251,7 +253,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('eng_reading_wrong_answers', JSON.stringify(wrongAnswers));
     if (userId) {
-      saveWrongAnswersToCloud(userId, wrongAnswers);
+      if (isSyncingWrongAnswersRef.current) {
+        isSyncingWrongAnswersRef.current = false;
+        saveWrongAnswersToCloud(userId, wrongAnswers, parseInt(localStorage.getItem('eng_reading_wrong_answers_updated_at') || '0', 10));
+      } else {
+        const newTime = Date.now();
+        localStorage.setItem('eng_reading_wrong_answers_updated_at', newTime.toString());
+        saveWrongAnswersToCloud(userId, wrongAnswers, newTime);
+      }
     }
   }, [wrongAnswers, userId]);
 
@@ -332,17 +341,29 @@ export default function App() {
     }).catch(err => console.error("Cloud stats load failed:", err));
 
     // Sync mistakes notebook in parallel
-    loadWrongAnswersFromCloud(userId).then((cloudWrong) => {
-      if (cloudWrong && isMounted) {
-        setWrongAnswers(prev => {
-          const merged = [...prev];
-          cloudWrong.forEach(cw => {
-            if (!merged.some(w => w.quizItem.question === cw.quizItem.question)) {
-              merged.push(cw);
-            }
-          });
-          return merged;
-        });
+    loadWrongAnswersFromCloud(userId).then((cloudData) => {
+      if (isMounted) {
+        const localSavedTime = localStorage.getItem('eng_reading_wrong_answers_updated_at');
+        const localTime = localSavedTime ? parseInt(localSavedTime, 10) : 0;
+        
+        if (!cloudData) {
+          // Initialize cloud
+          saveWrongAnswersToCloud(userId, wrongAnswers, localTime || Date.now());
+          if (!localSavedTime) {
+            localStorage.setItem('eng_reading_wrong_answers_updated_at', (localTime || Date.now()).toString());
+          }
+        } else if (cloudData.updatedAt > localTime) {
+          isSyncingWrongAnswersRef.current = true;
+          setWrongAnswers(cloudData.list);
+          localStorage.setItem('eng_reading_wrong_answers', JSON.stringify(cloudData.list));
+          localStorage.setItem('eng_reading_wrong_answers_updated_at', cloudData.updatedAt.toString());
+        } else if (localTime > cloudData.updatedAt) {
+          saveWrongAnswersToCloud(userId, wrongAnswers, localTime);
+        } else {
+          // Equal: set local just to sync lists, no update needed
+          isSyncingWrongAnswersRef.current = true;
+          setWrongAnswers(cloudData.list);
+        }
       }
     }).catch(err => console.error("Cloud wrong answers load failed:", err));
     

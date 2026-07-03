@@ -277,27 +277,33 @@ export async function loadStatsFromCloud(userId: string): Promise<AppStats | nul
 }
 
 /**
- * Saves the entire wrong answers array of a user to a single Cloud document (efficient!)
+ * Saves the entire wrong answers array of a user to a single Cloud document (efficient!) along with updatedAt timestamp
  */
-export async function saveWrongAnswersToCloud(userId: string, wrongAnswers: WrongAnswer[]): Promise<void> {
+export async function saveWrongAnswersToCloud(userId: string, wrongAnswers: WrongAnswer[], updatedAt?: number): Promise<void> {
   try {
     const wrongAnswersRef = doc(db, 'expression_wrong_answers', userId);
-    await setDoc(wrongAnswersRef, { list: wrongAnswers });
+    await setDoc(wrongAnswersRef, { 
+      list: wrongAnswers,
+      updatedAt: updatedAt || Date.now()
+    });
   } catch (error: any) {
     console.error("Firebase save wrong answers failed:", error);
   }
 }
 
 /**
- * Loads the wrong answers array of a user from Cloud
+ * Loads the wrong answers array of a user from Cloud along with its updatedAt timestamp
  */
-export async function loadWrongAnswersFromCloud(userId: string): Promise<WrongAnswer[] | null> {
+export async function loadWrongAnswersFromCloud(userId: string): Promise<{ list: WrongAnswer[], updatedAt: number } | null> {
   try {
     const wrongAnswersRef = doc(db, 'expression_wrong_answers', userId);
     const docSnap = await getDoc(wrongAnswersRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return (data.list || []) as WrongAnswer[];
+      return {
+        list: (data.list || []) as WrongAnswer[],
+        updatedAt: data.updatedAt || 0
+      };
     }
     return null;
   } catch (error: any) {
