@@ -156,6 +156,7 @@ export default function App() {
   const [activeLesson, setActiveLesson] = useState<LabLesson | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isShareOpen, setIsShareOpen] = useState<boolean>(false);
+  const [lessonsToShare, setLessonsToShare] = useState<LabLesson[]>([]);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // 3. User Input States
@@ -1023,6 +1024,32 @@ export default function App() {
     }
   };
 
+  const handleBulkDeleteLessons = async () => {
+    if (selectedDraftIds.size === 0) return;
+    if (window.confirm(`선택한 ${selectedDraftIds.size}개의 학습 세트를 완전히 삭제하시겠습니까?`)) {
+      const idsToDelete = Array.from(selectedDraftIds);
+      setLessonsHistory(prev => {
+        const updated = prev.filter(item => !selectedDraftIds.has(item.id));
+        localStorage.setItem('lab_lessons_history', JSON.stringify(updated));
+        return updated;
+      });
+      setSelectedDraftIds(new Set());
+      
+      if (userId) {
+        try {
+          setSyncStatus('syncing');
+          for (const id of idsToDelete) {
+            await removeLessonAssociation(id, userId);
+          }
+          setSyncStatus('synced');
+        } catch (err: any) {
+          console.error("Failed to remove cloud association on bulk delete:", err);
+          setSyncStatus('error');
+        }
+      }
+    }
+  };
+
   const handleStartRename = (e: React.MouseEvent, lesson: LabLesson) => {
     e.stopPropagation();
     setEditingTitleId(lesson.id);
@@ -1484,7 +1511,12 @@ ${quiz.rationale}`;
                   <button 
                     className="btn btn-secondary btn-sm"
                     style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.2)' }}
-                    onClick={() => setIsShareOpen(true)}
+                    onClick={() => {
+                      if (activeLesson) {
+                        setLessonsToShare([activeLesson]);
+                      }
+                      setIsShareOpen(true);
+                    }}
                   >
                     🔗 학습 세트 공유
                   </button>
@@ -1508,9 +1540,12 @@ ${quiz.rationale}`;
                 />
 
                 <ShareModal
-                  lesson={activeLesson}
+                  lessons={lessonsToShare}
                   isOpen={isShareOpen}
-                  onClose={() => setIsShareOpen(false)}
+                  onClose={() => {
+                    setIsShareOpen(false);
+                    setLessonsToShare([]);
+                  }}
                 />
               </div>
             )
@@ -2286,8 +2321,8 @@ ${quiz.rationale}`;
                       </div>
                     )}
 
-                    {/* Draft selection controls */}
-                    {filterMode === 'draft' && draftCount > 0 && (
+                    {/* Lesson selection controls */}
+                    {filteredHistory.length > 0 && (
                       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', gap: '0.4rem' }}>
                           <button
@@ -2295,8 +2330,8 @@ ${quiz.rationale}`;
                             className="btn btn-secondary btn-sm"
                             style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
                             onClick={() => {
-                              const visibleDraftIds = filteredHistory.filter(item => item.isDraft).map(item => item.id);
-                              setSelectedDraftIds(new Set(visibleDraftIds));
+                              const visibleIds = filteredHistory.map(item => item.id);
+                              setSelectedDraftIds(new Set(visibleIds));
                             }}
                           >
                             전체 선택 ({filteredHistory.length}개)
@@ -2315,7 +2350,7 @@ ${quiz.rationale}`;
                       </div>
                     )}
 
-                    {/* Bulk action panel for draft generation */}
+                    {/* Bulk action panel */}
                     {selectedDraftIds.size > 0 && (
                       <div style={{
                         display: 'flex',
@@ -2326,12 +2361,14 @@ ${quiz.rationale}`;
                         padding: '0.75rem 1rem',
                         borderRadius: '8px',
                         marginBottom: '0.75rem',
-                        fontSize: '0.85rem'
+                        fontSize: '0.85rem',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem'
                       }}>
                         <span style={{ color: 'white', fontWeight: '600' }}>
-                          대기 카드 {selectedDraftIds.size}개 선택됨
+                          학습 세트 {selectedDraftIds.size}개 선택됨
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
@@ -2340,14 +2377,38 @@ ${quiz.rationale}`;
                           >
                             선택 해제
                           </button>
+                          {Array.from(selectedDraftIds).every(id => lessonsHistory.find(l => l.id === id)?.isDraft) && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={handleBulkGenerateQuizzes}
+                              disabled={isBulkGenerating}
+                              style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
+                            >
+                              {isBulkGenerating ? '생성 중...' : '⚡ AI 일괄 생성'}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={handleBulkGenerateQuizzes}
-                            disabled={isBulkGenerating}
-                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}
+                            onClick={() => {
+                              const selectedLessons = Array.from(selectedDraftIds)
+                                .map(id => lessonsHistory.find(l => l.id === id))
+                                .filter(Boolean) as LabLesson[];
+                              setLessonsToShare(selectedLessons);
+                              setIsShareOpen(true);
+                            }}
                           >
-                            {isBulkGenerating ? '생성 중...' : '✨ AI 일괄 생성'}
+                            🔗 선택 공유
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={handleBulkDeleteLessons}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                          >
+                            🗑️ 선택 삭제
                           </button>
                         </div>
                       </div>
@@ -2376,29 +2437,27 @@ ${quiz.rationale}`;
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'flex-start', flex: 1, minWidth: 0, gap: '0.75rem' }}>
-                                {lesson.isDraft && (
-                                  <div 
-                                    style={{ display: 'flex', alignItems: 'center', paddingTop: '0.2rem' }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedDraftIds.has(lesson.id)}
-                                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                                      onChange={() => {
-                                        setSelectedDraftIds(prev => {
-                                          const next = new Set(prev);
-                                          if (next.has(lesson.id)) {
-                                            next.delete(lesson.id);
-                                          } else {
-                                            next.add(lesson.id);
-                                          }
-                                          return next;
-                                        });
-                                      }}
-                                    />
-                                  </div>
-                                )}
+                                <div 
+                                  style={{ display: 'flex', alignItems: 'center', paddingTop: '0.2rem' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDraftIds.has(lesson.id)}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                                    onChange={() => {
+                                      setSelectedDraftIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(lesson.id)) {
+                                          next.delete(lesson.id);
+                                        } else {
+                                          next.add(lesson.id);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </div>
 
                                 <div className="lesson-card-content">
                                   <div className="lesson-card-badges">
