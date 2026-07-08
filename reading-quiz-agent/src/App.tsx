@@ -21,7 +21,8 @@ import {
   loadPresetsProgressFromCloud,
   logQuizAttempt,
   sendEmailReport,
-  savePassageAnalysisToCloud
+  savePassageAnalysisToCloud,
+  shareLessonWithUser
 } from './firebaseService';
 
 interface SentenceItem {
@@ -195,7 +196,14 @@ export default function App() {
   const [isBulkGenerating, setIsBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
   const [isBulkAnalyzing, setIsBulkAnalyzing] = useState(false);
-  const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState({ completed: 0, total: 0 });
+  const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState<{
+    completed: number;
+    total: number;
+    currentTitle?: string;
+    retryCount?: number;
+    maxRetries?: number;
+    retryReason?: string;
+  }>({ completed: 0, total: 0 });
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('eng_user_email') || '';
   });
@@ -499,10 +507,27 @@ export default function App() {
       return;
     }
 
-    setIsBulkAnalyzing(true);
-    setBulkAnalyzeProgress({ completed: 0, total: lessonsToAnalyze.length });
+    // 1. Calculate total chunks (Gemini API calls) across all selected non-pending lessons
+    let totalApiCallsNeeded = 0;
+    const CHUNK_SIZE = 10;
+    lessonsToAnalyze.forEach(lesson => {
+      lesson.paragraphs.forEach(p => {
+        const sentences = splitIntoSentences(p.englishText);
+        totalApiCallsNeeded += Math.ceil(sentences.length / CHUNK_SIZE);
+      });
+    });
 
-    let completedCount = 0;
+    setIsBulkAnalyzing(true);
+    setBulkAnalyzeProgress({
+      completed: 0,
+      total: totalApiCallsNeeded,
+      currentTitle: '',
+      retryCount: 0,
+      maxRetries: 7,
+      retryReason: ''
+    });
+
+    let previouslyCompletedApiCalls = 0;
 
     for (const lesson of lessonsToAnalyze) {
       try {
@@ -510,7 +535,16 @@ export default function App() {
           lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
           lesson.passageText,
           apiKey,
-          () => {}, // Silent progress inside the lesson
+          (completedChunks) => {
+            const overallCompleted = previouslyCompletedApiCalls + completedChunks;
+            setBulkAnalyzeProgress(prev => ({
+              ...prev,
+              completed: overallCompleted,
+              currentTitle: lesson.title,
+              retryCount: 0,
+              retryReason: ''
+            }));
+          },
           (paragraphId, pAnalysis) => {
             try {
               const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
@@ -520,6 +554,14 @@ export default function App() {
             } catch (err) {
               console.error("Failed to save partial cache locally:", err);
             }
+          },
+          (attempt, maxRetries, statusOrError) => {
+            setBulkAnalyzeProgress(prev => ({
+              ...prev,
+              retryCount: attempt,
+              maxRetries,
+              retryReason: statusOrError
+            }));
           }
         );
 
@@ -528,15 +570,24 @@ export default function App() {
       } catch (error) {
         console.error(`Failed to analyze passage sentences for lesson ${lesson.id}:`, error);
       } finally {
-        completedCount++;
-        setBulkAnalyzeProgress({ completed: completedCount, total: lessonsToAnalyze.length });
+        let lessonChunks = 0;
+        lesson.paragraphs.forEach(p => {
+          const sentences = splitIntoSentences(p.englishText);
+          lessonChunks += Math.ceil(sentences.length / CHUNK_SIZE);
+        });
+        previouslyCompletedApiCalls += lessonChunks;
+        
+        setBulkAnalyzeProgress(prev => ({
+          ...prev,
+          completed: previouslyCompletedApiCalls
+        }));
         await new Promise(resolve => setTimeout(resolve, 800));
       }
     }
 
     setSelectedPendingIds(new Set());
     setIsBulkAnalyzing(false);
-    alert(`🎉 AI 일괄 지문 분석이 완료되었습니다! (${completedCount}개 학습자료 지문 전체 분석 완료)`);
+    alert(`🎉 AI 일괄 지문 분석이 완료되었습니다! (${lessonsToAnalyze.length}개 학습자료 지문 전체 분석 완료)`);
   };
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
@@ -719,7 +770,19 @@ export default function App() {
           setActiveLesson(decodedLesson);
           setIsSharedQuiz(true);
           setViewMode('split');
-          saveLessonToHistory(decodedLesson);
+          
+          const currentUserId = localStorage.getItem('eng_user_id') || null;
+          let sharedLessonWithUser = { ...decodedLesson };
+          if (currentUserId) {
+            sharedLessonWithUser.sharedWith = [...(decodedLesson.sharedWith || [])];
+            if (!sharedLessonWithUser.sharedWith.includes(currentUserId) && decodedLesson.ownerId !== currentUserId) {
+              sharedLessonWithUser.sharedWith.push(currentUserId);
+              shareLessonWithUser(decodedLesson.id, currentUserId).catch(err =>
+                console.error("Failed to associate shared lesson in cloud on link load:", err)
+              );
+            }
+          }
+          saveLessonToHistory(sharedLessonWithUser);
         } else {
           setError("공유된 클라우드 학습 데이터를 찾을 수 없습니다.");
         }
@@ -1634,23 +1697,55 @@ ${quiz.rationale}`;
               {isBulkAnalyzing && (
                 <div style={{
                   background: 'rgba(0, 0, 0, 0.2)',
-                  border: '1px solid var(--border-color)',
+                  border: '1px solid rgba(6, 182, 212, 0.3)',
                   borderRadius: '10px',
-                  padding: '1rem',
+                  padding: '1.25rem',
                   marginBottom: '1rem'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem', fontWeight: '600' }}>
-                    <span>🔍 AI 일괄 지문 분석 진행 중...</span>
-                    <span>{bulkAnalyzeProgress.completed} / {bulkAnalyzeProgress.total} 완료</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee' }}>
+                      <RefreshCw size={14} className="animate-spin" />
+                      🔍 AI 일괄 지문 분석 진행 중...
+                    </span>
+                    <span>API 호출 완료: {bulkAnalyzeProgress.completed} / {bulkAnalyzeProgress.total}</span>
                   </div>
+                  {bulkAnalyzeProgress.currentTitle && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                      분석 중: <strong>{bulkAnalyzeProgress.currentTitle}</strong>
+                    </div>
+                  )}
                   <div style={{ background: 'rgba(255,255,255,0.05)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
                     <div style={{
                       background: 'linear-gradient(90deg, #06b6d4 0%, var(--primary) 100%)',
                       height: '100%',
-                      width: `${(bulkAnalyzeProgress.completed / bulkAnalyzeProgress.total) * 100}%`,
+                      width: `${bulkAnalyzeProgress.total > 0 ? (bulkAnalyzeProgress.completed / bulkAnalyzeProgress.total) * 100 : 0}%`,
                       transition: 'width 0.3s ease'
                     }}></div>
                   </div>
+                  {bulkAnalyzeProgress.retryCount !== undefined && bulkAnalyzeProgress.retryCount > 0 && (
+                    <div style={{
+                      marginTop: '0.75rem',
+                      fontSize: '0.75rem',
+                      color: '#f59e0b',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.2)',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.2rem'
+                    }}>
+                      <div style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span>⚠️ API 통신 지연/실패로 자동 재시도 중...</span>
+                        <span>(시도 횟수: {bulkAnalyzeProgress.retryCount} / {bulkAnalyzeProgress.maxRetries || 7})</span>
+                      </div>
+                      {bulkAnalyzeProgress.retryReason && (
+                        <div style={{ opacity: 0.85, fontSize: '0.7rem' }}>
+                          [사유: {bulkAnalyzeProgress.retryReason}]
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

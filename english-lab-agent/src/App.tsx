@@ -28,7 +28,8 @@ import {
   logQuizAttempt,
   sendEmailReport,
   saveCustomPersonasToCloud,
-  loadCustomPersonasFromCloud
+  loadCustomPersonasFromCloud,
+  shareLessonWithUser
 } from './firebaseService';
 import { 
   Sparkles, Info, BookOpen, Trash2, Calendar, Edit2, Search, PlusCircle, Check,
@@ -774,6 +775,9 @@ export default function App() {
             sharedLessonWithUser.sharedWith = [...(decodedLesson.sharedWith || [])];
             if (!sharedLessonWithUser.sharedWith.includes(currentUserId) && decodedLesson.ownerId !== currentUserId) {
               sharedLessonWithUser.sharedWith.push(currentUserId);
+              shareLessonWithUser(decodedLesson.id, currentUserId).catch(err =>
+                console.error("Failed to associate shared lesson in cloud on link load:", err)
+              );
             }
           }
           saveLessonToHistory(sharedLessonWithUser);

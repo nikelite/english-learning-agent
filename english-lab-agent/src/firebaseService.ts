@@ -287,18 +287,31 @@ export async function syncUserLessons(userId: string, localLessons: LabLesson[])
         syncedLessons.push(merged);
         cloudLessonsMap.delete(localLesson.id);
       } else {
-        // Offline custom lesson: upload to cloud under this user
+        // Offline custom lesson OR shared lesson not associated in cloud
         try {
-          const uploadedId = await saveLessonToCloud(localLesson, userId);
-          const uploadedLesson = {
-            ...localLesson,
-            id: uploadedId,
-            ownerId: userId,
-            sharedWith: localLesson.sharedWith || []
-          };
-          syncedLessons.push(uploadedLesson);
+          if (localLesson.ownerId && localLesson.ownerId !== userId) {
+            await shareLessonWithUser(localLesson.id, userId);
+            if (localLesson.userAnswers) {
+              await saveSharedLessonProgress(localLesson.id, userId, {
+                userAnswers: localLesson.userAnswers,
+                solvedAt: localLesson.solvedAt,
+                firstAttemptScore: localLesson.firstAttemptScore,
+                retryHistory: localLesson.retryHistory
+              });
+            }
+            syncedLessons.push(localLesson);
+          } else {
+            const uploadedId = await saveLessonToCloud(localLesson, userId);
+            const uploadedLesson = {
+              ...localLesson,
+              id: uploadedId,
+              ownerId: userId,
+              sharedWith: localLesson.sharedWith || []
+            };
+            syncedLessons.push(uploadedLesson);
+          }
         } catch (err) {
-          console.warn("Failed to upload local offline lesson during sync:", err);
+          console.warn("Failed to upload local offline/shared association during sync:", err);
           syncedLessons.push(localLesson); // Preserve locally
         }
       }

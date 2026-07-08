@@ -21,7 +21,8 @@ async function fetchWithRetry(
   url: string,
   options: RequestInit,
   maxRetries = 7,
-  initialDelay = 1000
+  initialDelay = 1000,
+  onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<Response> {
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -33,7 +34,11 @@ async function fetchWithRetry(
       
       // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
       if (response.status === 429 || response.status >= 500) {
+        const msg = `HTTP ${response.status}`;
         console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+        if (onRetry) {
+          onRetry(attempt + 1, maxRetries, msg);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2;
         delay += Math.floor(Math.random() * 200); // add jitter
@@ -41,8 +46,12 @@ async function fetchWithRetry(
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || String(error);
       console.warn(`Network error during Gemini API request: ${error}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+      if (onRetry) {
+        onRetry(attempt + 1, maxRetries, msg);
+      }
       if (attempt === maxRetries - 1) {
         throw error;
       }
@@ -600,7 +609,8 @@ async function analyzeParagraphChunkSentences(
   chunkIdx: number,
   sentences: string[],
   passageText: string,
-  apiKey: string
+  apiKey: string,
+  onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<SentenceAnalysis[]> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
@@ -661,13 +671,19 @@ Ensure the response is a single, valid JSON array of objects. Do not wrap in mar
     }
   };
 
-  const response = await fetchWithRetry(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
+  const response = await fetchWithRetry(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
     },
-    body: JSON.stringify(requestBody)
-  });
+    7,
+    1000,
+    onRetry
+  );
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -726,7 +742,8 @@ export async function analyzePassageSentences(
   passageText: string,
   apiKey: string,
   onProgress?: (completed: number, total: number) => void,
-  onParagraphAnalyzed?: (paragraphId: number, analysis: SentenceAnalysis[]) => void
+  onParagraphAnalyzed?: (paragraphId: number, analysis: SentenceAnalysis[]) => void,
+  onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<Record<number, SentenceAnalysis[]>> {
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
@@ -775,7 +792,8 @@ export async function analyzePassageSentences(
           chunkIdx,
           chunk,
           passageText,
-          apiKey
+          apiKey,
+          onRetry
         );
         chunkResults[chunkIdx] = cResult;
       } catch (err) {

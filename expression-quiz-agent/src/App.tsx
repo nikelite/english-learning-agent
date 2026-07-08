@@ -20,7 +20,8 @@ import {
   savePresetsProgressToCloud,
   loadPresetsProgressFromCloud,
   logQuizAttempt,
-  sendEmailReport
+  sendEmailReport,
+  shareLessonWithUser
 } from './firebaseService';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, fetchMochiCards, createMochiCard } from './mochiService';
@@ -843,6 +844,9 @@ ${quiz.rationale}`;
             sharedLessonWithUser.sharedWith = [...(decodedLesson.sharedWith || [])];
             if (!sharedLessonWithUser.sharedWith.includes(currentUserId) && decodedLesson.ownerId !== currentUserId) {
               sharedLessonWithUser.sharedWith.push(currentUserId);
+              shareLessonWithUser(decodedLesson.id, currentUserId).catch(err =>
+                console.error("Failed to associate shared lesson in cloud on link load:", err)
+              );
             }
           }
           saveLessonToHistory(sharedLessonWithUser).then(saved => setActiveLesson(saved));
