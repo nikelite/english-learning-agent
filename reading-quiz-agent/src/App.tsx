@@ -203,6 +203,7 @@ export default function App() {
     retryCount?: number;
     maxRetries?: number;
     retryReason?: string;
+    statusPhase?: 'generating' | 'analyzing' | 'done' | '';
   }>({ completed: 0, total: 0 });
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('eng_user_email') || '';
@@ -440,24 +441,59 @@ export default function App() {
     localStorage.setItem('last_reading_sentence_limit', String(sentenceLimit));
   }, [sentenceLimit]);
 
-  // Batch generate quizzes for selected pending lessons
-  const handleBulkGenerateQuizzes = async () => {
+  // Batch process selected lessons: generate quizzes first if pending, then analyze passage sentences
+  const handleBulkProcessLessons = async () => {
     if (selectedPendingIds.size === 0) return;
     if (!apiKey) {
-      alert("AI 일괄 생성을 진행하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
+      alert("AI 일괄 작업을 진행하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
       return;
     }
 
-    setIsBulkGenerating(true);
-    setBulkProgress({ completed: 0, total: selectedPendingIds.size });
+    const selectedLessons = Array.from(selectedPendingIds)
+      .map(id => lessonsHistory.find(l => l.id === id))
+      .filter(Boolean) as ReadingLesson[];
 
-    const idsToGenerate = Array.from(selectedPendingIds);
-    let completedCount = 0;
+    if (selectedLessons.length === 0) return;
 
-    for (const lessonId of idsToGenerate) {
-      try {
-        const lesson = lessonsHistory.find(item => item.id === lessonId);
-        if (lesson && lesson.isPending) {
+    // 1. Calculate total API calls needed
+    let totalApiCallsNeeded = 0;
+    const CHUNK_SIZE = 10;
+    selectedLessons.forEach(lesson => {
+      if (lesson.isPending) {
+        totalApiCallsNeeded += 1; // 1 call for generateReadingLesson
+      }
+      const sentences = splitIntoSentences(lesson.passageText);
+      totalApiCallsNeeded += Math.ceil(sentences.length / CHUNK_SIZE);
+    });
+
+    setIsBulkAnalyzing(true);
+    setBulkAnalyzeProgress({
+      completed: 0,
+      total: totalApiCallsNeeded,
+      currentTitle: '',
+      retryCount: 0,
+      maxRetries: 7,
+      retryReason: '',
+      statusPhase: 'generating'
+    });
+
+    let previouslyCompletedApiCalls = 0;
+
+    for (let i = 0; i < selectedLessons.length; i++) {
+      let lesson = selectedLessons[i];
+
+      // Update current title and initial status phase
+      setBulkAnalyzeProgress(prev => ({
+        ...prev,
+        currentTitle: lesson.title,
+        statusPhase: lesson.isPending ? 'generating' : 'analyzing',
+        retryCount: 0,
+        retryReason: ''
+      }));
+
+      // Phase 1: Generate quizzes if pending
+      if (lesson.isPending) {
+        try {
           const generated = await generateReadingLesson(
             lesson.passageText,
             apiKey,
@@ -473,64 +509,34 @@ export default function App() {
             isPending: false
           };
 
-          await saveLessonToHistory(completedLesson);
+          // Save to local & cloud history
+          lesson = await saveLessonToHistory(completedLesson);
+
+          previouslyCompletedApiCalls += 1;
+          setBulkAnalyzeProgress(prev => ({
+            ...prev,
+            completed: previouslyCompletedApiCalls,
+            statusPhase: 'analyzing'
+          }));
+        } catch (error) {
+          console.error(`Failed to generate quizzes for lesson ${lesson.id}:`, error);
+          previouslyCompletedApiCalls += 1; // Count as completed to keep progress bar moving
+          setBulkAnalyzeProgress(prev => ({
+            ...prev,
+            completed: previouslyCompletedApiCalls
+          }));
+          // Skip sentence analysis since generation failed
+          continue;
         }
-      } catch (error) {
-        console.error(`Failed to generate quizzes for lesson ${lessonId}:`, error);
-      } finally {
-        completedCount++;
-        setBulkProgress(prev => ({ ...prev, completed: completedCount }));
-        // Add a small delay between lessons to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 800));
       }
-    }
 
-    setSelectedPendingIds(new Set());
-    setIsBulkGenerating(false);
-    alert(`🎉 AI 일괄 생성이 완료되었습니다! (${completedCount}개 학습자료 빌드 완료)`);
-  };
-
-  // Batch analyze passage sentences for selected lessons
-  const handleBulkAnalyzePassages = async () => {
-    if (selectedPendingIds.size === 0) return;
-    if (!apiKey) {
-      alert("AI 일괄 지문 분석을 진행하려면 Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
-      return;
-    }
-
-    const lessonsToAnalyze = Array.from(selectedPendingIds)
-      .map(id => lessonsHistory.find(l => l.id === id))
-      .filter(l => l && !l.isPending) as ReadingLesson[];
-
-    if (lessonsToAnalyze.length === 0) {
-      alert("분석 대기 중(Pending)인 학습 세트는 먼저 'AI 일괄 생성'을 통해 생성해야 지문 전체 분석이 가능합니다.");
-      return;
-    }
-
-    // 1. Calculate total chunks (Gemini API calls) across all selected non-pending lessons
-    let totalApiCallsNeeded = 0;
-    const CHUNK_SIZE = 10;
-    lessonsToAnalyze.forEach(lesson => {
-      lesson.paragraphs.forEach(p => {
-        const sentences = splitIntoSentences(p.englishText);
-        totalApiCallsNeeded += Math.ceil(sentences.length / CHUNK_SIZE);
-      });
-    });
-
-    setIsBulkAnalyzing(true);
-    setBulkAnalyzeProgress({
-      completed: 0,
-      total: totalApiCallsNeeded,
-      currentTitle: '',
-      retryCount: 0,
-      maxRetries: 7,
-      retryReason: ''
-    });
-
-    let previouslyCompletedApiCalls = 0;
-
-    for (const lesson of lessonsToAnalyze) {
+      // Phase 2: Passage sentence analysis
       try {
+        setBulkAnalyzeProgress(prev => ({
+          ...prev,
+          statusPhase: 'analyzing'
+        }));
+
         const fullResult = await analyzePassageSentences(
           lesson.paragraphs.map(p => ({ id: p.id, englishText: p.englishText })),
           lesson.passageText,
@@ -540,7 +546,6 @@ export default function App() {
             setBulkAnalyzeProgress(prev => ({
               ...prev,
               completed: overallCompleted,
-              currentTitle: lesson.title,
               retryCount: 0,
               retryReason: ''
             }));
@@ -576,7 +581,7 @@ export default function App() {
           lessonChunks += Math.ceil(sentences.length / CHUNK_SIZE);
         });
         previouslyCompletedApiCalls += lessonChunks;
-        
+
         setBulkAnalyzeProgress(prev => ({
           ...prev,
           completed: previouslyCompletedApiCalls
@@ -587,7 +592,7 @@ export default function App() {
 
     setSelectedPendingIds(new Set());
     setIsBulkAnalyzing(false);
-    alert(`🎉 AI 일괄 지문 분석이 완료되었습니다! (${lessonsToAnalyze.length}개 학습자료 지문 전체 분석 완료)`);
+    alert(`🎉 AI 일괄 생성 & 분석이 완료되었습니다! (${selectedLessons.length}개 학습자료 지문 및 분석 완료)`);
   };
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
@@ -1669,54 +1674,33 @@ ${quiz.rationale}`;
                 </button>
               </div>
 
-              {/* Bulk generation progress bar */}
-              {isBulkGenerating && (
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '10px',
-                  padding: '1rem',
-                  marginBottom: '1rem'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem', fontWeight: '600' }}>
-                    <span>✨ AI 일괄 분석 진행 중...</span>
-                    <span>{bulkProgress.completed} / {bulkProgress.total} 완료</span>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{
-                      background: 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
-                      height: '100%',
-                      width: `${(bulkProgress.completed / bulkProgress.total) * 100}%`,
-                      transition: 'width 0.3s ease'
-                    }}></div>
-                  </div>
-                </div>
-              )}
-
-              {/* Bulk analysis progress bar */}
+              {/* Bulk analysis & processing progress bar */}
               {isBulkAnalyzing && (
                 <div style={{
                   background: 'rgba(0, 0, 0, 0.2)',
-                  border: '1px solid rgba(6, 182, 212, 0.3)',
+                  border: `1px solid ${bulkAnalyzeProgress.statusPhase === 'generating' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
                   borderRadius: '10px',
                   padding: '1.25rem',
                   marginBottom: '1rem'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem', fontWeight: '600' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: bulkAnalyzeProgress.statusPhase === 'generating' ? '#fbbf24' : '#22d3ee' }}>
                       <RefreshCw size={14} className="animate-spin" />
-                      🔍 AI 일괄 지문 분석 진행 중...
+                      {bulkAnalyzeProgress.statusPhase === 'generating' ? '⚡ AI 일괄 지문 & 퀴즈 생성 중...' : '🔍 AI 일괄 지문 전체 분석 중...'}
                     </span>
                     <span>API 호출 완료: {bulkAnalyzeProgress.completed} / {bulkAnalyzeProgress.total}</span>
                   </div>
                   {bulkAnalyzeProgress.currentTitle && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                      분석 중: <strong>{bulkAnalyzeProgress.currentTitle}</strong>
+                      {bulkAnalyzeProgress.statusPhase === 'generating' ? '생성 중: ' : '분석 중: '} 
+                      <strong>{bulkAnalyzeProgress.currentTitle}</strong>
                     </div>
                   )}
                   <div style={{ background: 'rgba(255,255,255,0.05)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
                     <div style={{
-                      background: 'linear-gradient(90deg, #06b6d4 0%, var(--primary) 100%)',
+                      background: bulkAnalyzeProgress.statusPhase === 'generating' 
+                        ? 'linear-gradient(90deg, #f59e0b 0%, var(--primary) 100%)' 
+                        : 'linear-gradient(90deg, #06b6d4 0%, var(--primary) 100%)',
                       height: '100%',
                       width: `${bulkAnalyzeProgress.total > 0 ? (bulkAnalyzeProgress.completed / bulkAnalyzeProgress.total) * 100 : 0}%`,
                       transition: 'width 0.3s ease'
@@ -1805,28 +1789,24 @@ ${quiz.rationale}`;
                     >
                       선택 해제
                     </button>
-                    {Array.from(selectedPendingIds).every(id => lessonsHistory.find(l => l.id === id)?.isPending) && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={handleBulkGenerateQuizzes}
-                        disabled={isBulkGenerating}
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700' }}
-                      >
-                        {isBulkGenerating ? '생성 중...' : '⚡ AI 일괄 생성'}
-                      </button>
-                    )}
-                    {Array.from(selectedPendingIds).some(id => !lessonsHistory.find(l => l.id === id)?.isPending) && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={handleBulkAnalyzePassages}
-                        disabled={isBulkAnalyzing}
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: '700', background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.3)' }}
-                      >
-                        {isBulkAnalyzing ? '분석 중...' : '🔍 AI 지문 전체 분석'}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleBulkProcessLessons}
+                      disabled={isBulkAnalyzing}
+                      style={{
+                        padding: '0.25rem 0.75rem',
+                        fontSize: '0.75rem',
+                        fontWeight: '700',
+                        background: 'linear-gradient(90deg, #f59e0b 0%, #06b6d4 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                      }}
+                    >
+                      {isBulkAnalyzing ? '일괄 진행 중...' : '⚡ AI 일괄 생성 & 분석'}
+                    </button>
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
