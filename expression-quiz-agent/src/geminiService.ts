@@ -38,6 +38,25 @@ async function fetchWithRetry(
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
 }
 
+function cleanJsonString(raw: string): string {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.substring(7);
+  }
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.substring(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.substring(0, cleaned.length - 3);
+  }
+  cleaned = cleaned.trim();
+  
+  // Remove control characters except standard whitespace characters (tab, newline, carriage return)
+  cleaned = cleaned.replace(/[\u0000-\u0008\u000b-\u000f\u0010-\u001f]/g, "");
+  
+  return cleaned;
+}
+
 // Preloaded Premium Lessons for immediate offline exploration
 export const PRESET_LESSONS: Lesson[] = [
   {
@@ -265,7 +284,8 @@ Important Instructions:
 1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array.
 2. In the quizzes, test different angles of the topic: preposition matching, active vs passive voice, tense, subject-verb agreement, etc.
 3. Keep the tone friendly, encouraging, and highly professional yet simple.
-4. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
+4. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations, analogies, examples, and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
+5. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
 export async function generateLessonFromText(
   text: string,
@@ -326,11 +346,8 @@ export async function generateLessonFromText(
     const data = await response.json();
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!responseText) {
-      throw new Error("Gemini가 유효한 결과를 반환하지 않았습니다. 입력을 확인해 주세요.");
-    }
-
-    const parsedJson = JSON.parse(responseText);
+    const cleanedText = cleanJsonString(responseText);
+    const parsedJson = JSON.parse(cleanedText);
 
     // Map properties and guarantee compliance
     const lesson: Lesson = {
@@ -552,7 +569,8 @@ Strict Schema Requirements:
 Important Instructions:
 1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array for each lesson.
 2. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
-3. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
+3. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations, analogies, examples, and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
+4. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
 export async function generateVocabularyLessons(
   text: string,
@@ -613,11 +631,8 @@ export async function generateVocabularyLessons(
     const data = await response.json();
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!responseText) {
-      throw new Error("Gemini가 유효한 결과를 반환하지 않았습니다. 입력을 확인해 주세요.");
-    }
-
-    const parsedJson = JSON.parse(responseText);
+    const cleanedText = cleanJsonString(responseText);
+    const parsedJson = JSON.parse(cleanedText);
     const rawLessons = parsedJson.lessons || [];
 
     return rawLessons.map((item: any, idx: number) => {
