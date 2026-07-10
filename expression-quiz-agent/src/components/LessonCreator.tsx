@@ -5,7 +5,7 @@ import { PRESET_LESSONS } from '../geminiService';
 
 interface LessonCreatorProps {
   apiKey: string;
-  onGenerate: (text: string, questionCount: number, title?: string, isDraft?: boolean) => Promise<void>;
+  onGenerate: (text: string, questionCount: number, title?: string, isDraft?: boolean, isVocabulary?: boolean) => Promise<void>;
   onLoadPreset: (preset: Lesson) => void;
   isLoading: boolean;
   activeLesson: Lesson | null;
@@ -28,6 +28,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
   });
   const [error, setError] = useState<string | null>(null);
   const [isRegisterDraft, setIsRegisterDraft] = useState(false);
+  const [mode, setMode] = useState<'expression' | 'vocabulary'>('expression');
 
   React.useEffect(() => {
     localStorage.setItem('last_expr_question_count', String(questionCount));
@@ -49,7 +50,7 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
     }
 
     try {
-      await onGenerate(text, questionCount, titleInput.trim(), isRegisterDraft);
+      await onGenerate(text, questionCount, titleInput.trim(), isRegisterDraft, mode === 'vocabulary');
       setInputText('');
       setTitleInput('');
     } catch (err: any) {
@@ -70,7 +71,9 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
             AI 학습 어시스턴트
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-            틀린 퀴즈 해설, 단어, 혹은 영어 문장을 붙여넣으세요. AI가 심층 학습 자료를 생성합니다.
+            {mode === 'vocabulary' 
+              ? '어휘를 개별 혹은 뜻/뉘앙스별로 붙여넣으세요. 각각 독립된 세트로 정교하게 생성합니다.' 
+              : '틀린 퀴즈 해설, 단어, 혹은 영어 문장을 붙여넣으세요. AI가 심층 학습 자료를 생성합니다.'}
           </p>
         </div>
         <button
@@ -86,13 +89,72 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
 
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Mode Selector Tabs */}
+        <div style={{
+          display: 'flex',
+          gap: '0.25rem',
+          padding: '0.2rem',
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '10px',
+          border: '1px solid var(--border-color)'
+        }}>
+          <button
+            type="button"
+            onClick={() => setMode('expression')}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              fontSize: '0.775rem',
+              fontWeight: mode === 'expression' ? '700' : '500',
+              borderRadius: '8px',
+              border: 'none',
+              background: mode === 'expression' ? 'var(--primary)' : 'transparent',
+              color: mode === 'expression' ? 'white' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.2rem'
+            }}
+          >
+            ✍️ 표현/문법
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('vocabulary')}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              fontSize: '0.775rem',
+              fontWeight: mode === 'vocabulary' ? '700' : '500',
+              borderRadius: '8px',
+              border: 'none',
+              background: mode === 'vocabulary' ? 'var(--primary)' : 'transparent',
+              color: mode === 'vocabulary' ? 'white' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.2rem'
+            }}
+          >
+            📚 어휘 학습
+          </button>
+        </div>
+
         <div>
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="예시 입력:&#10;Despite our preparation, we failed the exam. / Although we prepared well... 두 표현의 차이를 알려줘."
+            placeholder={
+              mode === 'vocabulary'
+                ? "예시 입력:\n002 affect\naffect의 다른 뜻\naffection\naffectionate\nv. 영향을 미치다\nv. 감정을 유발하다\nn. 애정, 애착\nadj. 다정한, 애정 어린"
+                : "예시 입력:\nDespite our preparation, we failed the exam. / Although we prepared well... 두 표현의 차이를 알려줘."
+            }
             className="textarea-glow"
-            style={{ minHeight: '130px', fontSize: '0.9rem' }}
+            style={{ minHeight: '140px', fontSize: '0.9rem' }}
             disabled={isLoading}
           />
         </div>

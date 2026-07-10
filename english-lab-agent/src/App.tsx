@@ -1157,6 +1157,14 @@ export default function App() {
     }));
   };
 
+  const formatQuestionForMochi = (question: string, correctChoiceText: string): string => {
+    const blankRegex = /(?:_\s*){3,}|_{3,}|\(\s*blank\s*\)|\[\s*blank\s*\]|\(\s*빈칸\s*\)|\[\s*빈칸\s*\]/gi;
+    if (blankRegex.test(question)) {
+      return question.replace(blankRegex, `{${correctChoiceText}}`);
+    }
+    return question;
+  };
+
   const handlePushSingleQuizToMochi = async (quiz: LabQuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
       throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
@@ -1164,15 +1172,19 @@ export default function App() {
     
     const choiceLabels = ["A", "B", "C", "D", "E", "F"];
     const choicesText = quiz.choices.map((c, i) => `${choiceLabels[i]}) ${c}`).join('\n');
-    const correctChoiceText = `${choiceLabels[quiz.correctIndex]}) ${quiz.choices[quiz.correctIndex]}`;
+    const correctChoiceText = quiz.choices[quiz.correctIndex];
+    const correctChoiceTextFull = `${choiceLabels[quiz.correctIndex]}) ${correctChoiceText}`;
 
-    const content = `### Q. ${quiz.question}
+    // Convert blank/cloze to {correctAnswer} format
+    const formattedQuestion = formatQuestionForMochi(quiz.question, correctChoiceText);
+
+    const content = `### Q. ${formattedQuestion}
 
 ${choicesText}
 
 ---
 
-**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceText}
+**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceTextFull}
 
 **풀이 및 해설**:
 ${quiz.rationale}`;

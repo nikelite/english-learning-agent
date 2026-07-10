@@ -40,6 +40,7 @@ export interface Lesson {
   pronunciation: PronunciationData;
   quizzes: QuizItem[];
   isDraft?: boolean;
+  isVocabulary?: boolean;
   ownerId?: string | null;
   sharedWith?: string[];
   userAnswers?: Record<string, number>;

@@ -501,3 +501,209 @@ export async function deserializeLesson(base64Str: string): Promise<Lesson | nul
   }
 }
 
+// Vocabulary Mode System Prompt for Gemini
+const VOCABULARY_SYSTEM_PROMPT = `You are a native English linguistic expert and educational tutor. Your task is to analyze the provided English vocabulary root word, word list, or text, identify all distinct vocabulary words, meanings, or nuances, and generate a list of deep study materials.
+
+For each distinct word, derivative, or meaning/nuance (e.g., if the user lists 'affect' with different part-of-speeches or meanings, or lists 'affection', 'affectionate' as related derivatives, create a separate lesson entry for each one), generate a corresponding lesson study material.
+
+Your response MUST be a single, valid JSON object with a "lessons" array containing the lesson objects. Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.
+
+You must fill out all fields in KOREAN (except the English keywords/examples where appropriate).
+
+Strict Schema Requirements:
+{
+  "lessons": [
+    {
+      "title": "The vocabulary word and its part of speech/meaning in Korean (e.g., 'affect (v. 영향을 미치다)')",
+      "eli5": {
+        "explanation": "Explain the word's native nuance and dictionary definition in Korean. Focus on the core feeling of the word, native-speaker sensations, nuances, and things usually missed in standard vocabulary books. Write in a friendly, engaging tone suitable for a 10-year-old child (ELI10) in Korean.",
+        "analogy": "A clever, highly intuitive analogy or visual metaphor in Korean to help the student visualize the word's core nuance.",
+        "example": "A clear, natural example sentence in English showing the word in its typical context (e.g., 'Smoking affects your health. (O)')",
+        "exampleContext": "Brief Korean explanation about the example sentence context, usage, and why it is natural."
+      },
+      "memoryTips": {
+        "tipFormula": "A short, memorable 'formula' or visual equation (e.g., 'Affect = Action -> Effect = Result')",
+        "conceptA": "The word's main concept/뉘앙스",
+        "conceptADesc": "Brief, punchy description of the main concept in Korean",
+        "conceptB": "A confusing synonym, antonym, or close nuance (e.g. influence, or effect)",
+        "conceptBDesc": "Brief, punchy explanation of the difference in Korean",
+        "visualImage": "A mental image or vivid memory trick in Korean to lock this word in the user's brain forever."
+      },
+      "pronunciation": {
+        "wordOrPhrase": "The key vocabulary word",
+        "phoneticRespelling": "Phonetic respelling with syllable capitals for stress (e.g., 'uh-FEKT')",
+        "koreanPhonetic": "Natural Korean phonetic pronunciation guide (e.g., '어펙트')",
+        "stressGuide": "Detailed tips in Korean on linking, rhythm, and where to put primary stress."
+      },
+      "quizzes": [
+        {
+          "question": "A multiple-choice question in Korean, testing the correct usage of this word in context (e.g. selecting the correct word/preposition for an English blank sentence).",
+          "choices": [
+            "Four plausible options in English (or Korean as appropriate). Make them highly deceptive based on confusing nuances."
+          ],
+          "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
+          "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect. Reference choices using A번, B번, C번, D번."
+        }
+      ]
+    }
+  ]
+}
+
+Important Instructions:
+1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array for each lesson.
+2. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
+3. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
+
+export async function generateVocabularyLessons(
+  text: string,
+  apiKey: string,
+  questionCount: number = 5
+): Promise<Lesson[]> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const cleanText = text.trim();
+  if (!cleanText) {
+    throw new Error("분석할 텍스트가 입력되지 않았습니다.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${VOCABULARY_SYSTEM_PROMPT}
+            
+            Strict Request Parameters:
+            - Generate EXACTLY ${questionCount} multiple-choice quizzes under the 'quizzes' array for each lesson.
+            
+            Here is the study vocabulary/text to analyze:
+            """
+            ${cleanText}
+            """`
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2
+    }
+  };
+
+  try {
+    const response = await fetchWithRetry(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+      throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      throw new Error("Gemini가 유효한 결과를 반환하지 않았습니다. 입력을 확인해 주세요.");
+    }
+
+    const parsedJson = JSON.parse(responseText);
+    const rawLessons = parsedJson.lessons || [];
+
+    return rawLessons.map((item: any, idx: number) => {
+      const lesson: Lesson = {
+        id: `lesson-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        title: item.title || "새로운 영어 어휘 학습 세트",
+        sourceText: cleanText,
+        createdAt: Date.now() - idx * 1000,
+        isVocabulary: true,
+        eli5: {
+          explanation: item.eli5?.explanation || "설명이 누락되었습니다.",
+          analogy: item.eli5?.analogy || "비유가 누락되었습니다.",
+          example: item.eli5?.example || "예문이 누락되었습니다.",
+          exampleContext: item.eli5?.exampleContext || "해설이 누락되었습니다."
+        },
+        memoryTips: {
+          tipFormula: item.memoryTips?.tipFormula || "",
+          conceptA: item.memoryTips?.conceptA || "",
+          conceptADesc: item.memoryTips?.conceptADesc || "",
+          conceptB: item.memoryTips?.conceptB || "",
+          conceptBDesc: item.memoryTips?.conceptBDesc || "",
+          visualImage: item.memoryTips?.visualImage || ""
+        },
+        pronunciation: {
+          wordOrPhrase: item.pronunciation?.wordOrPhrase || "",
+          phoneticRespelling: item.pronunciation?.phoneticRespelling || "",
+          koreanPhonetic: item.pronunciation?.koreanPhonetic || "",
+          stressGuide: item.pronunciation?.stressGuide || ""
+        },
+        quizzes: (item.quizzes || []).map((q: any, qIdx: number) => {
+          const rawChoices = q.choices || ["A", "B", "C", "D"];
+          const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
+          const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+
+          // Shuffle choices using standard Fisher-Yates
+          const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
+          for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+          }
+
+          const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
+          const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+
+          // Remap A/B/C/D labels in rationale to match shuffled order
+          const LABELS = ['A', 'B', 'C', 'D'];
+          const oldToNewIdx: Record<number, number> = {};
+          choicesWithIndex.forEach((c: any, newIdx: number) => {
+            oldToNewIdx[c.cIdx] = newIdx;
+          });
+          let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+          // Phase 1: Replace old labels → temp placeholders (avoid collision)
+          const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
+          LABELS.forEach((label, oldIdx) => {
+            if (oldToNewIdx[oldIdx] !== undefined) {
+              const temp = TEMP[oldToNewIdx[oldIdx]];
+              remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+            }
+          });
+          // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
+          for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
+            if (oldToNewIdx[oldIdx] !== undefined) {
+              const numStr = `${oldIdx + 1}번`;
+              const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
+              remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
+            }
+          }
+          // Phase 2: Replace temp placeholders → final labels
+          TEMP.forEach((temp, labelIdx) => {
+            remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[labelIdx]);
+          });
+
+          return {
+            id: `expr-q-${Date.now()}-${idx}-${qIdx}`,
+            question: q.question || "문제가 생성되지 않았습니다.",
+            choices: shuffledChoices,
+            correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
+            rationale: remappedRationale
+          };
+        })
+      };
+      return lesson;
+    });
+  } catch (error: any) {
+    console.error("Gemini Vocabulary Generation Error:", error);
+    throw new Error(error.message || "어휘 학습자료를 생성하는 도중 알 수 없는 에러가 발생했습니다.");
+  }
+}
+

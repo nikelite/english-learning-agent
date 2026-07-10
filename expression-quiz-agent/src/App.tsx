@@ -6,7 +6,7 @@ import { QuizPanel } from './components/QuizPanel';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
-import { PRESET_LESSONS, generateLessonFromText, deserializeLesson } from './geminiService';
+import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons } from './geminiService';
 import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2, X } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -419,12 +419,30 @@ export default function App() {
       const savedCount = localStorage.getItem('last_expr_question_count');
       const qCount = savedCount ? Number(savedCount) : 5;
 
-      const generated = await generateLessonFromText(activeLesson.sourceText, apiKey, qCount);
-      generated.id = activeLesson.id; // Keep original ID
-      generated.title = activeLesson.title;
+      if (activeLesson.isVocabulary) {
+        const generatedList = await generateVocabularyLessons(activeLesson.sourceText, apiKey, qCount);
+        if (generatedList.length === 0) {
+          throw new Error("어휘 분석 데이터를 생성하지 못했습니다.");
+        }
 
-      const saved = await saveLessonToHistory(generated);
-      setActiveLesson(saved);
+        const firstGenerated = generatedList[0];
+        firstGenerated.id = activeLesson.id; // Keep original draft ID
+        const savedFirst = await saveLessonToHistory(firstGenerated);
+
+        // Save the rest as new lessons
+        for (let i = 1; i < generatedList.length; i++) {
+          await saveLessonToHistory(generatedList[i]);
+        }
+
+        setActiveLesson(savedFirst);
+      } else {
+        const generated = await generateLessonFromText(activeLesson.sourceText, apiKey, qCount);
+        generated.id = activeLesson.id; // Keep original ID
+        generated.title = activeLesson.title;
+
+        const saved = await saveLessonToHistory(generated);
+        setActiveLesson(saved);
+      }
     } catch (err: any) {
       alert(err.message || 'AI 학습 세트 생성에 실패했습니다.');
     } finally {
@@ -454,11 +472,24 @@ export default function App() {
         const draftLesson = lessonsHistory.find(item => item.id === lessonId);
         if (!draftLesson) continue;
 
-        const generated = await generateLessonFromText(draftLesson.sourceText, apiKey, qCount);
-        generated.id = draftLesson.id;
-        generated.title = draftLesson.title;
+        if (draftLesson.isVocabulary) {
+          const generatedList = await generateVocabularyLessons(draftLesson.sourceText, apiKey, qCount);
+          if (generatedList.length > 0) {
+            const firstGenerated = generatedList[0];
+            firstGenerated.id = draftLesson.id; // Keep original draft ID
+            await saveLessonToHistory(firstGenerated);
 
-        await saveLessonToHistory(generated);
+            // Save the rest as new lessons
+            for (let j = 1; j < generatedList.length; j++) {
+              await saveLessonToHistory(generatedList[j]);
+            }
+          }
+        } else {
+          const generated = await generateLessonFromText(draftLesson.sourceText, apiKey, qCount);
+          generated.id = draftLesson.id;
+          generated.title = draftLesson.title;
+          await saveLessonToHistory(generated);
+        }
       }
 
       setSelectedDraftIds(new Set());
@@ -470,6 +501,14 @@ export default function App() {
     }
   };
 
+  const formatQuestionForMochi = (question: string, correctChoiceText: string): string => {
+    const blankRegex = /(?:_\s*){3,}|_{3,}|\(\s*blank\s*\)|\[\s*blank\s*\]|\(\s*빈칸\s*\)|\[\s*빈칸\s*\]/gi;
+    if (blankRegex.test(question)) {
+      return question.replace(blankRegex, `{${correctChoiceText}}`);
+    }
+    return question;
+  };
+
   const handlePushSingleQuizToMochi = async (quiz: QuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
       throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
@@ -477,15 +516,19 @@ export default function App() {
     
     const choiceLabels = ["A", "B", "C", "D", "E", "F"];
     const choicesText = quiz.choices.map((c, i) => `${choiceLabels[i]}) ${c}`).join('\n');
-    const correctChoiceText = `${choiceLabels[quiz.correctIndex]}) ${quiz.choices[quiz.correctIndex]}`;
+    const correctChoiceText = quiz.choices[quiz.correctIndex];
+    const correctChoiceTextFull = `${choiceLabels[quiz.correctIndex]}) ${correctChoiceText}`;
 
-    const content = `### Q. ${quiz.question}
+    // Convert blank/cloze to {correctAnswer} format
+    const formattedQuestion = formatQuestionForMochi(quiz.question, correctChoiceText);
+
+    const content = `### Q. ${formattedQuestion}
 
 ${choicesText}
 
 ---
 
-**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceText}
+**정답**: ${quiz.correctIndex + 1}번 / ${correctChoiceTextFull}
 
 **풀이 및 해설**:
 ${quiz.rationale}`;
@@ -931,7 +974,7 @@ ${quiz.rationale}`;
   };
 
   // AI custom generation trigger
-  const handleGenerateLesson = async (text: string, questionCount: number, customTitle?: string, isDraft?: boolean) => {
+  const handleGenerateLesson = async (text: string, questionCount: number, customTitle?: string, isDraft?: boolean, isVocabulary?: boolean) => {
     if (isDraft) {
       const chunks = text.split(/\n\s*\n/).map(c => c.trim()).filter(Boolean);
       if (chunks.length === 0) return;
@@ -952,6 +995,7 @@ ${quiz.rationale}`;
             sourceText: chunk,
             createdAt: Date.now() - idx * 1000,
             isDraft: true,
+            isVocabulary: isVocabulary || false,
             eli5: { explanation: '', analogy: '', example: '', exampleContext: '' },
             memoryTips: { tipFormula: '', conceptA: '', conceptADesc: '', conceptB: '', conceptBDesc: '', visualImage: '' },
             pronunciation: { wordOrPhrase: '', koreanPhonetic: '', stressGuide: '', phoneticRespelling: '' },
@@ -974,14 +1018,31 @@ ${quiz.rationale}`;
 
     setIsLoading(true);
     try {
-      const generated = await generateLessonFromText(text, apiKey, questionCount);
-      if (customTitle && customTitle.trim()) {
-        generated.title = customTitle.trim();
+      if (isVocabulary) {
+        const generatedList = await generateVocabularyLessons(text, apiKey, questionCount);
+        if (generatedList.length === 0) {
+          throw new Error("어휘 분석 데이터를 생성하지 못했습니다.");
+        }
+
+        const savedLessons: Lesson[] = [];
+        for (const item of generatedList) {
+          const saved = await saveLessonToHistory(item);
+          savedLessons.push(saved);
+        }
+
+        setViewMode('study');
+        setActiveStudyTab('eli5');
+        setActiveLesson(savedLessons[0]);
+      } else {
+        const generated = await generateLessonFromText(text, apiKey, questionCount);
+        if (customTitle && customTitle.trim()) {
+          generated.title = customTitle.trim();
+        }
+        setViewMode('study');
+        setActiveStudyTab('eli5');
+        const savedLesson = await saveLessonToHistory(generated);
+        setActiveLesson(savedLesson);
       }
-      setViewMode('study');
-      setActiveStudyTab('eli5');
-      const savedLesson = await saveLessonToHistory(generated);
-      setActiveLesson(savedLesson);
     } catch (error) {
       throw error;
     } finally {
@@ -1690,7 +1751,11 @@ ${quiz.rationale}`;
                       }}
                       className="lesson-item-card"
                       style={{
-                        borderLeftColor: item.isDraft ? '#f59e0b' : 'var(--secondary)'
+                        borderLeftColor: item.isVocabulary 
+                          ? '#10b981' 
+                          : item.isDraft 
+                            ? '#f59e0b' 
+                            : 'var(--secondary)'
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', flex: 1, minWidth: 0, gap: '0.75rem' }}>
@@ -1721,6 +1786,11 @@ ${quiz.rationale}`;
                             <span className="lesson-card-badge date">
                               📅 {new Date(item.createdAt).toLocaleDateString()}
                             </span>
+                            {item.isVocabulary && (
+                              <span className="lesson-card-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                                📚 어휘 학습
+                              </span>
+                            )}
                             {item.isDraft ? (
                               <span className="lesson-card-badge draft">
                                 ⚡ AI 미생성
