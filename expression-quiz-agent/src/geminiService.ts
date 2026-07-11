@@ -1,4 +1,4 @@
-import { Lesson } from './types';
+import { Lesson, QuizItem } from './types';
 
 // Helper function to call fetch with exponential backoff retry for network errors/transient API limits
 async function fetchWithRetry(
@@ -720,5 +720,164 @@ export async function generateVocabularyLessons(
     console.error("Gemini Vocabulary Generation Error:", error);
     throw new Error(error.message || "어휘 학습자료를 생성하는 도중 알 수 없는 에러가 발생했습니다.");
   }
+}
+
+export async function generateAdditionalQuizzes(
+  lesson: Lesson,
+  wrongDetails: Array<{ question: string; userAnswer: string; correctAnswer: string; rationale: string }>,
+  questionCount: number,
+  apiKey: string
+): Promise<QuizItem[]> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  let wrongContext = "";
+  if (wrongDetails.length > 0) {
+    wrongContext = `
+The student previously got the following quizzes WRONG. You MUST analyze these mistakes and generate new, different questions that specifically target the concepts, nuances, or grammar/vocabulary errors demonstrated in these mistakes. Test them in different sentences/contexts to verify if they have fully corrected their understanding:
+${wrongDetails.map((w, idx) => `
+[Mistake #${idx + 1}]
+- Question: ${w.question}
+- Student's Wrong Selection: ${w.userAnswer}
+- Correct Answer: ${w.correctAnswer}
+- Rationale: ${w.rationale}
+`).join('\n')}
+`;
+  } else {
+    wrongContext = `
+The student has no recorded mistakes or has got everything correct. Generate general additional quizzes to further verify and reinforce their understanding of this lesson's concepts.
+`;
+  }
+
+  const prompt = `You are a native English linguistic expert and educational tutor. Your task is to generate additional quizzes to reinforce the student's understanding of the following English lesson:
+
+Lesson Title: ${lesson.title}
+Lesson Main Content / Source Text:
+"""
+${lesson.sourceText}
+"""
+Nuance Explanation (ELI10):
+"""
+${lesson.eli5.explanation}
+"""
+${wrongContext}
+
+Strict Instructions:
+1. Generate EXACTLY ${questionCount} multiple-choice quizzes under a "quizzes" array in the returned JSON object.
+2. If wrong answers were provided above, make sure the generated quizzes target those exact mistake areas but with DIFFERENT sentences, different answer choices, or different phrasing. Do not reuse the exact same sentences or questions from the mistakes.
+3. If it is a vocabulary lesson, ensure all quizzes test the usage, definitions, or nuances of this specific vocabulary word: '${lesson.title}'.
+4. Keep the tone friendly, encouraging, and highly professional yet simple.
+5. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
+6. The response MUST be a single, valid JSON object following this schema:
+{
+  "quizzes": [
+    {
+      "question": "The question in Korean (can include English sentence with a blank like 'Fill in the blank: She went to bed ________ being tired.')",
+      "choices": [
+        "Four plausible multiple-choice options in English or Korean as appropriate. Make them highly deceptive."
+      ],
+      "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
+      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect. Use letter labels A번, B번, C번, D번 to reference choices. choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번."
+    }
+  ]
+}
+Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.3
+    }
+  };
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!responseText) {
+    throw new Error("Gemini가 유효한 결과를 반환하지 않았습니다.");
+  }
+
+  const cleanedText = cleanJsonString(responseText);
+  const parsedJson = JSON.parse(cleanedText);
+  const rawQuizzes = parsedJson.quizzes || [];
+
+  return rawQuizzes.map((q: any, index: number) => {
+    const rawChoices = q.choices || ["A", "B", "C", "D"];
+    const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
+    const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+
+    // Shuffle choices using standard Fisher-Yates
+    const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
+    for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+    }
+
+    const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
+    const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+
+    // Remap A/B/C/D labels in rationale to match shuffled order
+    const LABELS = ['A', 'B', 'C', 'D'];
+    const oldToNewIdx: Record<number, number> = {};
+    choicesWithIndex.forEach((item: any, newIdx: number) => {
+      oldToNewIdx[item.cIdx] = newIdx;
+    });
+    let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+    // Phase 1: Replace old labels → temp placeholders (avoid collision)
+    const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
+    LABELS.forEach((label, oldIdx) => {
+      if (oldToNewIdx[oldIdx] !== undefined) {
+        const temp = TEMP[oldToNewIdx[oldIdx]];
+        remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+      }
+    });
+    // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
+    for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
+      if (oldToNewIdx[oldIdx] !== undefined) {
+        const numStr = `${oldIdx + 1}번`;
+        const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
+        remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
+      }
+    }
+    // Phase 2: Replace temp placeholders → final labels
+    TEMP.forEach((temp, idx) => {
+      remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
+    });
+
+    return {
+      id: `expr-q-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 6)}`,
+      question: q.question || "문제가 생성되지 않았습니다.",
+      choices: shuffledChoices,
+      correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
+      rationale: remappedRationale
+    };
+  });
 }
 

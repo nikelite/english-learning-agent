@@ -6,7 +6,7 @@ import { QuizPanel } from './components/QuizPanel';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
-import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons } from './geminiService';
+import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons, generateAdditionalQuizzes } from './geminiService';
 import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2, X } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -539,6 +539,41 @@ ${quiz.rationale}`;
       content,
       ["expression-agent", "quiz-review"]
     );
+  };
+
+  const handleGenerateAdditionalQuizzes = async (count: number): Promise<QuizItem[]> => {
+    if (!activeLesson) return [];
+    if (!apiKey) {
+      throw new Error("Gemini API Key가 필요합니다. 설정(⚙️) 창에서 먼저 키를 등록해 주세요.");
+    }
+
+    const lessonWrongs = wrongAnswers.filter(wa => wa.lessonId === activeLesson.id && !wa.isArchived);
+    const wrongDetails = lessonWrongs.map(wa => ({
+      question: wa.quizItem.question,
+      userAnswer: wa.quizItem.choices[wa.userAnswerIndex],
+      correctAnswer: wa.quizItem.choices[wa.quizItem.correctIndex],
+      rationale: wa.quizItem.rationale
+    }));
+
+    try {
+      const newQuizzes = await generateAdditionalQuizzes(activeLesson, wrongDetails, count, apiKey);
+      if (newQuizzes.length === 0) {
+        throw new Error("추가 문제를 생성하지 못했습니다. 다시 시도해 주세요.");
+      }
+
+      const updatedLesson: Lesson = {
+        ...activeLesson,
+        quizzes: [...activeLesson.quizzes, ...newQuizzes]
+      };
+
+      const savedLesson = await saveLessonToHistory(updatedLesson);
+      setActiveLesson(savedLesson);
+
+      return newQuizzes;
+    } catch (err: any) {
+      console.error("Failed to generate additional quizzes:", err);
+      throw err;
+    }
   };
 
   // 7.1 Cloud Sync State
@@ -1477,6 +1512,7 @@ ${quiz.rationale}`;
                   mochiApiKey={mochiApiKey}
                   mochiQuizDeckId={mochiQuizDeckId}
                   onAddQuizToMochi={handlePushSingleQuizToMochi}
+                  onGenerateAdditionalQuizzes={handleGenerateAdditionalQuizzes}
                 />
               )}
             </main>

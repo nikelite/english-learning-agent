@@ -14,6 +14,7 @@ interface QuizPanelProps {
   mochiApiKey: string;
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: QuizItem) => Promise<void>;
+  onGenerateAdditionalQuizzes?: (count: number) => Promise<QuizItem[]>;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
@@ -27,7 +28,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   onLoadNextUnsolvedLesson,
   mochiApiKey,
   mochiQuizDeckId,
-  onAddQuizToMochi
+  onAddQuizToMochi,
+  onGenerateAdditionalQuizzes
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
@@ -80,6 +82,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
   const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
+  const [additionalCount, setAdditionalCount] = useState<number>(3);
 
   const handlePushToMochi = async (quiz: QuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
@@ -305,6 +309,95 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             처음부터 다시 풀기
           </button>
         </div>
+
+        {/* AI 추가 퀴즈 생성 Section */}
+        {onGenerateAdditionalQuizzes && (
+          <div style={{
+            marginTop: '2rem',
+            padding: '1.5rem',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px dashed var(--primary)',
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+              <span style={{ fontSize: '0.95rem', fontWeight: '700', color: 'white' }}>
+                AI 오답 분석 맞춤형 추가 퀴즈 생성
+              </span>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, textAlign: 'center', maxWidth: '500px' }}>
+              틀린 문제들의 유형과 오답 데이터를 분석하여, 해당 단어/표현의 실수를 잡아내기 위한 변형 문제를 새로 생성합니다.
+            </p>
+            
+            {isGeneratingMore ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '600' }}>
+                <RefreshCw className="animate-spin" size={16} />
+                <span>AI가 오답 데이터를 분석하여 추가 문제를 생성하고 있습니다...</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <select
+                  value={additionalCount}
+                  onChange={(e) => setAdditionalCount(Number(e.target.value))}
+                  className="input-glow"
+                  style={{
+                    padding: '0.45rem 2rem 0.45rem 0.75rem',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-dark)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={3}>3 문항</option>
+                  <option value={5}>5 문항</option>
+                  <option value={8}>8 문항</option>
+                  <option value={10}>10 문항</option>
+                </select>
+                
+                <button
+                  className="btn btn-primary"
+                  style={{
+                    padding: '0.5rem 1.25rem',
+                    fontSize: '0.85rem',
+                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                    fontWeight: '700'
+                  }}
+                  onClick={async () => {
+                    setIsGeneratingMore(true);
+                    try {
+                      const newQuizzes = await onGenerateAdditionalQuizzes(additionalCount);
+                      if (newQuizzes && newQuizzes.length > 0) {
+                        alert(`🎉 ${newQuizzes.length}개의 새로운 실전 문제가 추가 퀴즈 세트로 구성되었습니다! 즉시 문제 풀이가 시작됩니다.`);
+                        setActiveQuizzes(newQuizzes);
+                        setSessionWrongs([]);
+                        setAttemptWrongs([]);
+                        setSubmittedAnswers({});
+                        setCurrentIdx(0);
+                        setSelectedAns(null);
+                        setIsSubmitted(false);
+                        setScore(0);
+                        setShowResult(false);
+                        setSavedWrongId(null);
+                      }
+                    } catch (err: any) {
+                      alert(err.message || "추가 퀴즈 생성에 실패했습니다.");
+                    } finally {
+                      setIsGeneratingMore(false);
+                    }
+                  }}
+                >
+                  ⚡ AI 추가 퀴즈 생성
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 문항별 상세 풀이 결과 분석 피드백 */}
         <div style={{ marginTop: '2.5rem', textAlign: 'left', maxWidth: '640px', margin: '2.5rem auto 0 auto' }}>
