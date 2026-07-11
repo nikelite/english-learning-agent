@@ -1158,9 +1158,9 @@ export default function App() {
   };
 
   const formatQuestionForMochi = (question: string, correctChoiceText: string): string => {
-    const blankRegex = /(?:_\s*){3,}|_{3,}|\(\s*blank\s*\)|\[\s*blank\s*\]|\(\s*빈칸\s*\)|\[\s*빈칸\s*\]/gi;
+    const blankRegex = /_(?:\s*_){1,}|_{2,}|\(\s*blank\s*\)|\[\s*blank\s*\]|\(\s*빈칸\s*\)|\[\s*빈칸\s*\]/gi;
     if (blankRegex.test(question)) {
-      return question.replace(blankRegex, `{${correctChoiceText}}`);
+      return question.replace(blankRegex, `{{${correctChoiceText}}}`);
     }
     return question;
   };
