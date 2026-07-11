@@ -324,6 +324,61 @@ export async function generateLessonFromText(
     ],
     generationConfig: {
       responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          eli5: {
+            type: "object",
+            properties: {
+              explanation: { type: "string" },
+              analogy: { type: "string" },
+              example: { type: "string" },
+              exampleContext: { type: "string" }
+            },
+            required: ["explanation", "analogy", "example", "exampleContext"]
+          },
+          memoryTips: {
+            type: "object",
+            properties: {
+              tipFormula: { type: "string" },
+              conceptA: { type: "string" },
+              conceptADesc: { type: "string" },
+              conceptB: { type: "string" },
+              conceptBDesc: { type: "string" },
+              visualImage: { type: "string" }
+            },
+            required: ["tipFormula", "conceptA", "conceptADesc", "conceptB", "conceptBDesc", "visualImage"]
+          },
+          pronunciation: {
+            type: "object",
+            properties: {
+              wordOrPhrase: { type: "string" },
+              phoneticRespelling: { type: "string" },
+              koreanPhonetic: { type: "string" },
+              stressGuide: { type: "string" }
+            },
+            required: ["wordOrPhrase", "phoneticRespelling", "koreanPhonetic", "stressGuide"]
+          },
+          quizzes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                question: { type: "string" },
+                choices: {
+                  type: "array",
+                  items: { type: "string" }
+                },
+                correctIndex: { type: "integer" },
+                rationale: { type: "string" }
+              },
+              required: ["question", "choices", "correctIndex", "rationale"]
+            }
+          }
+        },
+        required: ["title", "eli5", "memoryTips", "pronunciation", "quizzes"]
+      },
       temperature: 0.2
     }
   };
@@ -609,6 +664,70 @@ export async function generateVocabularyLessons(
     ],
     generationConfig: {
       responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          lessons: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                eli5: {
+                  type: "object",
+                  properties: {
+                    explanation: { type: "string" },
+                    analogy: { type: "string" },
+                    example: { type: "string" },
+                    exampleContext: { type: "string" }
+                  },
+                  required: ["explanation", "analogy", "example", "exampleContext"]
+                },
+                memoryTips: {
+                  type: "object",
+                  properties: {
+                    tipFormula: { type: "string" },
+                    conceptA: { type: "string" },
+                    conceptADesc: { type: "string" },
+                    conceptB: { type: "string" },
+                    conceptBDesc: { type: "string" },
+                    visualImage: { type: "string" }
+                  },
+                  required: ["tipFormula", "conceptA", "conceptADesc", "conceptB", "conceptBDesc", "visualImage"]
+                },
+                pronunciation: {
+                  type: "object",
+                  properties: {
+                    wordOrPhrase: { type: "string" },
+                    phoneticRespelling: { type: "string" },
+                    koreanPhonetic: { type: "string" },
+                    stressGuide: { type: "string" }
+                  },
+                  required: ["wordOrPhrase", "phoneticRespelling", "koreanPhonetic", "stressGuide"]
+                },
+                quizzes: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      question: { type: "string" },
+                      choices: {
+                        type: "array",
+                        items: { type: "string" }
+                      },
+                      correctIndex: { type: "integer" },
+                      rationale: { type: "string" }
+                    },
+                    required: ["question", "choices", "correctIndex", "rationale"]
+                  }
+                }
+              },
+              required: ["title", "eli5", "memoryTips", "pronunciation", "quizzes"]
+            }
+          }
+        },
+        required: ["lessons"]
+      },
       temperature: 0.2
     }
   };
@@ -734,16 +853,20 @@ export async function generateAdditionalQuizzes(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
+  const cleanTitle = lesson.title.replace(/"/g, "'");
+  const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
+  const cleanExplanation = lesson.eli5.explanation.replace(/"/g, "'");
+
   let wrongContext = "";
   if (wrongDetails.length > 0) {
     wrongContext = `
 The student previously got the following quizzes WRONG. You MUST analyze these mistakes and generate new, different questions that specifically target the concepts, nuances, or grammar/vocabulary errors demonstrated in these mistakes. Test them in different sentences/contexts to verify if they have fully corrected their understanding:
 ${wrongDetails.map((w, idx) => `
 [Mistake #${idx + 1}]
-- Question: ${w.question}
-- Student's Wrong Selection: ${w.userAnswer}
-- Correct Answer: ${w.correctAnswer}
-- Rationale: ${w.rationale}
+- Question: ${w.question.replace(/"/g, "'")}
+- Student's Wrong Selection: ${w.userAnswer.replace(/"/g, "'")}
+- Correct Answer: ${w.correctAnswer.replace(/"/g, "'")}
+- Rationale: ${w.rationale.replace(/"/g, "'")}
 `).join('\n')}
 `;
   } else {
@@ -754,36 +877,24 @@ The student has no recorded mistakes or has got everything correct. Generate gen
 
   const prompt = `You are a native English linguistic expert and educational tutor. Your task is to generate additional quizzes to reinforce the student's understanding of the following English lesson:
 
-Lesson Title: ${lesson.title}
+Lesson Title: ${cleanTitle}
 Lesson Main Content / Source Text:
 """
-${lesson.sourceText}
+${cleanSourceText}
 """
 Nuance Explanation (ELI10):
 """
-${lesson.eli5.explanation}
+${cleanExplanation}
 """
 ${wrongContext}
 
 Strict Instructions:
 1. Generate EXACTLY ${questionCount} multiple-choice quizzes under a "quizzes" array in the returned JSON object.
 2. If wrong answers were provided above, make sure the generated quizzes target those exact mistake areas but with DIFFERENT sentences, different answer choices, or different phrasing. Do not reuse the exact same sentences or questions from the mistakes.
-3. If it is a vocabulary lesson, ensure all quizzes test the usage, definitions, or nuances of this specific vocabulary word: '${lesson.title}'.
+3. If it is a vocabulary lesson, ensure all quizzes test the usage, definitions, or nuances of this specific vocabulary word: '${cleanTitle}'.
 4. Keep the tone friendly, encouraging, and highly professional yet simple.
 5. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
-6. The response MUST be a single, valid JSON object following this schema:
-{
-  "quizzes": [
-    {
-      "question": "The question in Korean (can include English sentence with a blank like 'Fill in the blank: She went to bed ________ being tired.')",
-      "choices": [
-        "Four plausible multiple-choice options in English or Korean as appropriate. Make them highly deceptive."
-      ],
-      "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
-      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect. Use letter labels A번, B번, C번, D번 to reference choices. choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번."
-    }
-  ]
-}
+6. The response MUST be a single, valid JSON object.
 Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`;
 
   const requestBody = {
@@ -799,6 +910,28 @@ Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`
     ],
     generationConfig: {
       responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          quizzes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                question: { type: "string" },
+                choices: {
+                  type: "array",
+                  items: { type: "string" }
+                },
+                correctIndex: { type: "integer" },
+                rationale: { type: "string" }
+              },
+              required: ["question", "choices", "correctIndex", "rationale"]
+            }
+          }
+        },
+        required: ["quizzes"]
+      },
       temperature: 0.3
     }
   };
