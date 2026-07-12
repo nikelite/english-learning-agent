@@ -771,6 +771,37 @@ export default function App() {
     const lessonsData: Array<{ lesson: ReadingLesson; analysisCache: any; stats: any }> = [];
 
     try {
+      const isCacheComplete = (l: ReadingLesson, c: any): boolean => {
+        if (!c || typeof c !== 'object') return false;
+        const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+        
+        const matchSentenceAnalysis = (analyses: any[] | undefined, sentence: string) => {
+          if (!analyses || !sentence) return undefined;
+          const target = clean(sentence);
+          let match = analyses.find((a: any) => clean(a.sentence) === target);
+          if (!match) {
+            match = analyses.find((a: any) => {
+              const aClean = clean(a.sentence);
+              return aClean.includes(target) || target.includes(aClean);
+            });
+          }
+          return match;
+        };
+
+        for (const p of l.paragraphs) {
+          const paragraphAnalyses = c[p.id];
+          if (!paragraphAnalyses || !Array.isArray(paragraphAnalyses)) return false;
+          
+          const sentences = splitIntoSentences(p.englishText);
+          for (const sentence of sentences) {
+            if (!matchSentenceAnalysis(paragraphAnalyses, sentence)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      };
+
       for (const lesson of selectedLessons) {
         let cache: any = null;
         try {
@@ -782,14 +813,35 @@ export default function App() {
           console.warn("Failed to parse local analysis cache:", e);
         }
 
-        if (!cache || Object.keys(cache).length === 0) {
+        let cacheComplete = isCacheComplete(lesson, cache);
+
+        // If local cache is incomplete or missing, try loading from Firestore cloud
+        if (!cacheComplete) {
           try {
-            cache = await loadPassageAnalysisFromCloud(lesson.id);
-            if (cache) {
+            console.log(`[BulkPrint] Local cache for ${lesson.title} is incomplete or missing. Fetching from Firestore...`);
+            const cloudCache = await loadPassageAnalysisFromCloud(lesson.id);
+            if (cloudCache) {
+              cache = cloudCache;
+              cacheComplete = isCacheComplete(lesson, cloudCache);
               localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
             }
           } catch (e) {
             console.warn("Failed to load analysis from cloud:", e);
+          }
+        }
+
+        // If STILL not complete, pro-actively trigger autoFillMissingAnalyses inline!
+        if (!cacheComplete && apiKey) {
+          try {
+            console.log(`[BulkPrint] Analysis for ${lesson.title} still has missing sentences. Auto-repairing inline...`);
+            const repairedCache = await autoFillMissingAnalyses(lesson, cache || {}, apiKey);
+            if (repairedCache) {
+              cache = repairedCache;
+              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+              await savePassageAnalysisToCloud(lesson.id, cache);
+            }
+          } catch (e) {
+            console.warn("Failed to repair cache inline during print:", e);
           }
         }
 
