@@ -7,7 +7,7 @@ interface ReviewRoomProps {
   wrongAnswers: WrongReadingAnswer[];
   lessonsHistory: ReadingLesson[];
   onRemoveWrongAnswer: (id: string) => void;
-  onDeleteWrongAnswer: (id: string) => void;
+  onDeleteWrongAnswers: (ids: string[]) => void;
   onUnarchiveWrongAnswer: (id: string) => void;
   onClearAll: () => void;
   mochiApiKey: string;
@@ -19,7 +19,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
   wrongAnswers,
   lessonsHistory,
   onRemoveWrongAnswer,
-  onDeleteWrongAnswer,
+  onDeleteWrongAnswers,
   onUnarchiveWrongAnswer,
   onClearAll,
   mochiApiKey,
@@ -137,6 +137,15 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
     }
   };
 
+  const handleBulkDelete = () => {
+    const idsToDelete = Array.from(selectedIds);
+    if (idsToDelete.length === 0) return;
+    if (window.confirm(`선택한 ${idsToDelete.length}개의 오답 기록을 오답노트에서 영구 삭제하시겠습니까?`)) {
+      onDeleteWrongAnswers(idsToDelete);
+      setSelectedIds(new Set());
+    }
+  };
+
   if (wrongAnswers.length === 0) {
     return (
       <div className="glass-panel main-panel animate-fade-in text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', minHeight: '400px' }}>
@@ -223,14 +232,24 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
           </div>
 
           {selectedIds.size > 0 && (
-            <button
-              className="btn btn-primary"
-              style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', background: 'linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%)' }}
-              onClick={handleBulkPushToMochi}
-              disabled={isBulkAdding}
-            >
-              {isBulkAdding ? (bulkProgress || "전송 중...") : `⚡ Mochi 카드 일괄 추가 (${selectedIds.size})`}
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="btn btn-primary"
+                style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', background: 'linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%)' }}
+                onClick={handleBulkPushToMochi}
+                disabled={isBulkAdding}
+              >
+                {isBulkAdding ? (bulkProgress || "전송 중...") : `⚡ Mochi 카드 일괄 추가 (${selectedIds.size})`}
+              </button>
+              
+              <button
+                className="btn btn-danger"
+                style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                onClick={handleBulkDelete}
+              >
+                🗑️ 선택 일괄 삭제 ({selectedIds.size})
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -407,7 +426,11 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                     <button
                       className="btn btn-danger"
                       style={{ fontSize: '0.75rem', padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'transparent', borderColor: 'rgba(239,68,68,0.2)' }}
-                      onClick={() => onDeleteWrongAnswer(wrongId)}
+                      onClick={() => {
+                        if (window.confirm("이 오답 데이터를 오답노트에서 완전히 삭제하시겠습니까?")) {
+                          onDeleteWrongAnswers([wrongId]);
+                        }
+                      }}
                     >
                       삭제
                     </button>

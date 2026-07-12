@@ -1544,11 +1544,9 @@ export default function App() {
     }));
   };
 
-  // Delete single wrong answer completely
-  const handleDeleteWrongAnswer = (wrongId: string) => {
-    if (window.confirm("이 오답 데이터를 오답노트에서 완전히 삭제하시겠습니까?")) {
-      setWrongAnswers(prev => prev.filter(wa => wa.id !== wrongId));
-    }
+  // Delete wrong answers completely
+  const handleDeleteWrongAnswers = (wrongIds: string[]) => {
+    setWrongAnswers(prev => prev.filter(wa => !wrongIds.includes(wa.id)));
   };
 
   const handleUnarchiveWrongAnswer = (wrongId: string) => {
@@ -2550,7 +2548,7 @@ ${quiz.rationale}`;
             wrongAnswers={wrongAnswers}
             lessonsHistory={lessonsHistory}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
-            onDeleteWrongAnswer={handleDeleteWrongAnswer}
+            onDeleteWrongAnswers={handleDeleteWrongAnswers}
             onUnarchiveWrongAnswer={handleUnarchiveWrongAnswer}
             onClearAll={handleClearAllWrong}
             mochiApiKey={mochiApiKey}
