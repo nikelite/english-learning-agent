@@ -3,6 +3,7 @@ import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, 
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
+import { QuizContextSentence } from './QuizContextSentence';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -17,7 +18,7 @@ interface ReadingSplitViewProps {
   onAddCustomVocabulary: (newVocab: ReadingVocabulary) => void;
   mochiApiKey: string;
   mochiQuizDeckId: string;
-  onAddQuizToMochi: (quiz: ReadingQuizItem) => Promise<void>;
+  onAddQuizToMochi: (quiz: ReadingQuizItem, lessonId?: string) => Promise<void>;
 }
 
 
@@ -260,7 +261,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       return next;
     });
     try {
-      await onAddQuizToMochi(quiz);
+      await onAddQuizToMochi(quiz, lesson.id);
     } catch (err: any) {
       alert(err.message || "Mochi 카드 전송에 실패했습니다.");
       setAddingToMochiIds(prev => {
@@ -1330,7 +1331,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             </button>
                           </h5>
                           
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <QuizContextSentence questionText={quiz.question} lesson={lesson} />
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', marginTop: '1rem' }}>
                             {quiz.choices.map((choice, cIdx) => {
                               const isThisCorrect = cIdx === quiz.correctIndex;
                               const isThisUserSelection = cIdx === userAnswer;
@@ -1421,6 +1424,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     <div style={{ fontSize: '1.05rem', fontWeight: '500', color: 'white', whiteSpace: 'pre-line', marginBottom: '1.25rem', lineHeight: '1.5' }}>
                       {activeQuestion.question}
                     </div>
+
+                    <QuizContextSentence questionText={activeQuestion.question} lesson={lesson} />
 
                     {/* Choices buttons */}
                     <div className="quiz-choices">

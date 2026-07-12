@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
 import { Award, Check, X, RefreshCw, Trash2, CheckCircle2, Archive, CheckSquare, Square } from 'lucide-react';
-import { WrongReadingAnswer } from '../types';
+import { WrongReadingAnswer, ReadingLesson } from '../types';
+import { QuizContextSentence } from './QuizContextSentence';
 
 interface ReviewRoomProps {
   wrongAnswers: WrongReadingAnswer[];
+  lessonsHistory: ReadingLesson[];
   onRemoveWrongAnswer: (id: string) => void;
   onDeleteWrongAnswer: (id: string) => void;
   onUnarchiveWrongAnswer: (id: string) => void;
   onClearAll: () => void;
   mochiApiKey: string;
   mochiQuizDeckId: string;
-  onAddQuizToMochi: (quiz: any) => Promise<void>;
+  onAddQuizToMochi: (quiz: any, lessonId?: string) => Promise<void>;
 }
 
 export const ReviewRoom: React.FC<ReviewRoomProps> = ({
   wrongAnswers,
+  lessonsHistory,
   onRemoveWrongAnswer,
   onDeleteWrongAnswer,
   onUnarchiveWrongAnswer,
@@ -85,7 +88,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
     }
     setAddingToMochiIds(prev => new Set(prev).add(wa.id));
     try {
-      await onAddQuizToMochi(wa.quizItem);
+      await onAddQuizToMochi(wa.quizItem, wa.lessonId);
     } catch (err: any) {
       alert(err.message || "Mochi 카드 전송에 실패했습니다.");
       setAddingToMochiIds(prev => {
@@ -114,7 +117,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
           setBulkProgress(`Mochi 카드 전송 중... (${i + 1}/${idsToPush.length})`);
           try {
             setAddingToMochiIds(prev => new Set(prev).add(wa.id));
-            await onAddQuizToMochi(wa.quizItem);
+            await onAddQuizToMochi(wa.quizItem, wa.lessonId);
             successCount++;
           } catch (err) {
             console.error("Failed to push quiz to Mochi:", err);
@@ -243,7 +246,8 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.25rem' }}>
           {displayedAnswers.map((wa) => {
-            const { quizItem, lessonTitle, id: wrongId } = wa;
+            const { quizItem, lessonTitle, id: wrongId, lessonId } = wa;
+            const lesson = lessonsHistory.find(l => l.id === lessonId);
             const userSelectedIdx = retriedAnswers[wrongId];
             const isCorrect = isAnsweredCorrectly[wrongId];
             const isSelected = selectedIds.has(wrongId);
@@ -276,6 +280,8 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                   <h4 style={{ fontSize: '0.925rem', fontWeight: '500', lineHeight: '1.5', marginBottom: '1rem', whiteSpace: 'pre-line', color: 'white' }}>
                     {quizItem.question}
                   </h4>
+
+                  <QuizContextSentence questionText={quizItem.question} lesson={lesson} />
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {quizItem.choices.map((choice, idx) => {

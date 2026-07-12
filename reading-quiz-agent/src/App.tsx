@@ -7,6 +7,7 @@ import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from './geminiService';
+import { getContextSentence } from './components/QuizContextSentence';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -1566,7 +1567,7 @@ export default function App() {
     return question;
   };
 
-  const handlePushSingleQuizToMochi = async (quiz: ReadingQuizItem) => {
+  const handlePushSingleQuizToMochi = async (quiz: ReadingQuizItem, lessonId?: string) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
       throw new Error("Mochi API Key와 전송할 Mochi 덱을 먼저 설정해 주세요.");
     }
@@ -1579,9 +1580,32 @@ export default function App() {
     // Convert blank/cloze to {correctAnswer} format
     const formattedQuestion = formatQuestionForMochi(quiz.question, correctChoiceText);
 
+    // Extract context sentence if lesson is available
+    let contextSec = '';
+    
+    // Auto-resolve lessonId by looking in wrongAnswers if not provided (e.g., for review questions)
+    let resolvedLessonId = lessonId;
+    if (!resolvedLessonId) {
+      const matchingWrong = wrongAnswers.find(wa => wa.quizItem.id === quiz.id || wa.quizItem.question === quiz.question);
+      if (matchingWrong) {
+        resolvedLessonId = matchingWrong.lessonId;
+      }
+    }
+
+    const lesson = resolvedLessonId ? lessonsHistory.find(l => l.id === resolvedLessonId) : activeLesson;
+    if (lesson) {
+      const match = getContextSentence(quiz.question, lesson);
+      if (match) {
+        const escapedWord = match.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(`(${escapedWord})`, 'gi');
+        const highlightedSentence = match.sentence.replace(regex, `**$1**`);
+        contextSec = `\n\n**지문 내 Context 문장 ${match.paragraphNum ? `(Paragraph ${match.paragraphNum})` : ''}**:\n> *“${highlightedSentence}”*`;
+      }
+    }
+
     const content = `### Q. ${formattedQuestion}
 
-${choicesText}
+${choicesText}${contextSec}
 
 ---
 
@@ -2524,6 +2548,7 @@ ${quiz.rationale}`;
         <div style={{ padding: '1.5rem 0 3rem 0' }}>
           <ReviewRoom
             wrongAnswers={wrongAnswers}
+            lessonsHistory={lessonsHistory}
             onRemoveWrongAnswer={handleRemoveWrongAnswer}
             onDeleteWrongAnswer={handleDeleteWrongAnswer}
             onUnarchiveWrongAnswer={handleUnarchiveWrongAnswer}
