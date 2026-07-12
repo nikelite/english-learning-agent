@@ -862,7 +862,15 @@ export default function App() {
       return match;
     };
 
-    lessonsData.forEach(({ lesson, analysisCache, stats }, idx) => {
+    const originalTitle = document.title;
+
+    const printNext = (index: number) => {
+      if (index >= lessonsData.length) {
+        document.title = originalTitle;
+        return;
+      }
+
+      const { lesson, analysisCache, stats } = lessonsData[index];
       let lessonHtml = '';
       
       lesson.paragraphs.forEach((p, pIdx) => {
@@ -1062,7 +1070,6 @@ export default function App() {
         </html>
       `;
 
-      // Trigger sequential iframe printing to avoid popup blocking and create separate documents
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.width = '0px';
@@ -1076,26 +1083,42 @@ export default function App() {
         doc.write(printHtml);
         doc.close();
 
-        // Stagger printing slightly to let browser buffer dialogs sequentially
-        setTimeout(() => {
-          const originalTitle = document.title;
-          document.title = lesson.title; // Force parent title so browser print subsystem defaults to this filename
+        let nextTriggered = false;
+        const triggerNext = () => {
+          if (nextTriggered) return;
+          nextTriggered = true;
+          
+          document.title = originalTitle;
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+          
+          setTimeout(() => {
+            printNext(index + 1);
+          }, 300);
+        };
 
+        iframe.contentWindow?.addEventListener('beforeprint', () => {
+          document.title = lesson.title;
+        });
+
+        iframe.contentWindow?.addEventListener('afterprint', () => {
+          triggerNext();
+        });
+
+        setTimeout(() => {
+          document.title = lesson.title;
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-
-          // Restore original title after a short delay
+          
           setTimeout(() => {
-            document.title = originalTitle;
-          }, 100);
-
-          // Clean up DOM afterwards
-          setTimeout(() => {
-            document.body.removeChild(iframe);
+            triggerNext();
           }, 15000);
-        }, 500 + idx * 300);
+        }, 500);
       }
-    });
+    };
+
+    printNext(0);
   };
 
   // CHECK AND DECODE URL SHARE LINK (`?share=...` or `?cloudShare=...`)
