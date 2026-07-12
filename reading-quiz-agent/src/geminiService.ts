@@ -1184,3 +1184,105 @@ export async function splitPassageIntoLessons(
   return lessons;
 }
 
+export async function autoFillMissingAnalyses(
+  lesson: { id: string; passageText: string; paragraphs: Array<{ id: number; englishText: string }> },
+  currentCache: Record<number, SentenceAnalysis[]>,
+  apiKey: string
+): Promise<Record<number, SentenceAnalysis[]>> {
+  const isEnglishSentence = (s: string): boolean => {
+    const hasEnglish = /[a-zA-Z]/.test(s);
+    const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
+    return hasEnglish && !hasKorean;
+  };
+
+  const matchSentenceAnalysis = (analyses: SentenceAnalysis[] | undefined, sentence: string): SentenceAnalysis | undefined => {
+    if (!analyses || !sentence) return undefined;
+    const cleanS = sentence.trim().toLowerCase();
+    
+    // 1. Exact or simple substring match first
+    let match = analyses.find(
+      a => a.sentence.trim().toLowerCase() === cleanS ||
+           a.sentence.toLowerCase().includes(cleanS) ||
+           cleanS.includes(a.sentence.toLowerCase())
+    );
+    if (match) return match;
+    
+    // 2. Normalized alphanumeric match
+    const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9가-힣]/g, '');
+    const normS = normalize(sentence);
+    if (!normS) return undefined;
+    
+    return analyses.find(a => {
+      const normA = normalize(a.sentence);
+      return normA === normS || normA.includes(normS) || normS.includes(normA);
+    });
+  };
+
+  // Find all missing sentences
+  const missingByParagraph: Record<number, string[]> = {};
+  let totalMissingCount = 0;
+
+  lesson.paragraphs.forEach(p => {
+    const sentences = splitIntoSentences(p.englishText);
+    const paragraphAnalyses = currentCache[p.id] || [];
+    sentences.forEach(sentence => {
+      if (!matchSentenceAnalysis(paragraphAnalyses, sentence)) {
+        if (!missingByParagraph[p.id]) {
+          missingByParagraph[p.id] = [];
+        }
+        missingByParagraph[p.id].push(sentence);
+        totalMissingCount++;
+      }
+    });
+  });
+
+  if (totalMissingCount === 0) {
+    return currentCache;
+  }
+
+  console.log(`[AutoFill] Detected ${totalMissingCount} missing sentence analyses. Automatically recovering...`);
+
+  const updatedCache = { ...currentCache };
+  const paragraphIds = Object.keys(missingByParagraph).map(Number);
+
+  try {
+    let currentCompleted = 0;
+    for (const pId of paragraphIds) {
+      const sentencesToAnalyze = missingByParagraph[pId];
+      
+      // Delay to avoid rate limit (429)
+      if (currentCompleted > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const result = await analyzeParagraphChunkSentences(
+        pId,
+        99, // special index for auto-fill chunk
+        sentencesToAnalyze,
+        lesson.passageText,
+        apiKey
+      );
+
+      if (result && result.length > 0) {
+        const currentParagraphAnalysis = updatedCache[pId] || [];
+        const cleanSentencesToAnalyze = sentencesToAnalyze.map(s => s.trim().toLowerCase());
+        
+        // Filter out old matching items to prevent duplicate records
+        const filtered = currentParagraphAnalysis.filter(a => {
+          const cleanA = a.sentence.trim().toLowerCase();
+          return !cleanSentencesToAnalyze.includes(cleanA);
+        });
+        
+        updatedCache[pId] = [...filtered, ...result];
+      }
+
+      currentCompleted++;
+    }
+    console.log(`[AutoFill] Successfully recovered ${totalMissingCount} missing analyses!`);
+  } catch (err) {
+    console.error("[AutoFill] Failed to auto-recover missing analyses:", err);
+  }
+
+  return updatedCache;
+}
+

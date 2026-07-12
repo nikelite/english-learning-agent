@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences } from '../geminiService';
+import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
@@ -235,11 +235,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             }
           );
           if (isCurrent) {
-            setAnalysisCache(fullResult);
-            // Save final results to LocalStorage and conditionally to Firestore
-            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
-            if (isAnalysisCacheValid(fullResult)) {
-              await savePassageAnalysisToCloud(lesson.id, fullResult);
+            const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
+            setAnalysisCache(verifiedResult);
+            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+            if (isAnalysisCacheValid(verifiedResult)) {
+              await savePassageAnalysisToCloud(lesson.id, verifiedResult);
               console.log("Auto-started passage analysis successfully cached to cloud!");
             } else {
               console.warn("Auto-started passage analysis contains failures; skipping cloud save.");

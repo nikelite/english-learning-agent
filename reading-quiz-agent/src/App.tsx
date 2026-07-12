@@ -6,7 +6,7 @@ import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
-import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences } from './geminiService';
+import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -571,8 +571,9 @@ export default function App() {
           }
         );
 
-        localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
-        await savePassageAnalysisToCloud(lesson.id, fullResult);
+        const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
+        localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+        await savePassageAnalysisToCloud(lesson.id, verifiedResult);
       } catch (error) {
         console.error(`Failed to analyze passage sentences for lesson ${lesson.id}:`, error);
       } finally {
