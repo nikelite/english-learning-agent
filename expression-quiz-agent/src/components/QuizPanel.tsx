@@ -15,6 +15,7 @@ interface QuizPanelProps {
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: QuizItem) => Promise<void>;
   onGenerateAdditionalQuizzes?: (count: number) => Promise<QuizItem[]>;
+  unsolvedLessonsCount?: number;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
@@ -29,7 +30,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   mochiApiKey,
   mochiQuizDeckId,
   onAddQuizToMochi,
-  onGenerateAdditionalQuizzes
+  onGenerateAdditionalQuizzes,
+  unsolvedLessonsCount
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
@@ -286,7 +288,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
               onClick={onLoadNextUnsolvedLesson}
               style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 15px rgba(16,185,129,0.2)', fontWeight: '700' }}
             >
-              ➡️ 다음 미풀이 학습 풀기
+              ➡️ 다음 미풀이 학습 풀기 {unsolvedLessonsCount !== undefined && unsolvedLessonsCount > 0 ? `(남은 학습: ${unsolvedLessonsCount}개)` : ''}
             </button>
           )}
 

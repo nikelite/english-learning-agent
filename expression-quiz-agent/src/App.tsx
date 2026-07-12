@@ -1513,6 +1513,7 @@ ${quiz.rationale}`;
                   mochiQuizDeckId={mochiQuizDeckId}
                   onAddQuizToMochi={handlePushSingleQuizToMochi}
                   onGenerateAdditionalQuizzes={handleGenerateAdditionalQuizzes}
+                  unsolvedLessonsCount={unsolvedCount}
                 />
               )}
             </main>
