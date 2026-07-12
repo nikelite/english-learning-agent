@@ -1154,7 +1154,7 @@ export default function App() {
         };
 
         iframe.contentWindow?.addEventListener('beforeprint', () => {
-          document.title = lesson.title;
+          document.title = lesson.title.replace(/\//g, '-');
         });
 
         iframe.contentWindow?.addEventListener('afterprint', () => {
@@ -1162,7 +1162,7 @@ export default function App() {
         });
 
         setTimeout(() => {
-          document.title = lesson.title;
+          document.title = lesson.title.replace(/\//g, '-');
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
           

@@ -720,7 +720,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       <html>
       <head>
         <meta charset="utf-8">
-        <title>[READ.AGENT] ${lesson.title} - 전체 문장 구문 분석</title>
+        <title>[READ.AGENT] ${lesson.title.replace(/\//g, '-')} - 전체 문장 구문 분석</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
           body {
