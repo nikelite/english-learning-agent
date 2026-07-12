@@ -1078,8 +1078,17 @@ export default function App() {
 
         // Stagger printing slightly to let browser buffer dialogs sequentially
         setTimeout(() => {
+          const originalTitle = document.title;
+          document.title = lesson.title; // Force parent title so browser print subsystem defaults to this filename
+
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
+
+          // Restore original title after a short delay
+          setTimeout(() => {
+            document.title = originalTitle;
+          }, 100);
+
           // Clean up DOM afterwards
           setTimeout(() => {
             document.body.removeChild(iframe);
