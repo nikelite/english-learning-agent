@@ -848,8 +848,6 @@ export default function App() {
       setIsLoading(false);
     }
 
-    let combinedContentHtml = '';
-
     const matchSentenceAnalysis = (analyses: any[] | undefined, sentence: string) => {
       if (!analyses || !sentence) return undefined;
       const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -864,7 +862,7 @@ export default function App() {
       return match;
     };
 
-    lessonsData.forEach(({ lesson, analysisCache, stats }, lessonIdx) => {
+    lessonsData.forEach(({ lesson, analysisCache, stats }, idx) => {
       let lessonHtml = '';
       
       lesson.paragraphs.forEach((p, pIdx) => {
@@ -937,8 +935,8 @@ export default function App() {
         });
       });
 
-      combinedContentHtml += `
-        <div class="lesson-block" style="page-break-after: ${lessonIdx === lessonsData.length - 1 ? 'avoid' : 'always'};">
+      const singleLessonContent = `
+        <div class="lesson-block">
           <div class="header">
             <h1>지문 제목: "${lesson.title}"</h1>
             <p>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트 | 출력 시간: ${new Date().toLocaleString()}</p>
@@ -951,129 +949,144 @@ export default function App() {
           ${lessonHtml}
         </div>
       `;
-    });
 
-    const printHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>[READ.AGENT] 일괄 구문 분석 인쇄 - 총 ${selectedLessons.length}개 세트</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
-          body {
-            font-family: 'Inter', 'Nanum Gothic', sans-serif;
-            color: #1e293b;
-            line-height: 1.5;
-            margin: 20px;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 2px solid #06b6d4;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
-            page-break-inside: avoid;
-          }
-          .header h1 {
-            margin: 0 0 6px 0;
-            font-size: 22px;
-            color: #0f172a;
-            font-weight: 800;
-          }
-          .header p {
-            margin: 0;
-            font-size: 12px;
-            color: #64748b;
-          }
-          .paragraph-header {
-            font-size: 14px;
-            font-weight: 800;
-            color: #0f172a;
-            margin: 20px 0 10px 0;
-            border-bottom: 1.5px solid #e2e8f0;
-            padding-bottom: 4px;
-            page-break-after: avoid;
-          }
-          .sentence-block {
-            page-break-inside: avoid;
-            border: 1px solid #e2e8f0;
-            border-left: 3px solid #06b6d4;
-            border-radius: 6px;
-            padding: 10px 14px;
-            margin-bottom: 12px;
-            background-color: #ffffff;
-          }
-          .english-text {
-            font-size: 14.5px;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 6px;
-          }
-          .analysis-section {
-            margin-top: 6px;
-            font-size: 12px;
-            border-top: 1px dashed #f1f5f9;
-            padding-top: 5px;
-            line-height: 1.45;
-          }
-          .section-title {
-            font-weight: 700;
-            color: #475569;
-            margin-right: 6px;
-            font-size: 11.5px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: inline-block;
-          }
-          .inline-item {
-            display: inline-block;
-            margin-right: 6px;
-            margin-bottom: 2px;
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            padding: 1px 6px;
-            border-radius: 4px;
-            font-size: 11.5px;
-            color: #334155;
-          }
-          .grammar-text, .context-text {
-            margin: 0;
-            color: #334155;
-            display: inline;
-          }
-          .stats-bar {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #475569;
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-          }
-          @media print {
+      const printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${lesson.title}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
             body {
-              margin: 15px;
+              font-family: 'Inter', 'Nanum Gothic', sans-serif;
+              color: #1e293b;
+              line-height: 1.5;
+              margin: 20px;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #06b6d4;
+              padding-bottom: 12px;
+              margin-bottom: 20px;
+              page-break-inside: avoid;
+            }
+            .header h1 {
+              margin: 0 0 6px 0;
+              font-size: 22px;
+              color: #0f172a;
+              font-weight: 800;
+            }
+            .header p {
+              margin: 0;
+              font-size: 12px;
+              color: #64748b;
+            }
+            .paragraph-header {
+              font-size: 14px;
+              font-weight: 800;
+              color: #0f172a;
+              margin: 20px 0 10px 0;
+              border-bottom: 1.5px solid #e2e8f0;
+              padding-bottom: 4px;
+              page-break-after: avoid;
             }
             .sentence-block {
-              box-shadow: none;
+              page-break-inside: avoid;
+              border: 1px solid #e2e8f0;
+              border-left: 3px solid #06b6d4;
+              border-radius: 6px;
+              padding: 10px 14px;
+              margin-bottom: 12px;
+              background-color: #ffffff;
             }
-          }
-        </style>
-      </head>
-      <body>
-        ${combinedContentHtml}
-      </body>
-      </html>
-    `;
+            .english-text {
+              font-size: 14.5px;
+              font-weight: 700;
+              color: #0f172a;
+              margin-bottom: 6px;
+            }
+            .analysis-section {
+              margin-top: 6px;
+              font-size: 12px;
+              border-top: 1px dashed #f1f5f9;
+              padding-top: 5px;
+              line-height: 1.45;
+            }
+            .section-title {
+              font-weight: 700;
+              color: #475569;
+              margin-right: 6px;
+              font-size: 11.5px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              display: inline-block;
+            }
+            .inline-item {
+              display: inline-block;
+              margin-right: 6px;
+              margin-bottom: 2px;
+              background-color: #f8fafc;
+              border: 1px solid #e2e8f0;
+              padding: 1px 6px;
+              border-radius: 4px;
+              font-size: 11.5px;
+              color: #334155;
+            }
+            .grammar-text, .context-text {
+              margin: 0;
+              color: #334155;
+              display: inline;
+            }
+            .stats-bar {
+              margin-top: 10px;
+              font-size: 12px;
+              color: #475569;
+              display: flex;
+              justify-content: center;
+              gap: 20px;
+            }
+            @media print {
+              body {
+                margin: 15px;
+              }
+              .sentence-block {
+                box-shadow: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${singleLessonContent}
+        </body>
+        </html>
+      `;
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printHtml);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-      }, 800);
-    }
+      // Trigger sequential iframe printing to avoid popup blocking and create separate documents
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(printHtml);
+        doc.close();
+
+        // Stagger printing slightly to let browser buffer dialogs sequentially
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          // Clean up DOM afterwards
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 15000);
+        }, 500 + idx * 300);
+      }
+    });
   };
 
   // CHECK AND DECODE URL SHARE LINK (`?share=...` or `?cloudShare=...`)
