@@ -12,7 +12,7 @@ export const getContextSentence = (questionText: string, lesson?: ReadingLesson 
   if (!lesson || !lesson.paragraphs || lesson.paragraphs.length === 0) return null;
 
   // 1. Extract the target word/phrase inside single/double quotes or standard quotes
-  const wordMatch = questionText.match(/['"“‘]([^'"“”‘’\s.]{2,})['"”’]/);
+  const wordMatch = questionText.match(/['"“‘]([^'"“”‘’.?!\r\n]{2,60})['"”’]/);
   if (!wordMatch) return null;
   const targetWord = wordMatch[1].trim();
 
@@ -20,15 +20,16 @@ export const getContextSentence = (questionText: string, lesson?: ReadingLesson 
   const paragraphMatch = questionText.match(/paragraph\s+(\d+)/i);
   const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
 
-  const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ''); // keep space!
   const targetClean = clean(targetWord);
   if (targetClean.length < 2) return null;
 
   // Helper to match target word inside a sentence
   const findSentenceMatch = (sentences: string[]): string | null => {
+    const escaped = targetWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     // Try exact word match first
     let match = sentences.find(s => {
-      const regex = new RegExp(`\\b${targetWord}\\b`, 'i');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
       return regex.test(s);
     });
     if (match) return match;
@@ -37,8 +38,8 @@ export const getContextSentence = (questionText: string, lesson?: ReadingLesson 
     match = sentences.find(s => s.toLowerCase().includes(targetWord.toLowerCase()));
     if (match) return match;
 
-    // Try stem/prefix match for longer words
-    if (targetWord.length >= 5) {
+    // Try stem/prefix match for longer single words
+    if (targetWord.length >= 5 && !targetWord.includes(' ')) {
       const stem = targetWord.substring(0, targetWord.length - 2).toLowerCase();
       match = sentences.find(s => s.toLowerCase().includes(stem));
       if (match) return match;
