@@ -22,6 +22,7 @@ import {
   logQuizAttempt,
   sendEmailReport,
   savePassageAnalysisToCloud,
+  loadPassageAnalysisFromCloud,
   shareLessonWithUser
 } from './firebaseService';
 
@@ -749,6 +750,329 @@ export default function App() {
           setSyncStatus('error');
         }
       }
+    }
+  };
+
+  const handleBulkPrintPDF = async () => {
+    const selectedLessons = Array.from(selectedPendingIds)
+      .map(id => lessonsHistory.find(l => l.id === id))
+      .filter(Boolean) as ReadingLesson[];
+
+    if (selectedLessons.length === 0) return;
+
+    const pendingLessons = selectedLessons.filter(l => l.isPending);
+    if (pendingLessons.length > 0) {
+      alert(`선택하신 학습 세트 중 아직 AI 생성 및 분석이 이루어지지 않은 분석 대기중 항목(${pendingLessons.length}개)이 있습니다. AI 일괄 생성을 먼저 완료하신 후 PDF 인쇄를 진행해 주세요!`);
+      return;
+    }
+
+    setIsLoading(true);
+    const lessonsData: Array<{ lesson: ReadingLesson; analysisCache: any; stats: any }> = [];
+
+    try {
+      for (const lesson of selectedLessons) {
+        let cache: any = null;
+        try {
+          const cached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
+          if (cached) {
+            cache = JSON.parse(cached);
+          }
+        } catch (e) {
+          console.warn("Failed to parse local analysis cache:", e);
+        }
+
+        if (!cache || Object.keys(cache).length === 0) {
+          try {
+            cache = await loadPassageAnalysisFromCloud(lesson.id);
+            if (cache) {
+              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+            }
+          } catch (e) {
+            console.warn("Failed to load analysis from cloud:", e);
+          }
+        }
+
+        const cleanEnglishText = lesson.paragraphs.map(p => p.englishText).join(' ');
+        const words = cleanEnglishText.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
+        const totalWords = words.length;
+        const sentences = splitIntoSentences(cleanEnglishText);
+        const totalSentences = Math.max(1, sentences.length);
+        
+        let totalSyllables = 0;
+        words.forEach(w => {
+          let word = w.toLowerCase().replace(/[^a-z]/g, '');
+          if (word.length === 0) return;
+          if (word.length <= 3) {
+            totalSyllables += 1;
+            return;
+          }
+          word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+          word = word.replace(/^y/, '');
+          const syllables = word.match(/[aeiouy]{1,2}/g);
+          totalSyllables += syllables ? syllables.length : 1;
+        });
+
+        const asl = totalWords / totalSentences;
+        const asw = totalSyllables / Math.max(1, totalWords);
+        const rawGrade = 0.39 * asl + 11.8 * asw - 15.59;
+        const grade = Math.max(1, Math.min(12, rawGrade));
+        const roundedGrade = Math.round(grade);
+        const lexileRanges: Record<number, { min: number; max: number; label: string }> = {
+          1: { min: 100, max: 400, label: "초등 1학년" },
+          2: { min: 300, max: 600, label: "초등 2학년" },
+          3: { min: 500, max: 800, label: "초등 3학년" },
+          4: { min: 600, max: 900, label: "초등 4학년" },
+          5: { min: 700, max: 1000, label: "초등 5학년" },
+          6: { min: 800, max: 1050, label: "초등 6학년" },
+          7: { min: 850, max: 1100, label: "중학 1학년" },
+          8: { min: 900, max: 1150, label: "중학 2학년" },
+          9: { min: 950, max: 1200, label: "중학 3학년" },
+          10: { min: 1000, max: 1250, label: "고교 1학년" },
+          11: { min: 1050, max: 1300, label: "고교 2학년" },
+          12: { min: 1100, max: 1400, label: "고교 3학년/대학" }
+        };
+        const info = lexileRanges[roundedGrade] || lexileRanges[12];
+        const estimatedLexileVal = Math.round(info.min + (info.max - info.min) * (grade % 1));
+        const stats = {
+          words: totalWords,
+          sentences: totalSentences,
+          lexile: `${Math.max(info.min, Math.min(info.max, estimatedLexileVal))}L`,
+          label: info.label
+        };
+
+        lessonsData.push({ lesson, analysisCache: cache || {}, stats });
+      }
+    } catch (err) {
+      console.error("Error preparing bulk print data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+
+    let combinedContentHtml = '';
+
+    const matchSentenceAnalysis = (analyses: any[] | undefined, sentence: string) => {
+      if (!analyses || !sentence) return undefined;
+      const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+      const target = clean(sentence);
+      let match = analyses.find((a: any) => clean(a.sentence) === target);
+      if (!match) {
+        match = analyses.find((a: any) => {
+          const aClean = clean(a.sentence);
+          return aClean.includes(target) || target.includes(aClean);
+        });
+      }
+      return match;
+    };
+
+    lessonsData.forEach(({ lesson, analysisCache, stats }, lessonIdx) => {
+      let lessonHtml = '';
+      
+      lesson.paragraphs.forEach((p, pIdx) => {
+        const sentences = splitIntoSentences(p.englishText);
+        const paragraphAnalyses = analysisCache[p.id] || [];
+
+        lessonHtml += `<div class="paragraph-header">Paragraph ${pIdx + 1}</div>`;
+
+        sentences.forEach((sentence, sIdx) => {
+          const activeAnalysis = matchSentenceAnalysis(paragraphAnalyses, sentence);
+
+          if (activeAnalysis) {
+            let vocabHtml = '';
+            if (activeAnalysis.vocabulary && activeAnalysis.vocabulary.length > 0) {
+              vocabHtml += `
+                <div class="analysis-section">
+                  <span class="section-title">🔤 주요 어휘:</span>
+                  ${activeAnalysis.vocabulary.map((v: any) => `<span class="inline-item"><strong>${v.word}</strong> (${v.meaning})</span>`).join('')}
+                </div>
+              `;
+            }
+
+            let exprHtml = '';
+            if (activeAnalysis.expressions && activeAnalysis.expressions.length > 0) {
+              exprHtml += `
+                <div class="analysis-section">
+                  <span class="section-title">✨ 주요 표현:</span>
+                  ${activeAnalysis.expressions.map((e: any) => `<span class="inline-item"><strong>${e.expression}</strong>: ${e.meaning}${e.contextNote ? ` (${e.contextNote})` : ''}</span>`).join('')}
+                </div>
+              `;
+            }
+
+            let grammarHtml = '';
+            if (activeAnalysis.grammar) {
+              grammarHtml += `
+                <div class="analysis-section">
+                  <span class="section-title">⚖️ 구문 & 문법:</span>
+                  <span class="grammar-text">${activeAnalysis.grammar}</span>
+                </div>
+              `;
+            }
+
+            let contextHtmlSec = '';
+            if (activeAnalysis.context) {
+              contextHtmlSec += `
+                <div class="analysis-section">
+                  <span class="section-title">🌐 문맥 분석:</span>
+                  <span class="context-text">${activeAnalysis.context}</span>
+                </div>
+              `;
+            }
+
+            lessonHtml += `
+              <div class="sentence-block">
+                <div class="english-text">S${sIdx + 1}. ${sentence}</div>
+                ${vocabHtml}
+                ${exprHtml}
+                ${grammarHtml}
+                ${contextHtmlSec}
+              </div>
+            `;
+          } else {
+            lessonHtml += `
+              <div class="sentence-block" style="padding: 8px 12px; margin-bottom: 8px;">
+                <div class="english-text" style="font-size: 13.5px; margin-bottom: 2px;">S${sIdx + 1}. ${sentence}</div>
+                <div style="font-size: 11.5px; color: #ef4444; font-weight: 600;">(이 문장의 AI 분석 정보가 준비되지 않았습니다.)</div>
+              </div>
+            `;
+          }
+        });
+      });
+
+      combinedContentHtml += `
+        <div class="lesson-block" style="page-break-after: ${lessonIdx === lessonsData.length - 1 ? 'avoid' : 'always'};">
+          <div class="header">
+            <h1>지문 제목: "${lesson.title}"</h1>
+            <p>📖 READ.AGENT - 전체 문장 구문 분석 학습 리포트 | 출력 시간: ${new Date().toLocaleString()}</p>
+            <div class="stats-bar">
+              <span>📊 <strong>문장 수:</strong> ${stats.sentences}개</span>
+              <span>📝 <strong>단어 수:</strong> ${stats.words}단어</span>
+              <span>🎯 <strong>예상 난이도:</strong> ${stats.lexile} (${stats.label})</span>
+            </div>
+          </div>
+          ${lessonHtml}
+        </div>
+      `;
+    });
+
+    const printHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>[READ.AGENT] 일괄 구문 분석 인쇄 - 총 ${selectedLessons.length}개 세트</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
+          body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            color: #1e293b;
+            line-height: 1.5;
+            margin: 20px;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #06b6d4;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+          }
+          .header h1 {
+            margin: 0 0 6px 0;
+            font-size: 22px;
+            color: #0f172a;
+            font-weight: 800;
+          }
+          .header p {
+            margin: 0;
+            font-size: 12px;
+            color: #64748b;
+          }
+          .paragraph-header {
+            font-size: 14px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 20px 0 10px 0;
+            border-bottom: 1.5px solid #e2e8f0;
+            padding-bottom: 4px;
+            page-break-after: avoid;
+          }
+          .sentence-block {
+            page-break-inside: avoid;
+            border: 1px solid #e2e8f0;
+            border-left: 3px solid #06b6d4;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            background-color: #ffffff;
+          }
+          .english-text {
+            font-size: 14.5px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 6px;
+          }
+          .analysis-section {
+            margin-top: 6px;
+            font-size: 12px;
+            border-top: 1px dashed #f1f5f9;
+            padding-top: 5px;
+            line-height: 1.45;
+          }
+          .section-title {
+            font-weight: 700;
+            color: #475569;
+            margin-right: 6px;
+            font-size: 11.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+          }
+          .inline-item {
+            display: inline-block;
+            margin-right: 6px;
+            margin-bottom: 2px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            color: #334155;
+          }
+          .grammar-text, .context-text {
+            margin: 0;
+            color: #334155;
+            display: inline;
+          }
+          .stats-bar {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #475569;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+          }
+          @media print {
+            body {
+              margin: 15px;
+            }
+            .sentence-block {
+              box-shadow: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${combinedContentHtml}
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 800);
     }
   };
 
@@ -1832,6 +2156,14 @@ ${quiz.rationale}`;
                       }}
                     >
                       🔗 선택 공유
+                    </button>
+                     <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'rgba(6, 182, 212, 0.1)', color: '#22d3ee', border: '1px solid rgba(6,182,212,0.2)' }}
+                      onClick={handleBulkPrintPDF}
+                    >
+                      📄 선택 일괄 PDF 출력
                     </button>
                     <button
                       type="button"
