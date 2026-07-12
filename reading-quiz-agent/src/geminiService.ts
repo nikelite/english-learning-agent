@@ -1120,7 +1120,7 @@ export async function splitPassageIntoLessons(
     
     if (totalParts === 1) {
       // Create a single placeholder lesson for this chapter
-      const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
+      const prefix = totalLessonsCount > 1 ? `(${lessonCounter}\u2215${totalLessonsCount}) ` : '';
       const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
       lessonCounter++;
 
@@ -1163,7 +1163,7 @@ export async function splitPassageIntoLessons(
       for (let pIdx = 0; pIdx < totalPartsCount; pIdx++) {
         const partText = parts[pIdx].join(' ');
 
-        const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
+        const prefix = totalLessonsCount > 1 ? `(${lessonCounter}\u2215${totalLessonsCount}) ` : '';
         const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
         lessonCounter++;
 
