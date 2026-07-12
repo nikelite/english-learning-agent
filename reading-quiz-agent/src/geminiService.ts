@@ -1089,10 +1089,19 @@ export async function splitPassageIntoLessons(
   const baseTitle = titleInput.trim() || cleanText.substring(0, 20).replace(/\n/g, ' ') + '...';
   const lessons: ReadingLesson[] = [];
 
+  let totalLessonsCount = 0;
+  for (let chIdx = 0; chIdx < semanticChapters.length; chIdx++) {
+    totalLessonsCount += partsCount[chIdx];
+  }
+
+  let lessonCounter = 1;
+  const cleanBase = baseTitle.length > 25 ? baseTitle.substring(0, 22).trim() + "..." : baseTitle;
+
   // 3. Process each semantic chapter
   for (let chIdx = 0; chIdx < semanticChapters.length; chIdx++) {
     const chapter = semanticChapters[chIdx];
     const totalParts = partsCount[chIdx];
+    const cleanChapterTitle = chapter.title.length > 20 ? chapter.title.substring(0, 17).trim() + "..." : chapter.title;
     
     // Safety check indices
     const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
@@ -1111,9 +1120,9 @@ export async function splitPassageIntoLessons(
     
     if (totalParts === 1) {
       // Create a single placeholder lesson for this chapter
-      const lessonTitle = semanticChapters.length > 1
-        ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title}`
-        : baseTitle;
+      const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
+      const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
+      lessonCounter++;
 
       lessons.push({
         id: `reading-pending-${Date.now()}-${chIdx}-${Math.random().toString(36).substring(2, 6)}`,
@@ -1154,9 +1163,9 @@ export async function splitPassageIntoLessons(
       for (let pIdx = 0; pIdx < totalPartsCount; pIdx++) {
         const partText = parts[pIdx].join(' ');
 
-        const lessonTitle = semanticChapters.length > 1
-          ? `${baseTitle} - [${chIdx + 1}단원] ${chapter.title} (Part ${pIdx + 1}/${totalPartsCount})`
-          : `${baseTitle} - Part ${pIdx + 1}/${totalPartsCount}`;
+        const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
+        const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
+        lessonCounter++;
 
         lessons.push({
           id: `reading-pending-${Date.now()}-${chIdx}-${pIdx}-${Math.random().toString(36).substring(2, 6)}`,
