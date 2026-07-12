@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences } from '../geminiService';
+import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
@@ -350,6 +350,151 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     } catch (err: any) {
       setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
       bgFetchTriggeredRef.current = false;
+    } finally {
+      setIsAnalyzingBg(false);
+    }
+  };
+
+  const getMissingSentences = () => {
+    const missing: Array<{ paragraphId: number; sentence: string }> = [];
+    lesson.paragraphs.forEach(p => {
+      const sentences = splitIntoSentences(p.englishText);
+      const paragraphAnalyses = analysisCache[p.id] || [];
+      sentences.forEach(sentence => {
+        const sentenceAnalysis = matchSentenceAnalysis(paragraphAnalyses, sentence);
+        if (!sentenceAnalysis) {
+          missing.push({ paragraphId: p.id, sentence });
+        }
+      });
+    });
+    return missing;
+  };
+
+  const handleAnalyzeSingleSentence = async (paragraphId: number, sentence: string) => {
+    if (!apiKey) {
+      setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록해 주세요.");
+      return;
+    }
+    setIsAnalyzingBg(true);
+    setAnalysisError(null);
+    try {
+      const result = await analyzeParagraphChunkSentences(
+        paragraphId,
+        0,
+        [sentence],
+        lesson.passageText,
+        apiKey
+      );
+
+      if (result && result.length > 0) {
+        setAnalysisCache(prev => {
+          const currentParagraphAnalysis = prev[paragraphId] || [];
+          const filtered = currentParagraphAnalysis.filter(a => {
+            const cleanA = a.sentence.trim().toLowerCase();
+            const cleanS = sentence.trim().toLowerCase();
+            return cleanA !== cleanS;
+          });
+          const updatedParagraphAnalysis = [...filtered, ...result];
+          const updated = {
+            ...prev,
+            [paragraphId]: updatedParagraphAnalysis
+          };
+          localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+          
+          if (isAnalysisCacheValid(updated)) {
+            savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
+              console.warn("Failed to save merged analysis to cloud:", err);
+            });
+          }
+          return updated;
+        });
+      }
+    } catch (err: any) {
+      console.error("Single sentence analysis retry failed:", err);
+      setAnalysisError(err.message || "문장 재분석 중 오류가 발생했습니다.");
+    } finally {
+      setIsAnalyzingBg(false);
+    }
+  };
+
+  const handleFillMissingAnalyses = async () => {
+    if (!apiKey) {
+      setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록해 주세요.");
+      return;
+    }
+
+    const missing = getMissingSentences();
+    if (missing.length === 0) {
+      alert("모든 문장의 AI 분석 정보가 이미 등록되어 있습니다!");
+      return;
+    }
+
+    setIsAnalyzingBg(true);
+    setAnalysisError(null);
+
+    const missingByParagraph: Record<number, string[]> = {};
+    missing.forEach(m => {
+      if (!missingByParagraph[m.paragraphId]) {
+        missingByParagraph[m.paragraphId] = [];
+      }
+      missingByParagraph[m.paragraphId].push(m.sentence);
+    });
+
+    const paragraphIds = Object.keys(missingByParagraph).map(Number);
+    setBgProgress({ completed: 0, total: paragraphIds.length });
+
+    try {
+      let currentCompleted = 0;
+      for (const pId of paragraphIds) {
+        const sentencesToAnalyze = missingByParagraph[pId];
+        
+        if (currentCompleted > 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        const result = await analyzeParagraphChunkSentences(
+          pId,
+          99,
+          sentencesToAnalyze,
+          lesson.passageText,
+          apiKey
+        );
+
+        if (result && result.length > 0) {
+          setAnalysisCache(prev => {
+            const currentParagraphAnalysis = prev[pId] || [];
+            const cleanSentencesToAnalyze = sentencesToAnalyze.map(s => s.trim().toLowerCase());
+            const filtered = currentParagraphAnalysis.filter(a => {
+              const cleanA = a.sentence.trim().toLowerCase();
+              return !cleanSentencesToAnalyze.includes(cleanA);
+            });
+            const updatedParagraphAnalysis = [...filtered, ...result];
+            const updated = {
+              ...prev,
+              [pId]: updatedParagraphAnalysis
+            };
+            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+            return updated;
+          });
+        }
+
+        currentCompleted++;
+        setBgProgress({ completed: currentCompleted, total: paragraphIds.length });
+      }
+
+      setAnalysisCache(prev => {
+        if (isAnalysisCacheValid(prev)) {
+          savePassageAnalysisToCloud(lesson.id, prev).catch(err => {
+            console.warn("Failed to save merged analysis to cloud:", err);
+          });
+        }
+        return prev;
+      });
+
+      alert("🎉 누락된 문장들의 AI 분석 정보가 성공적으로 복구되었습니다!");
+    } catch (err: any) {
+      console.error("Failed to fill missing analyses:", err);
+      setAnalysisError(err.message || "누락된 분석을 가져오는 도중 오류가 발생했습니다.");
     } finally {
       setIsAnalyzingBg(false);
     }
@@ -824,6 +969,29 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
               <ZoomIn size={15} />
             </button>
 
+            {getMissingSentences().length > 0 && (
+              <button 
+                className="btn btn-warning" 
+                style={{ 
+                  padding: '0.35rem 0.75rem', 
+                  fontSize: '0.725rem', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.25rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: 'white',
+                  border: 'none'
+                }} 
+                onClick={handleFillMissingAnalyses}
+                disabled={isAnalyzingBg}
+                title="누락된 문장 분석 채우기"
+              >
+                {isAnalyzingBg ? "⏳ 채우는 중..." : `🔍 누락 분석 채우기 (${getMissingSentences().length})`}
+              </button>
+            )}
+
             <button 
               className="btn btn-primary" 
               style={{ 
@@ -959,7 +1127,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             {!sentenceAnalysis && !isAnalyzingBg && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
                                 <span>⚠️ {analysisError || "이 문장의 분석 정보를 가져오지 못했거나 분석되지 않은 문장입니다. API 키를 등록하고 다시 시도해 보세요."}</span>
-                                <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }} onClick={(e) => { e.stopPropagation(); handleManualRetry(); }}>
+                                <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }} onClick={(e) => { e.stopPropagation(); handleAnalyzeSingleSentence(p.id, sentence); }}>
                                   다시 시도
                                 </button>
                               </div>
@@ -974,7 +1142,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                                     <button 
                                       className="btn btn-secondary" 
                                       style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: 'white', background: '#d97706', borderColor: '#d97706', cursor: 'pointer' }} 
-                                      onClick={(e) => { e.stopPropagation(); handleManualRetry(); }}
+                                      onClick={(e) => { e.stopPropagation(); handleAnalyzeSingleSentence(p.id, sentence); }}
                                       disabled={isAnalyzingBg}
                                     >
                                       {isAnalyzingBg ? "분석 중..." : "AI 재분석"}

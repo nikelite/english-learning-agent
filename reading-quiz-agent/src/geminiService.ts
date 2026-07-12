@@ -604,7 +604,7 @@ Ensure the response is a single, valid JSON object and nothing else. Do not wrap
 }
 
 // Helper to analyze a small group of English sentences in parallel with Gemini
-async function analyzeParagraphChunkSentences(
+export async function analyzeParagraphChunkSentences(
   paragraphId: number,
   chunkIdx: number,
   sentences: string[],
