@@ -1,18 +1,42 @@
 import sbd from 'sbd';
 import { ReadingLesson, ReadingVocabulary, SentenceAnalysis } from './types';
 
-// Centralized sentence splitting function using sbd (Sentence Boundary Detection)
+// Centralized sentence splitting function using sbd (Sentence Boundary Detection) with robust masking for abbreviations and initials
 export function splitIntoSentences(text: string): string[] {
   if (!text) return [];
-  const cleaned = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-  return sbd.sentences(cleaned, {
+  
+  // 1. Preprocess line breaks and normalize spaces
+  let cleaned = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // 2. Masking abbreviations and initials using a safe private Unicode character (U+E000)
+  const PLACEHOLDER = "\uE000";
+  
+  // Mask standard abbreviations (case-insensitive)
+  const abbrRegex = /\b(Mr|Mrs|Ms|Dr|St|Jr|Sr|Co|Corp|Inc|Ltd|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec|vs|etc|approx)\b\./gi;
+  cleaned = cleaned.replace(abbrRegex, (match, p1) => {
+    return `${p1}${PLACEHOLDER}`;
+  });
+  
+  // Mask e.g. and i.e.
+  cleaned = cleaned.replace(/\b(e\.g|i\.e)\./gi, (match, p1) => {
+    return p1.replace(/\./g, PLACEHOLDER) + PLACEHOLDER;
+  });
+
+  // Mask initials like "A. Avery" or "J. K. Rowling" (capital letter followed by dot, then space and another capital/Korean word)
+  const initialRegex = /\b([A-Z])\.(?=\s+[A-Z가-힣])/g;
+  cleaned = cleaned.replace(initialRegex, (match, p1) => {
+    return `${p1}${PLACEHOLDER}`;
+  });
+
+  // 3. Sentence segmentation
+  const rawSentences = sbd.sentences(cleaned, {
     sanitize: false,
-    preserve_whitespace: true,
-    abbreviations: [
-      "e.g", "i.e", "vs", "etc", "approx", 
-      "Jan", "Feb", "Mar", "Apr", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-      "Mr", "Mrs", "Dr", "St", "Jr", "Sr", "Co", "Corp", "Inc", "Ltd"
-    ]
+    preserve_whitespace: true
+  });
+  
+  // 4. Restore original periods
+  return rawSentences.map(s => {
+    return s.replace(new RegExp(PLACEHOLDER, 'g'), '.');
   });
 }
 
