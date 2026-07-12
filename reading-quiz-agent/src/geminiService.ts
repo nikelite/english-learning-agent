@@ -1183,6 +1183,28 @@ export async function splitPassageIntoLessons(
 
   return lessons;
 }
+export const matchSentenceAnalysis = (analyses: SentenceAnalysis[] | undefined, sentence: string): SentenceAnalysis | undefined => {
+  if (!analyses || !sentence) return undefined;
+  const cleanS = sentence.trim().toLowerCase();
+  
+  // 1. Exact or simple substring match first
+  let match = analyses.find(
+    a => a.sentence.trim().toLowerCase() === cleanS ||
+         a.sentence.toLowerCase().includes(cleanS) ||
+         cleanS.includes(a.sentence.toLowerCase())
+  );
+  if (match) return match;
+  
+  // 2. Normalized alphanumeric match
+  const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9가-힣]/g, '');
+  const normS = normalize(sentence);
+  if (!normS) return undefined;
+  
+  return analyses.find(a => {
+    const normA = normalize(a.sentence);
+    return normA === normS || normA.includes(normS) || normS.includes(normA);
+  });
+};
 
 export async function autoFillMissingAnalyses(
   lesson: { id: string; passageText: string; paragraphs: Array<{ id: number; englishText: string }> },
@@ -1193,29 +1215,6 @@ export async function autoFillMissingAnalyses(
     const hasEnglish = /[a-zA-Z]/.test(s);
     const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
     return hasEnglish && !hasKorean;
-  };
-
-  const matchSentenceAnalysis = (analyses: SentenceAnalysis[] | undefined, sentence: string): SentenceAnalysis | undefined => {
-    if (!analyses || !sentence) return undefined;
-    const cleanS = sentence.trim().toLowerCase();
-    
-    // 1. Exact or simple substring match first
-    let match = analyses.find(
-      a => a.sentence.trim().toLowerCase() === cleanS ||
-           a.sentence.toLowerCase().includes(cleanS) ||
-           cleanS.includes(a.sentence.toLowerCase())
-    );
-    if (match) return match;
-    
-    // 2. Normalized alphanumeric match
-    const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9가-힣]/g, '');
-    const normS = normalize(sentence);
-    if (!normS) return undefined;
-    
-    return analyses.find(a => {
-      const normA = normalize(a.sentence);
-      return normA === normS || normA.includes(normS) || normS.includes(normA);
-    });
   };
 
   // Find all missing sentences

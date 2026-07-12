@@ -6,7 +6,7 @@ import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
-import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses } from './geminiService';
+import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from './geminiService';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
 import { 
   loadLessonFromCloud, 
@@ -774,19 +774,6 @@ export default function App() {
       const isCacheComplete = (l: ReadingLesson, c: any): boolean => {
         if (!c || typeof c !== 'object') return false;
         const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-        
-        const matchSentenceAnalysis = (analyses: any[] | undefined, sentence: string) => {
-          if (!analyses || !sentence) return undefined;
-          const target = clean(sentence);
-          let match = analyses.find((a: any) => clean(a.sentence) === target);
-          if (!match) {
-            match = analyses.find((a: any) => {
-              const aClean = clean(a.sentence);
-              return aClean.includes(target) || target.includes(aClean);
-            });
-          }
-          return match;
-        };
 
         for (const p of l.paragraphs) {
           const paragraphAnalyses = c[p.id];
@@ -901,19 +888,6 @@ export default function App() {
       setIsLoading(false);
     }
 
-    const matchSentenceAnalysis = (analyses: any[] | undefined, sentence: string) => {
-      if (!analyses || !sentence) return undefined;
-      const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-      const target = clean(sentence);
-      let match = analyses.find((a: any) => clean(a.sentence) === target);
-      if (!match) {
-        match = analyses.find((a: any) => {
-          const aClean = clean(a.sentence);
-          return aClean.includes(target) || target.includes(aClean);
-        });
-      }
-      return match;
-    };
 
     const originalTitle = document.title;
 

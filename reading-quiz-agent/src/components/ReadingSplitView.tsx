@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses } from '../geminiService';
+import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 
 interface ReadingSplitViewProps {
@@ -20,30 +20,6 @@ interface ReadingSplitViewProps {
   onAddQuizToMochi: (quiz: ReadingQuizItem) => Promise<void>;
 }
 
-// Helper to match sentence text against SentenceAnalysis objects using exact, substring, and normalized comparisons
-const matchSentenceAnalysis = (analyses: SentenceAnalysis[] | undefined, sentence: string): SentenceAnalysis | undefined => {
-  if (!analyses || !sentence) return undefined;
-  
-  const cleanS = sentence.trim().toLowerCase();
-  
-  // 1. Exact or simple substring match first
-  let match = analyses.find(
-    a => a.sentence.trim().toLowerCase() === cleanS ||
-         a.sentence.toLowerCase().includes(cleanS) ||
-         cleanS.includes(a.sentence.toLowerCase())
-  );
-  if (match) return match;
-  
-  // 2. Normalized alphanumeric match
-  const normalize = (txt: string) => txt.toLowerCase().replace(/[^a-zA-Z0-9가-힣]/g, '');
-  const normS = normalize(sentence);
-  if (!normS) return undefined;
-  
-  return analyses.find(a => {
-    const normA = normalize(a.sentence);
-    return normA === normS || normA.includes(normS) || normS.includes(normA);
-  });
-};
 
 export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   lesson,
