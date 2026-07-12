@@ -889,6 +889,33 @@ export default function App() {
     }
 
 
+    let overallMissingCount = 0;
+    let missingDetails = '';
+    
+    lessonsData.forEach(({ lesson, analysisCache }) => {
+      lesson.paragraphs.forEach((p, pIdx) => {
+        const sentences = splitIntoSentences(p.englishText);
+        const paragraphAnalyses = analysisCache[p.id] || [];
+        sentences.forEach((sentence, sIdx) => {
+          if (!matchSentenceAnalysis(paragraphAnalyses, sentence)) {
+            overallMissingCount++;
+            if (overallMissingCount <= 3) {
+              missingDetails += `\n- "${lesson.title}"의 문단 ${pIdx + 1}, 문장 ${sIdx + 1}: "${sentence.substring(0, 40)}..."`;
+            }
+          }
+        });
+      });
+    });
+
+    if (overallMissingCount > 0) {
+      const confirmPrint = window.confirm(
+        `⚠️ [출력 경고] 선택한 지문 중 총 ${overallMissingCount}개의 문장에 AI 분석 정보가 누락되었습니다.\n${missingDetails}${overallMissingCount > 3 ? '\n- ... 외 추가 누락 있음' : ''}\n\n이 누락된 상태 그대로 인쇄를 진행하시겠습니까?`
+      );
+      if (!confirmPrint) {
+        return;
+      }
+    }
+
     const originalTitle = document.title;
 
     const printNext = (index: number) => {
@@ -960,6 +987,7 @@ export default function App() {
               </div>
             `;
           } else {
+            console.warn(`[BulkPrint Mismatch] Sentence not matched: "${sentence}" in Paragraph ID ${p.id} of Lesson "${lesson.title}". Available analyses in cache for this paragraph:`, paragraphAnalyses.map((a: any) => a.sentence));
             lessonHtml += `
               <div class="sentence-block" style="padding: 8px 12px; margin-bottom: 8px;">
                 <div class="english-text" style="font-size: 13.5px; margin-bottom: 2px;">S${sIdx + 1}. ${sentence}</div>
