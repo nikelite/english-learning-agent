@@ -139,9 +139,42 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
                 트레이닝 핵심 구절
               </span>
-              <h3 style={{ fontSize: '1.6rem', fontWeight: '800', color: 'white', fontFamily: 'var(--font-display)' }}>
+              <h3 style={{ fontSize: '1.6rem', fontWeight: '800', color: 'white', fontFamily: 'var(--font-display)', marginBottom: '0.25rem' }}>
                 "{pronunciation.wordOrPhrase}"
               </h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <a 
+                  href={`https://youglish.com/pronounce/${encodeURIComponent(pronunciation.wordOrPhrase)}/english`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    fontSize: '0.75rem',
+                    background: 'rgba(56, 189, 248, 0.1)',
+                    color: '#38bdf8',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '9999px',
+                    textDecoration: 'none',
+                    fontWeight: 'bold',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'rgba(56, 189, 248, 0.2)';
+                    e.currentTarget.style.borderColor = '#38bdf8';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(56, 189, 248, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+                  }}
+                >
+                  🔊 YouGlish에서 원어민 실제 발음 듣기 ↗
+                </a>
+              </div>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
                 <div className="phonetic-respelling">
