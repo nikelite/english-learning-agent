@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveApiKey(tempKey.trim());
-    onSaveUserId(tempUserId.trim());
+    onSaveUserId(tempUserId.trim().toLowerCase());
     onSaveUserEmail(tempUserEmail.trim());
     onSaveMochiApiKey(tempMochiApiKey.trim());
     onSaveMochiQuizDeckId(tempMochiQuizDeckId);
@@ -245,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <input
                   type="text"
                   value={tempUserId}
-                  onChange={(e) => setTempUserId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                  onChange={(e) => setTempUserId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
                   placeholder="예: nikelite"
                   className="input-glow"
                 />

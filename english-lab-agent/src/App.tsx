@@ -122,7 +122,7 @@ export default function App() {
     return localStorage.getItem('lab_gemini_api_key') || '';
   });
   const [userId, setUserId] = useState<string>(() => {
-    return localStorage.getItem('lab_user_id') || '';
+    return (localStorage.getItem('lab_user_id') || '').trim().toLowerCase();
   });
 
   const [mochiApiKey, setMochiApiKey] = useState<string>(() => {
@@ -838,8 +838,9 @@ export default function App() {
   };
 
   const handleSaveUserId = (newId: string) => {
-    setUserId(newId);
-    localStorage.setItem('lab_user_id', newId);
+    const cleanedId = newId.trim().toLowerCase();
+    setUserId(cleanedId);
+    localStorage.setItem('lab_user_id', cleanedId);
   };
 
   // AI Correction trigger

@@ -218,14 +218,15 @@ export default function App() {
 
   // 7.1 Cloud Sync State
   const [userId, setUserId] = useState<string>(() => {
-    return localStorage.getItem('eng_user_id') || '';
+    return (localStorage.getItem('eng_user_id') || '').trim().toLowerCase();
   });
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const handleSaveUserId = (newId: string) => {
-    setUserId(newId);
-    localStorage.setItem('eng_user_id', newId);
+    const cleanedId = newId.trim().toLowerCase();
+    setUserId(cleanedId);
+    localStorage.setItem('eng_user_id', cleanedId);
   };
 
   // Injected quizzes (includes standard ones + oldest past mistakes) calculated synchronously

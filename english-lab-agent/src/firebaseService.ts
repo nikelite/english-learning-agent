@@ -157,7 +157,21 @@ export async function saveSharedLessonProgress(
 }
 
 /**
- * Loads all shared lesson progress documents for a given user
+ * Generates unique casing variations for case-insensitive Firestore lookups
+ */
+export function getCasingVariations(userId: string): string[] {
+  const trimmed = userId.trim();
+  const variations = [
+    trimmed,
+    trimmed.toLowerCase(),
+    trimmed.toUpperCase(),
+    trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+  ];
+  return Array.from(new Set(variations)).filter(Boolean);
+}
+
+/**
+ * Loads all shared lesson progress documents for a given user (supporting casing variations)
  */
 export async function loadSharedLessonsProgress(
   userId: string
@@ -168,13 +182,20 @@ export async function loadSharedLessonsProgress(
   retryHistory?: any[];
 }>> {
   try {
-    const q = query(collection(db, 'lab_shared_progress'), where('userId', '==', userId));
+    const variations = getCasingVariations(userId);
+    const q = query(collection(db, 'lab_shared_progress'), where('userId', 'in', variations));
     const querySnap = await getDocs(q);
     const progressMap: Record<string, any> = {};
     querySnap.forEach((docSnap) => {
       const data = docSnap.data();
       if (data.lessonId && data.progress) {
-        progressMap[data.lessonId] = data.progress;
+        const existing = progressMap[data.lessonId];
+        if (!existing || (data.updatedAt || 0) > (existing.updatedAt || 0)) {
+          progressMap[data.lessonId] = {
+            ...data.progress,
+            updatedAt: data.updatedAt
+          };
+        }
       }
     });
     return progressMap;
@@ -220,8 +241,9 @@ function mergeLessons(local: LabLesson, cloud: LabLesson): { merged: LabLesson, 
  */
 export async function syncUserLessons(userId: string, localLessons: LabLesson[]): Promise<LabLesson[]> {
   try {
+    const variations = getCasingVariations(userId);
     // 1. Query lessons owned by user
-    const qOwner = query(collection(db, 'lab_lessons'), where('ownerId', '==', userId));
+    const qOwner = query(collection(db, 'lab_lessons'), where('ownerId', 'in', variations));
     const querySnapOwner = await getDocs(qOwner);
     const ownerLessons: LabLesson[] = [];
     querySnapOwner.forEach((docSnap) => {
@@ -229,7 +251,7 @@ export async function syncUserLessons(userId: string, localLessons: LabLesson[])
     });
     
     // 2. Query lessons shared with user
-    const qShared = query(collection(db, 'lab_lessons'), where('sharedWith', 'array-contains', userId));
+    const qShared = query(collection(db, 'lab_lessons'), where('sharedWith', 'array-contains-any', variations));
     const querySnapShared = await getDocs(qShared);
     const sharedLessons: LabLesson[] = [];
     querySnapShared.forEach((docSnap) => {
@@ -656,9 +678,10 @@ export async function sendEmailReport(
  */
 export async function loadUserQuizAttemptsFromCloud(targetUserId: string): Promise<any[]> {
   try {
+    const variations = getCasingVariations(targetUserId);
     const q = query(
       collection(db, 'lab_quiz_attempts'), 
-      where('userId', '==', targetUserId.trim())
+      where('userId', 'in', variations)
     );
     const querySnap = await getDocs(q);
     const attempts: any[] = [];
