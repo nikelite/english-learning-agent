@@ -1014,3 +1014,76 @@ Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`
   });
 }
 
+/**
+ * Sends a user follow-up question context-aware to Gemini
+ */
+export async function askGeminiFollowUpQuestion(
+  lesson: Lesson,
+  question: string,
+  chatHistory: Array<{ role: 'user' | 'model'; text: string }>,
+  apiKey: string
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+  const cleanTitle = lesson.title.replace(/"/g, "'");
+  const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
+  const cleanExplanation = lesson.eli5.explanation.replace(/"/g, "'");
+
+  const formattedContents = [
+    {
+      role: "user",
+      parts: [
+        {
+          text: `You are an encouraging native English tutor. The student is currently studying this lesson:
+Title: ${cleanTitle}
+Content: ${cleanSourceText}
+ELI10 Explanation: ${cleanExplanation}
+
+Answer the student's follow-up questions clearly, simply, and in Korean. Do not use complex jargon. Keep the tone friendly, helpful, and engaging (suitable for a 10-year-old child).`
+        }
+      ]
+    },
+    ...chatHistory.map(h => ({
+      role: h.role,
+      parts: [{ text: h.text }]
+    })),
+    {
+      role: "user",
+      parts: [{ text: question }]
+    }
+  ];
+
+  const requestBody = {
+    contents: formattedContents,
+    generationConfig: {
+      temperature: 0.5
+    }
+  };
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
+    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!responseText) {
+    throw new Error("Gemini가 답변을 반환하지 않았습니다.");
+  }
+
+  return responseText;
+}
+

@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, ChevronRight } from 'lucide-react';
 import { Lesson } from '../types';
 
@@ -5,14 +6,47 @@ interface StudyTabsProps {
   lesson: Lesson;
   activeStudyTab: 'eli5' | 'memory' | 'pronounce';
   setActiveStudyTab: (tab: 'eli5' | 'memory' | 'pronounce') => void;
+  apiKey: string;
 }
 
 export const StudyTabs: React.FC<StudyTabsProps> = ({
   lesson,
   activeStudyTab,
-  setActiveStudyTab
+  setActiveStudyTab,
+  apiKey
 }) => {
   const { eli5, memoryTips, pronunciation } = lesson;
+
+  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'model'; text: string }>>([]);
+  const [questionInput, setQuestionInput] = useState('');
+  const [isAsking, setIsAsking] = useState(false);
+
+  useEffect(() => {
+    setChatHistory([]);
+    setQuestionInput('');
+    setIsAsking(false);
+  }, [lesson.id]);
+
+  const handleAskQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const queryStr = questionInput.trim();
+    if (!queryStr || isAsking || !apiKey) return;
+
+    const newHistory = [...chatHistory, { role: 'user' as const, text: queryStr }];
+    setChatHistory(newHistory);
+    setQuestionInput('');
+    setIsAsking(true);
+
+    try {
+      const { askGeminiFollowUpQuestion } = await import('../geminiService');
+      const response = await askGeminiFollowUpQuestion(lesson, queryStr, chatHistory, apiKey);
+      setChatHistory([...newHistory, { role: 'model' as const, text: response }]);
+    } catch (err: any) {
+      alert("AI 답변 생성에 실패했습니다: " + err.message);
+    } finally {
+      setIsAsking(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -23,7 +57,7 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
           onClick={() => setActiveStudyTab('eli5')}
         >
           <HelpCircle size={16} />
-          쉬운 설명 (ELI5)
+          쉬운 설명 (ELI10)
         </button>
         <button
           className={`tab-btn ${activeStudyTab === 'memory' ? 'active' : ''}`}
@@ -49,7 +83,7 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
             <div className="card-section">
               <h4 className="card-title-bar">
                 <HelpCircle style={{ color: 'var(--primary)' }} size={20} />
-                아주 쉽게 이해하는 핵심 원리
+                아주 쉽게 이해하는 핵심 원리 (ELI10)
               </h4>
               <p style={{ color: 'var(--text-primary)', fontSize: '1.05rem', lineHeight: '1.7', whiteSpace: 'pre-line' }}>
                 {eli5.explanation}
@@ -75,6 +109,67 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
                   {eli5.exampleContext}
                 </p>
               </div>
+            </div>
+
+            {/* AI 추가 질문 (Follow-up Q&A) */}
+            <div className="card-section" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+              <h4 className="card-title-bar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(139, 92, 246, 0.15)', color: 'var(--primary)', fontSize: '1rem' }}>🤖</span>
+                <span>AI에게 추가 질문하기 (ELI10 Q&A)</span>
+              </h4>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                이 설명에서 이해가 가지 않는 부분이나 추가로 궁금한 점을 질문해 보세요. AI가 10세 수준으로 한 번 더 쉽게 설명해 드립니다.
+              </p>
+
+              {/* Chat History List */}
+              {chatHistory.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem', maxHeight: '300px', overflowY: 'auto', padding: '0.5rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  {chatHistory.map((msg, index) => (
+                    <div 
+                      key={index}
+                      style={{
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                        maxWidth: '85%',
+                        padding: '0.6rem 0.9rem',
+                        borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '12px 12px 12px 0',
+                        background: msg.role === 'user' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+                        border: msg.role === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        fontSize: '0.9rem',
+                        lineHeight: '1.5',
+                        whiteSpace: 'pre-line'
+                      }}
+                    >
+                      {msg.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Input Form */}
+              <form onSubmit={handleAskQuestion} style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={questionInput}
+                  onChange={(e) => setQuestionInput(e.target.value)}
+                  placeholder={apiKey ? "설명 중 이해가 안 가는 점을 물어보세요..." : "설정에서 API Key를 등록하면 질문할 수 있습니다."}
+                  className="input-glow"
+                  style={{ flex: 1, padding: '0.65rem 1rem' }}
+                  disabled={isAsking || !apiKey}
+                />
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{
+                    padding: '0.65rem 1.25rem',
+                    background: 'linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%)',
+                    whiteSpace: 'nowrap'
+                  }}
+                  disabled={isAsking || !questionInput.trim() || !apiKey}
+                >
+                  {isAsking ? '답변 중...' : '질문하기'}
+                </button>
+              </form>
             </div>
           </div>
         )}

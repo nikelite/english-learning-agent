@@ -1495,6 +1495,7 @@ ${quiz.rationale}`;
                   lesson={activeLesson}
                   activeStudyTab={activeStudyTab}
                   setActiveStudyTab={setActiveStudyTab}
+                  apiKey={apiKey}
                 />
               ) : (
                 <QuizPanel
