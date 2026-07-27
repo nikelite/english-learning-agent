@@ -124,9 +124,17 @@ export default function App() {
     const saved = localStorage.getItem('last_reading_vocab_count');
     return saved ? Number(saved) : 2;
   });
-  const [sentenceLimit, setSentenceLimit] = useState<number>(() => {
-    const saved = localStorage.getItem('last_reading_sentence_limit');
-    return saved ? Number(saved) : 75;
+  const [wordLimit, setWordLimit] = useState<number>(() => {
+    const saved = localStorage.getItem('last_reading_word_limit');
+    if (saved) return Number(saved);
+    const legacySaved = localStorage.getItem('last_reading_sentence_limit');
+    if (legacySaved) return Math.max(100, Number(legacySaved) * 15);
+    return 200;
+  });
+  const [wordLimitMode, setWordLimitMode] = useState<'preset' | 'custom'>(() => {
+    const current = localStorage.getItem('last_reading_word_limit');
+    const val = current ? Number(current) : 200;
+    return (val === 200 || val === 400 || val === 800) ? 'preset' : 'custom';
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -441,8 +449,8 @@ export default function App() {
   }, [vocabCount]);
 
   useEffect(() => {
-    localStorage.setItem('last_reading_sentence_limit', String(sentenceLimit));
-  }, [sentenceLimit]);
+    localStorage.setItem('last_reading_word_limit', String(wordLimit));
+  }, [wordLimit]);
 
   // Batch process selected lessons: generate quizzes first if pending, then analyze passage sentences
   const handleBulkProcessLessons = async () => {
@@ -1261,7 +1269,7 @@ export default function App() {
       const filteredWords = filteredText.split(/\s+/).filter(Boolean);
       const filteredWordsCount = filteredWords.length;
 
-      const exceedsLimit = remainingSentencesCount > sentenceLimit;
+      const exceedsLimit = remainingWordsCount > wordLimit;
       const reconstructedText = reconstructText(updatedSentences);
 
       return {
@@ -1299,7 +1307,7 @@ export default function App() {
         await saveLessonToHistory(generated);
       } else {
         // Only run splitting logic if the user explicitly wants to split
-        const splitLessons = await splitPassageIntoLessons(text, title, sentenceLimit, apiKey);
+        const splitLessons = await splitPassageIntoLessons(text, title, wordLimit, apiKey);
         
         if (splitLessons.length === 0) {
           throw new Error("지문 분석 결과 단원을 분할하지 못했습니다.");
@@ -1424,7 +1432,7 @@ export default function App() {
 
     const filteredWordsCount = Math.max(0, originalWordsCount - remainingWordsCount);
 
-    const exceedsLimit = remainingSentencesCount > sentenceLimit;
+    const exceedsLimit = remainingWordsCount > wordLimit;
 
     // Reset expand states and open the preview modal
     setReportExpand({ original: false, remaining: false, filtered: false });
@@ -1941,21 +1949,46 @@ ${quiz.rationale}`;
                   </div>
                 </div>
 
-                {/* Text Chunking Sentence Limit Selector */}
+                {/* Text Chunking Word Limit Selector */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>지문 분할 기준 (문장 수)</label>
-                  <select
-                    value={sentenceLimit}
-                    onChange={(e) => setSentenceLimit(Number(e.target.value))}
-                    className="select-glow"
-                    disabled={isLoading}
-                  >
-                    <option value={30}>30 문장 (짧은 단원 - 빠른 훈련)</option>
-                    <option value={50}>50 문장 (일반 단원)</option>
-                    <option value={75}>75 문장 (기본값 - 표준 학습)</option>
-                    <option value={100}>100 문장 (심층 학습 - 긴 본문)</option>
-                    <option value={150}>150 문장 (초장문 학습 - 고난도)</option>
-                  </select>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>지문 분할 기준 (단어 수)</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <select
+                      value={wordLimitMode === 'preset' ? wordLimit : 'custom'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'custom') {
+                          setWordLimitMode('custom');
+                        } else {
+                          setWordLimitMode('preset');
+                          setWordLimit(Number(val));
+                        }
+                      }}
+                      className="select-glow"
+                      disabled={isLoading}
+                      style={{ flex: 1 }}
+                    >
+                      <option value={200}>200 단어 (⭐️ 추천 기본값 / 수능·TOEFL 표준)</option>
+                      <option value={400}>400 단어 (중장문 학습)</option>
+                      <option value={800}>800 단어 (초장문 / 원서 학습)</option>
+                      <option value="custom">✍️ 직접 입력</option>
+                    </select>
+
+                    {wordLimitMode === 'custom' && (
+                      <input
+                        type="number"
+                        min={50}
+                        max={5000}
+                        step={50}
+                        value={wordLimit}
+                        onChange={(e) => setWordLimit(Math.max(10, Number(e.target.value)))}
+                        className="input-glow"
+                        placeholder="단어 수"
+                        style={{ width: '110px' }}
+                        disabled={isLoading}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {error && (
@@ -2783,12 +2816,12 @@ ${quiz.rationale}`;
             {/* Split analogy/exceed message */}
             {splitConfirm.exceedsLimit ? (
               <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem 1rem', background: 'rgba(139, 92, 246, 0.05)', border: '1px dashed rgba(139, 92, 246, 0.3)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: '1.5' }}>
-                ⚠️ 설정된 분할 기준(<strong style={{ color: 'var(--primary)' }}>{sentenceLimit}문장</strong>)을 초과하는 방대한 지문입니다. 
-                단원 분할 기능 사용을 적극 권장합니다. (보관함에 분할 생성됨)
+                ⚠️ 설정된 분할 기준(<strong style={{ color: 'var(--primary)' }}>{wordLimit}단어</strong>)을 초과하는 지문({splitConfirm.remainingWords}단어)입니다. 
+                문장 완성도를 100% 보존하며 균형 있게 단원 분할을 진행합니다. (보관함에 분할 생성됨)
               </div>
             ) : (
               <div className="eli5-analogy-box" style={{ margin: '0 0 1.5rem 0', padding: '0.75rem 1rem', background: 'rgba(6, 182, 212, 0.05)', border: '1px dashed rgba(6, 182, 212, 0.3)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: '1.5' }}>
-                ✅ 학습에 무리 없는 아담한 분량의 지문입니다. 바로 분석 및 학습을 시작할 수 있습니다.
+                ✅ 학습에 무리 없는 아담한 분량({splitConfirm.remainingWords}단어)의 지문입니다. 바로 분석 및 학습을 시작할 수 있습니다.
               </div>
             )}
 
@@ -2800,7 +2833,7 @@ ${quiz.rationale}`;
                     className="btn btn-primary"
                     style={{ width: '100%', padding: '0.85rem' }}
                   >
-                    ✂️ {Math.ceil(splitConfirm.remainingSentences / sentenceLimit)}개 단원으로 분할하여 분석 시작
+                    ✂️ 약 {Math.max(1, Math.round(splitConfirm.remainingWords / wordLimit))}개 단원으로 균형 분할하여 분석 시작
                   </button>
                   
                   <button

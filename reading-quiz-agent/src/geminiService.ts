@@ -866,11 +866,24 @@ interface SemanticChapter {
  * Uses Gemini API to semantically analyze the passage paragraph structure 
  * and group them into natural chapters/sections with engaging titles.
  */
+/**
+ * Counts English words in a text block
+ */
+export function countEnglishWords(text: string): number {
+  if (!text) return 0;
+  const words = text.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
+  return words.length;
+}
+
+/**
+ * Determines semantic chapter groupings for a long passage based on paragraph index ranges,
+ * aiming for approximately wordLimit words per section while preserving sentence/paragraph completeness.
+ */
 export async function determineSemanticChapters(
   passageText: string,
   apiKey: string,
   targetChapterCount: number,
-  sentenceLimit: number
+  wordLimit: number
 ): Promise<SemanticChapter[]> {
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 등록해 주세요.");
@@ -896,17 +909,11 @@ export async function determineSemanticChapters(
     }];
   }
 
-  // Create lightweight outline: index + English sentence count + first 100 characters of each paragraph
+  // Create lightweight outline: index + English word count + first 100 characters of each paragraph
   const outline = paragraphs.map((p, idx) => {
-    const pSentences = splitIntoSentences(p);
-    const isEnglishSentence = (s: string): boolean => {
-      const hasEnglish = /[a-zA-Z]/.test(s);
-      const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
-      return hasEnglish && !hasKorean;
-    };
-    const engCount = pSentences.filter(isEnglishSentence).length;
+    const wordCount = countEnglishWords(p);
     const snippet = p.length > 100 ? `${p.substring(0, 100)}...` : p;
-    return `[Paragraph ${idx}] (${engCount} English sentences): "${snippet}"`;
+    return `[Paragraph ${idx}] (${wordCount} English words): "${snippet}"`;
   }).join('\n\n');
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
@@ -914,14 +921,14 @@ export async function determineSemanticChapters(
   const prompt = `You are an elite academic textbook editor and ESL curriculum architect.
 Your task is to analyze the outline of a long English passage and group its paragraphs semantically into EXACTLY ${targetChapterCount} coherent, natural thematic chapters/sections.
 
-Here is the paragraph outline with corresponding index numbers and the number of English sentences in each paragraph:
+Here is the paragraph outline with corresponding index numbers and the number of English words in each paragraph:
 ${outline}
 
 CRITICAL INSTRUCTIONS:
 1. You MUST group these paragraphs sequentially into EXACTLY ${targetChapterCount} chapters/sections. The returned JSON array MUST contain exactly ${targetChapterCount} elements.
-2. Group the paragraphs logically by topic, narrative progression, or subject shift, but also try to balance the total number of English sentences in each chapter/section.
-3. The ideal target is about ${sentenceLimit} English sentences per chapter/section. Try to avoid any single chapter exceeding ${sentenceLimit} English sentences if possible.
-4. If the total number of English sentences in the passage is very small or if it's not possible to balance perfectly, prioritize grouping paragraphs into EXACTLY ${targetChapterCount} chapters/sections anyway.
+2. Group the paragraphs logically by topic, narrative progression, or subject shift, but also try to balance the total number of English words in each chapter/section as evenly as possible.
+3. The ideal target is about ${wordLimit} English words per chapter/section. Try to avoid any single chapter exceeding ${wordLimit} English words if possible while preserving paragraph boundaries.
+4. If the total number of English words in the passage is small or if it's not possible to balance perfectly, prioritize grouping paragraphs into EXACTLY ${targetChapterCount} chapters/sections anyway.
 
 You must return the grouping in the following strict JSON array format. Every paragraph index MUST be assigned to exactly one chapter, sequentially:
 [
@@ -995,13 +1002,14 @@ Do not wrap the output in markdown code blocks. Output strictly valid JSON.`;
 }
 
 /**
- * Splits a long text passage semantically by chapters, and then sequentially by sentence thresholds,
+ * Splits a long text passage semantically by chapters, and then sequentially by word count thresholds,
  * returning an array of placeholder lessons awaiting lazy on-demand generation.
+ * Always preserves complete sentences.
  */
 export async function splitPassageIntoLessons(
   passageText: string,
   titleInput: string,
-  sentenceLimit: number,
+  wordLimit: number,
   apiKey: string
 ): Promise<ReadingLesson[]> {
   const cleanText = passageText.trim();
@@ -1017,21 +1025,12 @@ export async function splitPassageIntoLessons(
 
   if (paragraphs.length === 0) return [];
 
-  // Count only English sentences in the entire passage first
-  const allSentences: string[] = [];
-  for (const para of paragraphs) {
-    allSentences.push(...splitIntoSentences(para));
-  }
-  const isEnglishSentence = (s: string): boolean => {
-    const hasEnglish = /[a-zA-Z]/.test(s);
-    const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s);
-    return hasEnglish && !hasKorean;
-  };
-  const totalEnglishSentences = allSentences.filter(isEnglishSentence).length;
-  const targetChapterCount = Math.max(1, Math.ceil(totalEnglishSentences / sentenceLimit));
+  // Count total English words across the entire passage
+  const totalEnglishWords = countEnglishWords(cleanText);
+  const targetChapterCount = Math.max(1, Math.round(totalEnglishWords / wordLimit));
 
   // 2. Fetch semantic chapters via lightweight outline Gemini check
-  let semanticChapters = await determineSemanticChapters(cleanText, apiKey, targetChapterCount, sentenceLimit);
+  let semanticChapters = await determineSemanticChapters(cleanText, apiKey, targetChapterCount, wordLimit);
   
   // Post-process: If Gemini returned more chapters than targetChapterCount, merge adjacent ones sequentially
   if (semanticChapters.length > targetChapterCount) {
@@ -1040,16 +1039,10 @@ export async function splitPassageIntoLessons(
         const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
         const endIdx = Math.max(startIdx, Math.min(chapter.endParagraphIndex, paragraphs.length - 1));
         const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
-        
-        let count = 0;
-        for (const para of chapterParagraphs) {
-          const sentences = splitIntoSentences(para);
-          count += sentences.filter(isEnglishSentence).length;
-        }
-        return count;
+        return countEnglishWords(chapterParagraphs.join('\n\n'));
       });
 
-      // Find the adjacent pair (i, i+1) with the minimum combined sentence count
+      // Find the adjacent pair (i, i+1) with the minimum combined word count
       let minCombined = Infinity;
       let mergeIdx = 0;
       for (let i = 0; i < semanticChapters.length - 1; i++) {
@@ -1078,18 +1071,12 @@ export async function splitPassageIntoLessons(
     }
   }
 
-  // Calculate final English sentence count for each chapter
-  const finalChapterSentenceCounts = semanticChapters.map(chapter => {
+  // Calculate final English word count for each chapter
+  const finalChapterWordCounts = semanticChapters.map(chapter => {
     const startIdx = Math.max(0, Math.min(chapter.startParagraphIndex, paragraphs.length - 1));
     const endIdx = Math.max(startIdx, Math.min(chapter.endParagraphIndex, paragraphs.length - 1));
     const chapterParagraphs = paragraphs.slice(startIdx, endIdx + 1);
-    
-    let count = 0;
-    for (const para of chapterParagraphs) {
-      const sentences = splitIntoSentences(para);
-      count += sentences.filter(isEnglishSentence).length;
-    }
-    return count;
+    return countEnglishWords(chapterParagraphs.join('\n\n'));
   });
 
   // Apportionment: allocate partsCount to each chapter such that the sum is exactly targetChapterCount
@@ -1100,9 +1087,9 @@ export async function splitPassageIntoLessons(
     let maxRatio = -1;
     let maxIdx = 0;
     for (let i = 0; i < semanticChapters.length; i++) {
-      const sentencesPerPart = finalChapterSentenceCounts[i] / partsCount[i];
-      if (sentencesPerPart > maxRatio) {
-        maxRatio = sentencesPerPart;
+      const wordsPerPart = finalChapterWordCounts[i] / partsCount[i];
+      if (wordsPerPart > maxRatio) {
+        maxRatio = wordsPerPart;
         maxIdx = i;
       }
     }
@@ -1159,24 +1146,23 @@ export async function splitPassageIntoLessons(
         isPending: true
       });
     } else {
-      // Split chapter locally into totalParts balanced parts by English sentence count
-      const chapterSentencesCount = finalChapterSentenceCounts[chIdx];
-      const targetSize = Math.max(1, Math.ceil(chapterSentencesCount / totalParts));
+      // Split chapter locally into totalParts balanced parts by English word count, preserving complete sentences
+      const chapterWordCount = finalChapterWordCounts[chIdx];
+      const targetWordsPerPart = Math.max(1, Math.ceil(chapterWordCount / totalParts));
       
       const parts: string[][] = [];
       let currentPart: string[] = [];
-      let engCount = 0;
+      let wordCountInPart = 0;
       
       for (const sentence of sentences) {
         currentPart.push(sentence);
-        if (isEnglishSentence(sentence)) {
-          engCount++;
-        }
+        wordCountInPart += countEnglishWords(sentence);
+
         // Cut when the balanced target size is reached (but not for the last part)
-        if (engCount >= targetSize && parts.length < totalParts - 1) {
+        if (wordCountInPart >= targetWordsPerPart && parts.length < totalParts - 1) {
           parts.push(currentPart);
           currentPart = [];
-          engCount = 0;
+          wordCountInPart = 0;
         }
       }
       if (currentPart.length > 0) {
