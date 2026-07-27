@@ -405,7 +405,7 @@ export async function generateReadingLesson(
     throw new Error("분석할 독해 지문 텍스트가 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -553,7 +553,7 @@ export async function generateCustomVocabItem(
     throw new Error("분석할 단어 또는 표현이 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an elite academic English linguist and ESL curriculum developer.
 Analyze the following English target word or phrase: "${cleanWord}"
@@ -636,7 +636,7 @@ export async function analyzeParagraphChunkSentences(
   apiKey: string,
   onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<SentenceAnalysis[]> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const targetText = sentences.join(' ');
 
@@ -916,7 +916,7 @@ export async function determineSemanticChapters(
     return `[Paragraph ${idx}] (${wordCount} English words): "${snippet}"`;
   }).join('\n\n');
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an elite academic textbook editor and ESL curriculum architect.
 Your task is to analyze the outline of a long English passage and group its paragraphs semantically into EXACTLY ${targetChapterCount} coherent, natural thematic chapters/sections.
