@@ -509,9 +509,12 @@ export default function App() {
     });
 
     let previouslyCompletedApiCalls = 0;
+    const failedLessons: { title: string; reason: string }[] = [];
+    let successCount = 0;
 
     for (let i = 0; i < selectedLessons.length; i++) {
       let lesson = selectedLessons[i];
+      let lessonFailed = false;
 
       // Update current title and initial status phase
       setBulkAnalyzeProgress(prev => ({
@@ -550,15 +553,16 @@ export default function App() {
             total: Math.max(prev.total, previouslyCompletedApiCalls),
             statusPhase: 'analyzing'
           }));
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Failed to generate quizzes for lesson ${lesson.id}:`, error);
-          previouslyCompletedApiCalls += 1; // Count as completed to keep progress bar moving
+          failedLessons.push({ title: lesson.title, reason: error?.message || "퀴즈 생성 실패" });
+          previouslyCompletedApiCalls += 1;
           setBulkAnalyzeProgress(prev => ({
             ...prev,
             completed: previouslyCompletedApiCalls,
             total: Math.max(prev.total, previouslyCompletedApiCalls)
           }));
-          // Skip sentence analysis since generation failed
+          lessonFailed = true;
           continue;
         }
       }
@@ -607,8 +611,12 @@ export default function App() {
         const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
         localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
         await savePassageAnalysisToCloud(lesson.id, verifiedResult);
-      } catch (error) {
+        if (!lessonFailed) {
+          successCount++;
+        }
+      } catch (error: any) {
         console.error(`Failed to analyze passage sentences for lesson ${lesson.id}:`, error);
+        failedLessons.push({ title: lesson.title, reason: error?.message || "지문 분석 실패" });
       } finally {
         let lessonChunks = 0;
         lesson.paragraphs.forEach(p => {
@@ -621,13 +629,19 @@ export default function App() {
           ...prev,
           completed: previouslyCompletedApiCalls
         }));
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
     setSelectedPendingIds(new Set());
     setIsBulkAnalyzing(false);
-    alert(`🎉 AI 일괄 생성 & 분석이 완료되었습니다! (${selectedLessons.length}개 학습자료 지문 및 분석 완료)`);
+
+    if (failedLessons.length > 0) {
+      const failSummary = failedLessons.map((f, i) => `${i + 1}. [${f.title}]: ${f.reason}`).join('\n');
+      alert(`⚠️ AI 일괄 작업 완료 리포트\n\n총 ${selectedLessons.length}개 중 ${successCount}개 성공, ${failedLessons.length}개 실패하였습니다.\n\n[실패 내역]\n${failSummary}`);
+    } else {
+      alert(`🎉 AI 일괄 생성 & 분석이 완벽히 완료되었습니다! (${selectedLessons.length}개 학습자료 지문 및 퀴즈 분석 100% 성공)`);
+    }
   };
 
   // Save lesson to history library (caches locally and uploads/syncs to cloud if userId is active)
