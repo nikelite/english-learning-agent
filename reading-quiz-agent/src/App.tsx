@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { safeSetLocalStorage } from './utils/storage';
 import { Header } from './components/Header';
 import { ReadingSplitView } from './components/ReadingSplitView';
 import { ReviewRoom } from './components/ReviewRoom';
@@ -68,7 +69,7 @@ export default function App() {
 
   const handleSaveMochiApiKey = (key: string) => {
     setMochiApiKey(key);
-    localStorage.setItem('mochi_api_key', key);
+    safeSetLocalStorage('mochi_api_key', key);
   };
 
   const [mochiQuizDeckId, setMochiQuizDeckId] = useState<string>(() => {
@@ -77,7 +78,7 @@ export default function App() {
 
   const handleSaveMochiQuizDeckId = (deckId: string) => {
     setMochiQuizDeckId(deckId);
-    localStorage.setItem('mochi_quiz_deck_id', deckId);
+    safeSetLocalStorage('mochi_quiz_deck_id', deckId);
   };
 
   const [mochiDecks, setMochiDecks] = useState<any[]>([]);
@@ -237,7 +238,7 @@ export default function App() {
 
   const handleSaveUserEmail = (email: string) => {
     setUserEmail(email);
-    localStorage.setItem('eng_user_email', email);
+    safeSetLocalStorage('eng_user_email', email);
   };
 
   // 7.1 Cloud Sync State
@@ -250,7 +251,7 @@ export default function App() {
   const handleSaveUserId = (newId: string) => {
     const cleanedId = newId.trim().toLowerCase();
     setUserId(cleanedId);
-    localStorage.setItem('eng_user_id', cleanedId);
+    safeSetLocalStorage('eng_user_id', cleanedId);
   };
 
   // Injected quizzes (includes standard ones + oldest past mistakes) calculated synchronously
@@ -291,21 +292,21 @@ export default function App() {
 
   // Local storage and cloud background backup persistence
   useEffect(() => {
-    localStorage.setItem('eng_reading_wrong_answers', JSON.stringify(wrongAnswers));
+    safeSetLocalStorage('eng_reading_wrong_answers', JSON.stringify(wrongAnswers));
     if (userId) {
       if (isSyncingWrongAnswersRef.current) {
         isSyncingWrongAnswersRef.current = false;
         saveWrongAnswersToCloud(userId, wrongAnswers, parseInt(localStorage.getItem('eng_reading_wrong_answers_updated_at') || '0', 10));
       } else {
         const newTime = Date.now();
-        localStorage.setItem('eng_reading_wrong_answers_updated_at', newTime.toString());
+        safeSetLocalStorage('eng_reading_wrong_answers_updated_at', newTime.toString());
         saveWrongAnswersToCloud(userId, wrongAnswers, newTime);
       }
     }
   }, [wrongAnswers, userId]);
 
   useEffect(() => {
-    localStorage.setItem('eng_reading_stats', JSON.stringify(stats));
+    safeSetLocalStorage('eng_reading_stats', JSON.stringify(stats));
     if (userId) {
       saveStatsToCloud(userId, stats);
     }
@@ -356,7 +357,7 @@ export default function App() {
     syncUserLessons(userId, localList).then((syncedList) => {
       if (isMounted) {
         setLessonsHistory(syncedList);
-        localStorage.setItem('eng_reading_lessons_history', JSON.stringify(syncedList));
+        safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(syncedList));
         setSyncStatus('synced');
       }
     }).catch((err: any) => {
@@ -390,13 +391,13 @@ export default function App() {
           // Initialize cloud
           saveWrongAnswersToCloud(userId, wrongAnswers, localTime || Date.now());
           if (!localSavedTime) {
-            localStorage.setItem('eng_reading_wrong_answers_updated_at', (localTime || Date.now()).toString());
+            safeSetLocalStorage('eng_reading_wrong_answers_updated_at', (localTime || Date.now()).toString());
           }
         } else if (cloudData.updatedAt > localTime) {
           isSyncingWrongAnswersRef.current = true;
           setWrongAnswers(cloudData.list);
-          localStorage.setItem('eng_reading_wrong_answers', JSON.stringify(cloudData.list));
-          localStorage.setItem('eng_reading_wrong_answers_updated_at', cloudData.updatedAt.toString());
+          safeSetLocalStorage('eng_reading_wrong_answers', JSON.stringify(cloudData.list));
+          safeSetLocalStorage('eng_reading_wrong_answers_updated_at', cloudData.updatedAt.toString());
         } else if (localTime > cloudData.updatedAt) {
           saveWrongAnswersToCloud(userId, wrongAnswers, localTime);
         } else {
@@ -444,7 +445,7 @@ export default function App() {
         });
         
         if (hasChanges) {
-          localStorage.setItem('eng_reading_presets_progress', JSON.stringify(mergedPresetsProgress));
+          safeSetLocalStorage('eng_reading_presets_progress', JSON.stringify(mergedPresetsProgress));
           savePresetsProgressToCloud(userId, mergedPresetsProgress);
         }
       }
@@ -457,15 +458,15 @@ export default function App() {
 
   // Persist last selected configurations
   useEffect(() => {
-    localStorage.setItem('last_reading_comprehension_count', String(comprehensionCount));
+    safeSetLocalStorage('last_reading_comprehension_count', String(comprehensionCount));
   }, [comprehensionCount]);
 
   useEffect(() => {
-    localStorage.setItem('last_reading_vocab_count', String(vocabCount));
+    safeSetLocalStorage('last_reading_vocab_count', String(vocabCount));
   }, [vocabCount]);
 
   useEffect(() => {
-    localStorage.setItem('last_reading_word_limit', String(wordLimit));
+    safeSetLocalStorage('last_reading_word_limit', String(wordLimit));
   }, [wordLimit]);
 
   // Batch process selected lessons: generate quizzes first if pending, then analyze passage sentences
@@ -593,7 +594,7 @@ export default function App() {
               const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
               const cache = localCached ? JSON.parse(localCached) : {};
               cache[paragraphId] = pAnalysis;
-              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+              safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
             } catch (err) {
               console.error("Failed to save partial cache locally:", err);
             }
@@ -609,7 +610,7 @@ export default function App() {
         );
 
         const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
-        localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+        safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
         await savePassageAnalysisToCloud(lesson.id, verifiedResult);
         if (!lessonFailed) {
           successCount++;
@@ -663,7 +664,7 @@ export default function App() {
         item.title !== updatedLesson.title
       );
       const updated = [updatedLesson, ...filtered];
-      localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+      safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
 
@@ -699,7 +700,7 @@ export default function App() {
                 item.title !== cloudLesson.title
               );
               const updated = [cloudLesson, ...filtered];
-              localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+              safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
               return updated;
             });
           }
@@ -735,7 +736,7 @@ export default function App() {
         }
         return item;
       });
-      localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+      safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
 
@@ -757,7 +758,7 @@ export default function App() {
       // Remove locally immediately
       setLessonsHistory(prev => {
         const updated = prev.filter(item => item.id !== lessonId);
-        localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+        safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
         return updated;
       });
       
@@ -781,7 +782,7 @@ export default function App() {
       const idsToDelete = Array.from(selectedPendingIds);
       setLessonsHistory(prev => {
         const updated = prev.filter(item => !selectedPendingIds.has(item.id));
-        localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+        safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
         return updated;
       });
       setSelectedPendingIds(new Set());
@@ -857,7 +858,7 @@ export default function App() {
             if (cloudCache) {
               cache = cloudCache;
               cacheComplete = isCacheComplete(lesson, cloudCache);
-              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+              safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
             }
           } catch (e) {
             console.warn("Failed to load analysis from cloud:", e);
@@ -871,7 +872,7 @@ export default function App() {
             const repairedCache = await autoFillMissingAnalyses(lesson, cache || {}, apiKey);
             if (repairedCache) {
               cache = repairedCache;
-              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+              safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
               await savePassageAnalysisToCloud(lesson.id, cache);
             }
           } catch (e) {
@@ -1382,7 +1383,7 @@ export default function App() {
                   const oldTempId = lesson.id;
                   const tempAnalysis = localStorage.getItem(`eng_passage_analysis_${oldTempId}`);
                   if (tempAnalysis) {
-                    localStorage.setItem(`eng_passage_analysis_${docId}`, tempAnalysis);
+                    safeSetLocalStorage(`eng_passage_analysis_${docId}`, tempAnalysis);
                     const parsed = JSON.parse(tempAnalysis);
                     await savePassageAnalysisToCloud(docId, parsed);
                   }
@@ -1401,7 +1402,7 @@ export default function App() {
             const generatedTitles = new Set(generatedLessons.map(l => l.title));
             const filtered = prev.filter(item => !generatedIds.has(item.id) && !generatedTitles.has(item.title));
             const updated = [...generatedLessons, ...filtered];
-            localStorage.setItem('eng_reading_lessons_history', JSON.stringify(updated));
+            safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
             return updated;
           });
   
@@ -1421,7 +1422,7 @@ export default function App() {
 
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
-    localStorage.setItem('eng_reading_api_key', key);
+    safeSetLocalStorage('eng_reading_api_key', key);
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -1784,7 +1785,7 @@ ${quiz.rationale}`;
           firstAttemptScore: updatedLesson.firstAttemptScore,
           retryHistory: updatedLesson.retryHistory
         };
-        localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
+        safeSetLocalStorage('eng_reading_presets_progress', JSON.stringify(presetsProgress));
         if (userId) {
           savePresetsProgressToCloud(userId, presetsProgress);
         }
@@ -1814,7 +1815,7 @@ ${quiz.rationale}`;
         firstAttemptScore: activeLesson.firstAttemptScore,
         retryHistory: activeLesson.retryHistory
       };
-      localStorage.setItem('eng_reading_presets_progress', JSON.stringify(presetsProgress));
+      safeSetLocalStorage('eng_reading_presets_progress', JSON.stringify(presetsProgress));
       if (userId) {
         savePresetsProgressToCloud(userId, presetsProgress);
       }

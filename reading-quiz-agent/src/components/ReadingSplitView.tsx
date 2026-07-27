@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
+import { safeSetLocalStorage } from '../utils/storage';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
@@ -155,7 +156,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
           if (cloudCached && isAnalysisCacheValid(cloudCached)) {
             initialCache = cloudCached;
-            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cloudCached));
+            safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cloudCached));
           }
         } catch (err) {
           console.warn("Failed to check cloud analysis cache:", err);
@@ -175,7 +176,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             const verifiedResult = await autoFillMissingAnalyses(lesson, initialCache, apiKey);
             if (isCurrent) {
               setAnalysisCache(verifiedResult);
-              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+              safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
               await savePassageAnalysisToCloud(lesson.id, verifiedResult);
             }
           } catch (repairErr) {
@@ -216,7 +217,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     ...prev,
                     [paragraphId]: pAnalysis
                   };
-                  localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+                  safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
                   savePassageAnalysisToCloud(lesson.id, updated).catch(() => {});
                   return updated;
                 });
@@ -226,7 +227,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           if (isCurrent) {
             const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
             setAnalysisCache(verifiedResult);
-            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+            safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
             await savePassageAnalysisToCloud(lesson.id, verifiedResult);
             console.log("Auto-started passage analysis successfully cached to cloud!");
           }
@@ -322,13 +323,13 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
               ...prev,
               [paragraphId]: pAnalysis
             };
-            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+            safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
             return updated;
           });
         }
       );
       setAnalysisCache(fullResult);
-      localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
+      safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
       await savePassageAnalysisToCloud(lesson.id, fullResult);
     } catch (err: any) {
       setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
@@ -382,7 +383,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             ...prev,
             [paragraphId]: updatedParagraphAnalysis
           };
-          localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+          safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
           
           savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
             console.warn("Failed to save merged analysis to cloud:", err);
@@ -434,7 +435,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
               ...prev,
               [pId]: updatedParagraphAnalysis
             };
-            localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+            safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
             savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
               console.warn("Failed to save merged analysis to cloud:", err);
             });
