@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { safeSetLocalStorage } from './utils/storage';
+import { saveToIndexedDB, loadFromIndexedDB, STORE_ANALYSIS } from './utils/indexedDBStorage';
 import { Header } from './components/Header';
 import { ReadingSplitView } from './components/ReadingSplitView';
 import { ReviewRoom } from './components/ReviewRoom';
@@ -223,6 +224,7 @@ export default function App() {
   const [isBulkGenerating, setIsBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
   const [isBulkAnalyzing, setIsBulkAnalyzing] = useState(false);
+  const [isPreparingPDF, setIsPreparingPDF] = useState(false);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState<{
     completed: number;
     total: number;
@@ -815,14 +817,12 @@ export default function App() {
       return;
     }
 
-    setIsLoading(true);
+    setIsPreparingPDF(true);
     const lessonsData: Array<{ lesson: ReadingLesson; analysisCache: any; stats: any }> = [];
 
     try {
       const isCacheComplete = (l: ReadingLesson, c: any): boolean => {
         if (!c || typeof c !== 'object') return false;
-        const clean = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-
         for (const p of l.paragraphs) {
           const paragraphAnalyses = c[p.id];
           if (!paragraphAnalyses || !Array.isArray(paragraphAnalyses)) return false;
@@ -839,6 +839,7 @@ export default function App() {
 
       for (const lesson of selectedLessons) {
         let cache: any = null;
+        // 1. Try LocalStorage
         try {
           const cached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
           if (cached) {
@@ -850,22 +851,37 @@ export default function App() {
 
         let cacheComplete = isCacheComplete(lesson, cache);
 
-        // If local cache is incomplete or missing, try loading from Firestore cloud
+        // 2. Try IndexedDB second (Unlimited GB storage!)
         if (!cacheComplete) {
           try {
-            console.log(`[BulkPrint] Local cache for ${lesson.title} is incomplete or missing. Fetching from Firestore...`);
+            const idbCache = await loadFromIndexedDB(STORE_ANALYSIS, lesson.id);
+            if (idbCache && isCacheComplete(lesson, idbCache)) {
+              cache = idbCache;
+              cacheComplete = true;
+              safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+            }
+          } catch (e) {
+            console.warn("Failed to check IndexedDB analysis cache during print:", e);
+          }
+        }
+
+        // 3. Try Firestore cloud third
+        if (!cacheComplete) {
+          try {
+            console.log(`[BulkPrint] Local & IndexedDB cache for ${lesson.title} is incomplete or missing. Fetching from Firestore...`);
             const cloudCache = await loadPassageAnalysisFromCloud(lesson.id);
             if (cloudCache) {
               cache = cloudCache;
               cacheComplete = isCacheComplete(lesson, cloudCache);
               safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
+              saveToIndexedDB(STORE_ANALYSIS, lesson.id, cache);
             }
           } catch (e) {
             console.warn("Failed to load analysis from cloud:", e);
           }
         }
 
-        // If STILL not complete, pro-actively trigger autoFillMissingAnalyses inline!
+        // 4. Only if cache is missing from all stores, auto-repair missing items inline
         if (!cacheComplete && apiKey) {
           try {
             console.log(`[BulkPrint] Analysis for ${lesson.title} still has missing sentences. Auto-repairing inline...`);
@@ -873,7 +889,7 @@ export default function App() {
             if (repairedCache) {
               cache = repairedCache;
               safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cache));
-              await savePassageAnalysisToCloud(lesson.id, cache);
+              saveToIndexedDB(STORE_ANALYSIS, lesson.id, cache);
             }
           } catch (e) {
             console.warn("Failed to repair cache inline during print:", e);
@@ -933,7 +949,7 @@ export default function App() {
     } catch (err) {
       console.error("Error preparing bulk print data:", err);
     } finally {
-      setIsLoading(false);
+      setIsPreparingPDF(false);
     }
 
 
@@ -2964,6 +2980,33 @@ ${quiz.rationale}`;
             >
               생성 중단
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Preparation Modal Overlay */}
+      {isPreparingPDF && (
+        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 12, 0.75)', backdropFilter: 'blur(12px)', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '24px', boxShadow: '0 0 40px rgba(139, 92, 246, 0.25)', maxWidth: '420px', width: '92%', textAlign: 'center' }}>
+            <div className="pulse-glow" style={{ width: '72px', height: '72px', background: 'rgba(139, 92, 246, 0.12)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--primary)', animation: 'spin 4s linear infinite' }}>
+              <BookOpen size={34} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontWeight: '700' }}>
+                📄 PDF Export Engine
+              </span>
+              <h3 style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold', margin: '0.5rem 0 0.5rem 0' }}>
+                PDF 교재 인쇄용 편집 중
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
+                저장된 고화질 SVOC 문법 분석과 퀴즈 데이터를<br />
+                인쇄용 포맷으로 레이아웃을 다듬는 중입니다.<br />
+                <span style={{ color: '#c084fc', fontSize: '0.8rem', fontWeight: '600' }}>(AI 재분석 없이 즉시 전환됩니다)</span>
+              </p>
+            </div>
+            <div style={{ width: '100%', background: 'rgba(255,255,255,0.06)', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+              <div className="animate-pulse" style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, #8b5cf6 0%, #ec4899 50%, #8b5cf6 100%)', backgroundSize: '200% 100%', animation: 'shimmer 2s infinite linear' }}></div>
+            </div>
           </div>
         </div>
       )}
