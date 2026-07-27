@@ -40,18 +40,48 @@ export function splitIntoSentences(text: string): string[] {
   });
 }
 
-// Helper function to call fetch with 45s timeout and exponential backoff retry
+// Dynamic Adaptive Rate Control Manager for API Throttling
+export class AdaptiveRateLimiter {
+  private pacingDelay = 200; // Base pacing delay (ms)
+  private minPacing = 100;   // Minimum pacing delay (ms)
+  private maxPacing = 3000;  // Maximum pacing delay (ms)
+
+  public async waitPacing() {
+    if (this.pacingDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.pacingDelay));
+    }
+  }
+
+  public onSuccess() {
+    // Gradually speed up (decay pacing delay) on successful calls
+    this.pacingDelay = Math.max(this.minPacing, Math.floor(this.pacingDelay * 0.85));
+  }
+
+  public onRateLimit(status: number) {
+    // Dynamically scale up pacing delay when HTTP 429 or server errors occur
+    if (status === 429) {
+      this.pacingDelay = Math.min(this.maxPacing, Math.max(1000, Math.floor(this.pacingDelay * 2.5)));
+    } else {
+      this.pacingDelay = Math.min(this.maxPacing, Math.max(500, Math.floor(this.pacingDelay * 1.5)));
+    }
+    console.warn(`[Adaptive Rate Control] Adjusted pacing delay to ${this.pacingDelay}ms (HTTP ${status})`);
+  }
+}
+
+// Helper function to call fetch with dynamic exponential backoff with jitter
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 2,
-  initialDelay = 500,
+  maxRetries = 4,
+  initialDelay = 1000,
   onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<Response> {
   let delay = initialDelay;
+  const maxBackoffDelay = 16000;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout for complex AI generation
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s hard timeout
 
     try {
       const response = await fetch(url, {
@@ -64,15 +94,25 @@ async function fetchWithRetry(
         return response;
       }
       
-      // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
+      // Handle HTTP 429 (Rate Limit) or HTTP 5xx (Server Error) with Exponential Backoff + Jitter
       if (response.status === 429 || response.status >= 500) {
-        const msg = `HTTP ${response.status}`;
-        console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+        const jitter = Math.floor(Math.random() * 300);
+        const currentDelay = delay + jitter;
+        const msg = response.status === 429
+          ? `HTTP 429 (Rate Limit) - ${attempt + 1}/${maxRetries}회 지수 백오프 대기 (${currentDelay}ms)`
+          : `HTTP ${response.status} (Server Error) - ${attempt + 1}/${maxRetries}회 대기 (${currentDelay}ms)`;
+
+        console.warn(`[Gemini API] ${msg}`);
         if (onRetry) {
           onRetry(attempt + 1, maxRetries, msg);
         }
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 1.5;
+
+        if (attempt === maxRetries - 1) {
+          return response;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        delay = Math.min(maxBackoffDelay, delay * 2); // Exponential backoff (2x)
         continue;
       }
       
@@ -80,16 +120,21 @@ async function fetchWithRetry(
     } catch (error: any) {
       clearTimeout(timeoutId);
       const isAbort = error.name === 'AbortError';
+      const jitter = Math.floor(Math.random() * 300);
+      const currentDelay = delay + jitter;
       const msg = isAbort ? 'API 요청 시간 초과 (45초)' : (error?.message || String(error));
-      console.warn(`Network error during Gemini API request: ${msg}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+      
+      console.warn(`[Gemini API] Network Error: ${msg}. Retrying in ${currentDelay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
       if (onRetry) {
         onRetry(attempt + 1, maxRetries, msg);
       }
+
       if (attempt === maxRetries - 1) {
         throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (45초). 다시 시도해 주세요.' : msg);
       }
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 1.5;
+
+      await new Promise(resolve => setTimeout(resolve, currentDelay));
+      delay = Math.min(maxBackoffDelay, delay * 2);
     }
   }
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
@@ -806,7 +851,9 @@ export async function analyzePassageSentences(
   const totalChunks = paragraphTasks.reduce((acc, t) => acc + t.chunks.length, 0);
   let completedChunks = 0;
 
-  // 3. Process each paragraph's chunks sequentially to prevent concurrent rate limit (429) errors
+  // 3. Process each paragraph's chunks sequentially with dynamic adaptive rate control
+  const rateLimiter = new AdaptiveRateLimiter();
+
   const runParagraphAnalysis = async (task: typeof paragraphTasks[0]) => {
     const { paragraph, chunks } = task;
     const chunkResults: SentenceAnalysis[][] = new Array(chunks.length);
@@ -814,10 +861,8 @@ export async function analyzePassageSentences(
     for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
       const chunk = chunks[chunkIdx];
       try {
-        // Add a small delay between requests to be rate-limit safe
-        if (completedChunks > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        // Dynamically wait pacing delay before next request
+        await rateLimiter.waitPacing();
 
         const cResult = await analyzeParagraphChunkSentences(
           paragraph.id,
@@ -825,10 +870,19 @@ export async function analyzePassageSentences(
           chunk,
           passageText,
           apiKey,
-          onRetry
+          (attempt, maxRetries, statusMsg) => {
+            if (statusMsg.includes('429')) {
+              rateLimiter.onRateLimit(429);
+            }
+            if (onRetry) {
+              onRetry(attempt, maxRetries, statusMsg);
+            }
+          }
         );
+        rateLimiter.onSuccess();
         chunkResults[chunkIdx] = cResult;
       } catch (err) {
+        rateLimiter.onRateLimit(500);
         console.error(`Error analyzing paragraph ${paragraph.id} chunk ${chunkIdx}:`, err);
         // Fallback for this chunk
         chunkResults[chunkIdx] = chunk.map(s => ({

@@ -1,17 +1,44 @@
 import { shuffleChoicesAndRemapRationale } from './types';
 import type { MochiCard } from './types';
 
-// Helper function to call fetch with 45s timeout and fast retries
+// Dynamic Adaptive Rate Control Manager for API Throttling
+export class AdaptiveRateLimiter {
+  private pacingDelay = 200;
+  private minPacing = 100;
+  private maxPacing = 3000;
+
+  public async waitPacing() {
+    if (this.pacingDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.pacingDelay));
+    }
+  }
+
+  public onSuccess() {
+    this.pacingDelay = Math.max(this.minPacing, Math.floor(this.pacingDelay * 0.85));
+  }
+
+  public onRateLimit(status: number) {
+    if (status === 429) {
+      this.pacingDelay = Math.min(this.maxPacing, Math.max(1000, Math.floor(this.pacingDelay * 2.5)));
+    } else {
+      this.pacingDelay = Math.min(this.maxPacing, Math.max(500, Math.floor(this.pacingDelay * 1.5)));
+    }
+  }
+}
+
+// Helper function to call fetch with dynamic exponential backoff with jitter
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 2,
-  initialDelay = 500
+  maxRetries = 4,
+  initialDelay = 1000
 ): Promise<Response> {
   let delay = initialDelay;
+  const maxBackoffDelay = 16000;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
       const response = await fetch(url, {
@@ -25,22 +52,32 @@ async function fetchWithRetry(
       }
 
       if (response.status === 429 || response.status >= 500) {
-        console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 1.5;
+        const jitter = Math.floor(Math.random() * 300);
+        const currentDelay = delay + jitter;
+        console.warn(`[Gemini API] HTTP ${response.status}. Retrying in ${currentDelay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+        
+        if (attempt === maxRetries - 1) {
+          return response;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        delay = Math.min(maxBackoffDelay, delay * 2);
         continue;
       }
       return response;
     } catch (error: any) {
       clearTimeout(timeoutId);
       const isAbort = error.name === 'AbortError';
+      const jitter = Math.floor(Math.random() * 300);
+      const currentDelay = delay + jitter;
       const msg = isAbort ? 'API 요청 시간 초과 (45초)' : (error?.message || String(error));
-      console.warn(`Network error during Gemini API request: ${msg}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+      
+      console.warn(`[Gemini API] Network error: ${msg}. Retrying in ${currentDelay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
       if (attempt === maxRetries - 1) {
         throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (45초). 다시 시도해 주세요.' : msg);
       }
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 1.5;
+      await new Promise(resolve => setTimeout(resolve, currentDelay));
+      delay = Math.min(maxBackoffDelay, delay * 2);
     }
   }
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
