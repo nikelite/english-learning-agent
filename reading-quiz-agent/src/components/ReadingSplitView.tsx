@@ -635,7 +635,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
   };
 
+  const isPrintingRef = useRef(false);
+
   const handleExportPDF = () => {
+    if (isPrintingRef.current) return;
+    isPrintingRef.current = true;
+    setTimeout(() => {
+      isPrintingRef.current = false;
+    }, 1500);
+
     if (isAnalyzingBg) {
       alert("AI가 전체 지문을 분석하는 중입니다. 분석이 완료되면 PDF 저장이 가능합니다. 잠시만 대기해 주세요!");
       return;

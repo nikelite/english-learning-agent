@@ -1203,9 +1203,15 @@ export default function App() {
         doc.close();
 
         let nextTriggered = false;
+        let onAfterPrint: (() => void) | null = null;
+
         const triggerNext = () => {
           if (nextTriggered) return;
           nextTriggered = true;
+          
+          if (onAfterPrint && iframe.contentWindow) {
+            iframe.contentWindow.removeEventListener('afterprint', onAfterPrint);
+          }
           
           document.title = originalTitle;
           if (document.body.contains(iframe)) {
@@ -1217,22 +1223,20 @@ export default function App() {
           }, 300);
         };
 
+        onAfterPrint = () => {
+          triggerNext();
+        };
+
         iframe.contentWindow?.addEventListener('beforeprint', () => {
           document.title = formatPdfFileName(lesson.title);
         });
 
-        iframe.contentWindow?.addEventListener('afterprint', () => {
-          triggerNext();
-        });
+        iframe.contentWindow?.addEventListener('afterprint', onAfterPrint);
 
         setTimeout(() => {
           document.title = formatPdfFileName(lesson.title);
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-          
-          setTimeout(() => {
-            triggerNext();
-          }, 15000);
         }, 500);
       }
     };
