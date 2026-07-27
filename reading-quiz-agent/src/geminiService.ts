@@ -40,7 +40,7 @@ export function splitIntoSentences(text: string): string[] {
   });
 }
 
-// Helper function to call fetch with 15s timeout and exponential backoff retry
+// Helper function to call fetch with 45s timeout and exponential backoff retry
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
@@ -51,7 +51,7 @@ async function fetchWithRetry(
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s hard timeout per call
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout for complex AI generation
 
     try {
       const response = await fetch(url, {
@@ -80,13 +80,13 @@ async function fetchWithRetry(
     } catch (error: any) {
       clearTimeout(timeoutId);
       const isAbort = error.name === 'AbortError';
-      const msg = isAbort ? 'API 요청 시간 초과 (15초)' : (error?.message || String(error));
+      const msg = isAbort ? 'API 요청 시간 초과 (45초)' : (error?.message || String(error));
       console.warn(`Network error during Gemini API request: ${msg}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
       if (onRetry) {
         onRetry(attempt + 1, maxRetries, msg);
       }
       if (attempt === maxRetries - 1) {
-        throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (15초). 다시 시도해 주세요.' : msg);
+        throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (45초). 다시 시도해 주세요.' : msg);
       }
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 1.5;
