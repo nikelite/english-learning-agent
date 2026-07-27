@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { safeSetLocalStorage } from '../utils/storage';
+import { saveToIndexedDB, loadFromIndexedDB, STORE_ANALYSIS } from '../utils/indexedDBStorage';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
@@ -150,13 +151,26 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         console.warn("Failed to check local analysis cache:", localErr);
       }
 
-      // 2. Try cloud cache second if local is not found
+      // 2. Try IndexedDB cache second (Unlimited GB storage!)
+      if (!initialCache) {
+        try {
+          const idbCached = await loadFromIndexedDB(STORE_ANALYSIS, lesson.id);
+          if (idbCached && isAnalysisCacheValid(idbCached)) {
+            initialCache = idbCached;
+          }
+        } catch (idbErr) {
+          console.warn("Failed to check IndexedDB analysis cache:", idbErr);
+        }
+      }
+
+      // 3. Try cloud cache third if local & IndexedDB are not found
       if (!initialCache) {
         try {
           const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
           if (cloudCached && isAnalysisCacheValid(cloudCached)) {
             initialCache = cloudCached;
             safeSetLocalStorage(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cloudCached));
+            saveToIndexedDB(STORE_ANALYSIS, lesson.id, cloudCached);
           }
         } catch (err) {
           console.warn("Failed to check cloud analysis cache:", err);
