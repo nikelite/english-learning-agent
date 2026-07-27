@@ -1,5 +1,8 @@
 import { Lesson, QuizItem } from './types';
 
+export const GEMINI_PRIMARY_MODEL = "gemini-3.6-flash";
+export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
+
 // Helper function to call fetch with exponential backoff retry for network errors/transient API limits
 async function fetchWithRetry(
   url: string,
@@ -7,14 +10,22 @@ async function fetchWithRetry(
   maxRetries = 7,
   initialDelay = 1000
 ): Promise<Response> {
+  let currentUrl = url;
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(currentUrl, options);
       if (response.ok) {
         return response;
       }
       
+      // Auto-fallback if 3.6-flash model is not supported for this key (404/400 model error)
+      if ((response.status === 404 || response.status === 400) && currentUrl.includes(GEMINI_PRIMARY_MODEL)) {
+        console.warn(`[Gemini API] Primary model ${GEMINI_PRIMARY_MODEL} returned ${response.status}. Automatically falling back to ${GEMINI_FALLBACK_MODEL}...`);
+        currentUrl = currentUrl.replace(GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL);
+        continue;
+      }
+
       // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
       if (response.status === 429 || response.status >= 500) {
         console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
@@ -301,7 +312,7 @@ export async function generateLessonFromText(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -641,7 +652,7 @@ export async function generateVocabularyLessons(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -851,7 +862,7 @@ export async function generateAdditionalQuizzes(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const cleanTitle = lesson.title.replace(/"/g, "'");
   const cleanSourceText = lesson.sourceText.replace(/"/g, "'");

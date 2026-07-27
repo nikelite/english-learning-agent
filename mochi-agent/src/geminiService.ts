@@ -1,6 +1,9 @@
 import { shuffleChoicesAndRemapRationale } from './types';
 import type { MochiCard } from './types';
 
+export const GEMINI_PRIMARY_MODEL = "gemini-3.6-flash";
+export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
+
 // Helper function to call fetch with exponential backoff retry
 async function fetchWithRetry(
   url: string,
@@ -8,13 +11,22 @@ async function fetchWithRetry(
   maxRetries = 5,
   initialDelay = 1000
 ): Promise<Response> {
+  let currentUrl = url;
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(currentUrl, options);
       if (response.ok) {
         return response;
       }
+
+      // Auto-fallback if 3.6-flash model is not supported for this key (404/400 model error)
+      if ((response.status === 404 || response.status === 400) && currentUrl.includes(GEMINI_PRIMARY_MODEL)) {
+        console.warn(`[Gemini API] Primary model ${GEMINI_PRIMARY_MODEL} returned ${response.status}. Automatically falling back to ${GEMINI_FALLBACK_MODEL}...`);
+        currentUrl = currentUrl.replace(GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL);
+        continue;
+      }
+
       if (response.status === 429 || response.status >= 500) {
         console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -76,7 +88,7 @@ export async function generateMochiCards(
   }
 
   const chunks = chunkInputText(cleanText, 10);
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const generateChunk = async (chunkText: string, chunkIdx: number): Promise<MochiCard[]> => {
     let prompt = "";
