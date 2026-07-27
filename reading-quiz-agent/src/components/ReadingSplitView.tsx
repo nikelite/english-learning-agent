@@ -118,17 +118,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     if (paragraphIds.length === 0) return false;
     for (const pId of paragraphIds) {
       const list = cache[pId];
-      if (!Array.isArray(list) || list.length === 0) return false;
-      for (const item of list) {
-        if (!item || typeof item !== 'object') return false;
-        const grammar = item.grammar || '';
-        const context = item.context || '';
-        if (grammar.includes('생성하지 못했습니다') || context.includes('생성하지 못했습니다')) {
-          return false;
-        }
+      if (Array.isArray(list) && list.length > 0) {
+        return true;
       }
     }
-    return true;
+    return false;
   };
 
   // Background auto-fetching and analysis effect
@@ -140,40 +134,58 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     let isCurrent = true;
 
     const runAutoAnalysis = async () => {
+      let initialCache: Record<number, SentenceAnalysis[]> | null = null;
+
       // 1. Try LocalStorage cache first (instantaneous & offline friendly!)
       try {
         const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`);
         if (localCached) {
           const parsed = JSON.parse(localCached);
-          if (parsed && Object.keys(parsed).length > 0 && isAnalysisCacheValid(parsed)) {
-            if (isCurrent) {
-              setAnalysisCache(parsed);
-              bgFetchTriggeredRef.current = true;
-            }
-            return;
+          if (parsed && isAnalysisCacheValid(parsed)) {
+            initialCache = parsed;
           }
         }
       } catch (localErr) {
         console.warn("Failed to check local analysis cache:", localErr);
       }
 
-      // 2. Try cloud cache second
-      try {
-        const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
-        if (cloudCached && Object.keys(cloudCached).length > 0 && isAnalysisCacheValid(cloudCached)) {
-          if (isCurrent) {
-            setAnalysisCache(cloudCached);
-            bgFetchTriggeredRef.current = true;
-            // Cache locally for next time
+      // 2. Try cloud cache second if local is not found
+      if (!initialCache) {
+        try {
+          const cloudCached = await loadPassageAnalysisFromCloud(lesson.id);
+          if (cloudCached && isAnalysisCacheValid(cloudCached)) {
+            initialCache = cloudCached;
             localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(cloudCached));
           }
-          return;
+        } catch (err) {
+          console.warn("Failed to check cloud analysis cache:", err);
         }
-      } catch (err) {
-        console.warn("Failed to check cloud analysis cache:", err);
       }
 
-      // 3. If not cached, trigger silent background fetch
+      // 3. If cache was found (either local or cloud), render immediately and auto-fill any remaining missing sentences
+      if (initialCache) {
+        if (isCurrent) {
+          setAnalysisCache(initialCache);
+          bgFetchTriggeredRef.current = true;
+        }
+
+        // Silent background auto-repair for any missing sentence items
+        if (apiKey && lesson.paragraphs && lesson.paragraphs.length > 0) {
+          try {
+            const verifiedResult = await autoFillMissingAnalyses(lesson, initialCache, apiKey);
+            if (isCurrent) {
+              setAnalysisCache(verifiedResult);
+              localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
+              await savePassageAnalysisToCloud(lesson.id, verifiedResult);
+            }
+          } catch (repairErr) {
+            console.warn("Background auto-repair of analysis cache failed:", repairErr);
+          }
+        }
+        return;
+      }
+
+      // 4. If no cache exists at all, trigger silent background fetch
       if (!bgFetchTriggeredRef.current && apiKey && lesson.paragraphs && lesson.paragraphs.length > 0) {
         bgFetchTriggeredRef.current = true;
         if (isCurrent) {
@@ -204,8 +216,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     ...prev,
                     [paragraphId]: pAnalysis
                   };
-                  // Progressively save to LocalStorage so partial progress is saved!
                   localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+                  savePassageAnalysisToCloud(lesson.id, updated).catch(() => {});
                   return updated;
                 });
               }
@@ -215,12 +227,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
             const verifiedResult = await autoFillMissingAnalyses(lesson, fullResult, apiKey);
             setAnalysisCache(verifiedResult);
             localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(verifiedResult));
-            if (isAnalysisCacheValid(verifiedResult)) {
-              await savePassageAnalysisToCloud(lesson.id, verifiedResult);
-              console.log("Auto-started passage analysis successfully cached to cloud!");
-            } else {
-              console.warn("Auto-started passage analysis contains failures; skipping cloud save.");
-            }
+            await savePassageAnalysisToCloud(lesson.id, verifiedResult);
+            console.log("Auto-started passage analysis successfully cached to cloud!");
           }
         } catch (bgErr) {
           console.warn("Auto background passage analysis failed:", bgErr);
@@ -321,9 +329,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       );
       setAnalysisCache(fullResult);
       localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(fullResult));
-      if (isAnalysisCacheValid(fullResult)) {
-        await savePassageAnalysisToCloud(lesson.id, fullResult);
-      }
+      await savePassageAnalysisToCloud(lesson.id, fullResult);
     } catch (err: any) {
       setAnalysisError(err.message || "문장 분석 생성에 실패했습니다.");
       bgFetchTriggeredRef.current = false;
@@ -378,11 +384,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           };
           localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
           
-          if (isAnalysisCacheValid(updated)) {
-            savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
-              console.warn("Failed to save merged analysis to cloud:", err);
-            });
-          }
+          savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
+            console.warn("Failed to save merged analysis to cloud:", err);
+          });
           return updated;
         });
       }
@@ -399,40 +403,25 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       setAnalysisError("우측 상단 톱니바퀴(⚙️)를 눌러 Gemini API Key를 등록해 주세요.");
       return;
     }
-
-    const missing = getMissingSentences();
-    if (missing.length === 0) {
-      alert("모든 문장의 AI 분석 정보가 이미 등록되어 있습니다!");
+    const missingItems = getMissingSentences();
+    if (missingItems.length === 0) {
+      alert("모든 문장의 AI 분석 정보가 이미 완전하게 작성되어 있습니다. ✨");
       return;
     }
 
     setIsAnalyzingBg(true);
     setAnalysisError(null);
-
-    const missingByParagraph: Record<number, string[]> = {};
-    missing.forEach(m => {
-      if (!missingByParagraph[m.paragraphId]) {
-        missingByParagraph[m.paragraphId] = [];
-      }
-      missingByParagraph[m.paragraphId].push(m.sentence);
-    });
-
-    const paragraphIds = Object.keys(missingByParagraph).map(Number);
-    setBgProgress({ completed: 0, total: paragraphIds.length });
-
     try {
+      const paragraphIds = Array.from(new Set(missingItems.map(item => item.paragraphId)));
+      setBgProgress({ completed: 0, total: paragraphIds.length });
       let currentCompleted = 0;
-      for (const pId of paragraphIds) {
-        const sentencesToAnalyze = missingByParagraph[pId];
-        
-        if (currentCompleted > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
 
+      for (const pId of paragraphIds) {
+        const sentencesInP = missingItems.filter(item => item.paragraphId === pId).map(item => item.sentence);
         const result = await analyzeParagraphChunkSentences(
           pId,
-          99,
-          sentencesToAnalyze,
+          0,
+          sentencesInP,
           lesson.passageText,
           apiKey
         );
@@ -440,17 +429,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         if (result && result.length > 0) {
           setAnalysisCache(prev => {
             const currentParagraphAnalysis = prev[pId] || [];
-            const cleanSentencesToAnalyze = sentencesToAnalyze.map(s => s.trim().toLowerCase());
-            const filtered = currentParagraphAnalysis.filter(a => {
-              const cleanA = a.sentence.trim().toLowerCase();
-              return !cleanSentencesToAnalyze.includes(cleanA);
-            });
-            const updatedParagraphAnalysis = [...filtered, ...result];
+            const updatedParagraphAnalysis = [...currentParagraphAnalysis, ...result];
             const updated = {
               ...prev,
               [pId]: updatedParagraphAnalysis
             };
             localStorage.setItem(`eng_passage_analysis_${lesson.id}`, JSON.stringify(updated));
+            savePassageAnalysisToCloud(lesson.id, updated).catch(err => {
+              console.warn("Failed to save merged analysis to cloud:", err);
+            });
             return updated;
           });
         }

@@ -644,8 +644,9 @@ export async function savePassageAnalysisToCloud(
   analysis: Record<number, SentenceAnalysis[]>
 ): Promise<void> {
   try {
+    if (!lessonId || !analysis) return;
     const analysisRef = doc(db, 'passage_analyses', lessonId);
-    await setDoc(analysisRef, { analysis, createdAt: Date.now() });
+    await setDoc(analysisRef, { analysis, updatedAt: Date.now() }, { merge: true });
   } catch (error) {
     console.error("Firebase save passage analysis failed:", error);
   }

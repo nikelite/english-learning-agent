@@ -1339,6 +1339,19 @@ export default function App() {
                   ownerId: userId,
                   sharedWith: lesson.sharedWith || []
                 };
+
+                // Migrate any local passage analysis cached under temporary ID to permanent docId
+                try {
+                  const oldTempId = lesson.id;
+                  const tempAnalysis = localStorage.getItem(`eng_passage_analysis_${oldTempId}`);
+                  if (tempAnalysis) {
+                    localStorage.setItem(`eng_passage_analysis_${docId}`, tempAnalysis);
+                    const parsed = JSON.parse(tempAnalysis);
+                    await savePassageAnalysisToCloud(docId, parsed);
+                  }
+                } catch (migrateErr) {
+                  console.warn("Failed to migrate temp analysis to cloud docId:", migrateErr);
+                }
               } catch (err) {
                 console.error("Failed to upload placeholder lesson to cloud:", err);
               }
