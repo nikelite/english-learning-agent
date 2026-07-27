@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
-import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from '../geminiService';
+import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 import { QuizContextSentence } from './QuizContextSentence';
 
@@ -708,7 +708,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       <html>
       <head>
         <meta charset="utf-8">
-        <title>[READ.AGENT] ${lesson.title.replace(/\//g, '-')} - 전체 문장 구문 분석</title>
+        <title>${formatPdfFileName(lesson.title)}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Nanum+Gothic:wght@400;700&display=swap');
           body {

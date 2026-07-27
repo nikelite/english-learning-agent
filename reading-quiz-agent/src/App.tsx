@@ -6,7 +6,7 @@ import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
 import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
-import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis } from './geminiService';
+import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from './geminiService';
 import { getContextSentence } from './components/QuizContextSentence';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
 import { 
@@ -1164,7 +1164,7 @@ export default function App() {
         };
 
         iframe.contentWindow?.addEventListener('beforeprint', () => {
-          document.title = lesson.title.replace(/\//g, '-');
+          document.title = formatPdfFileName(lesson.title);
         });
 
         iframe.contentWindow?.addEventListener('afterprint', () => {
@@ -1172,7 +1172,7 @@ export default function App() {
         });
 
         setTimeout(() => {
-          document.title = lesson.title.replace(/\//g, '-');
+          document.title = formatPdfFileName(lesson.title);
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
           

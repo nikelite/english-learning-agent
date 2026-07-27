@@ -1295,3 +1295,41 @@ export async function autoFillMissingAnalyses(
   return updatedCache;
 }
 
+/**
+ * Formats and cleans lesson titles for PDF export and browser print dialogs,
+ * replacing slashes with 'of' (e.g. 1/4 -> 1of4), removing special characters, and truncating long titles cleanly at CHxx / Chapter xx.
+ */
+export function formatPdfFileName(title: string): string {
+  if (!title) return "Reading_Lesson";
+
+  let clean = title.trim();
+
+  // 1. Convert slash part notation (1/4) or (1-4) to clean (1of4) for file system safety
+  clean = clean.replace(/\((\d+)\s*[/|-]\s*(\d+)\)/g, '($1of$2)');
+  clean = clean.replace(/\b(\d+)\s*[/|-]\s*(\d+)\b/g, '$1of$2');
+
+  // 2. Replace illegal filename characters with space: / \ : * ? " < > |
+  clean = clean.replace(/[/\\:*?"<>|]/g, ' ').trim();
+
+  // 3. Search for chapter pattern (e.g. CH10, CH 10, Chapter 10) and cut off long subtitles after it
+  const chMatch = clean.match(/^(.*?\b(?:ch|chapter)\s*\d+)(.*)$/i);
+  if (chMatch) {
+    clean = chMatch[1].trim();
+  } else {
+    // 4. Otherwise, if there is a ' - ' separator, cut off at the first ' - '
+    if (clean.includes(' - ')) {
+      clean = clean.split(' - ')[0].trim();
+    }
+  }
+
+  // 5. Clean trailing dots, dashes, underscores, spaces
+  clean = clean.replace(/[\s._-]+$/g, '').trim();
+
+  // 6. Limit overall length to max 40 characters for OS filename safety
+  if (clean.length > 40) {
+    clean = clean.substring(0, 37).trim() + "...";
+  }
+
+  return clean || "Reading_Lesson";
+}
+
