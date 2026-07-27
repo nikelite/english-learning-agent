@@ -291,7 +291,7 @@ export async function generateCorrection(
     throw new Error("교정할 영문 텍스트를 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const userPrompt = `
 Analyze and correct the following text.
@@ -573,7 +573,7 @@ export async function processFollowUp(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   // Build lesson context for the prompt
   const contextPrompt = `
@@ -664,7 +664,7 @@ export async function generateAIPresentedSituation(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const systemPrompt = `You are a creative educational counselor. Your task is to design a highly engaging, custom English conversation situation based on the user's ideation prompt (which could be a news topic, question-answer, or simple keywords).
 The conversation category is: ${type}.
@@ -746,7 +746,7 @@ export async function generateChatPartnerResponse(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const systemInstructions = `You are roleplaying as a conversation partner in a specific situation.
 Situation Context:
@@ -815,7 +815,7 @@ export async function generateConversationFeedback(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   // Format chat history into a human-readable transcript
   const transcript = chatHistory

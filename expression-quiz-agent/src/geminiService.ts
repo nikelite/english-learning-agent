@@ -309,7 +309,7 @@ export async function generateLessonFromText(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -649,7 +649,7 @@ export async function generateVocabularyLessons(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -859,7 +859,7 @@ export async function generateAdditionalQuizzes(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const cleanTitle = lesson.title.replace(/"/g, "'");
   const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
@@ -1035,7 +1035,7 @@ export async function askGeminiFollowUpQuestion(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const cleanTitle = lesson.title.replace(/"/g, "'");
   const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
