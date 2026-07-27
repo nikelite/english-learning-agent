@@ -40,33 +40,30 @@ export function splitIntoSentences(text: string): string[] {
   });
 }
 
-export const GEMINI_PRIMARY_MODEL = "gemini-3.6-flash";
-export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
-
-// Helper function to call fetch with exponential backoff retry for network errors/transient API limits
+// Helper function to call fetch with 15s timeout and exponential backoff retry
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 7,
-  initialDelay = 1000,
+  maxRetries = 2,
+  initialDelay = 500,
   onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<Response> {
-  let currentUrl = url;
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s hard timeout per call
+
     try {
-      const response = await fetch(currentUrl, options);
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (response.ok) {
         return response;
       }
       
-      // Auto-fallback if 3.6-flash model is not supported for this key (404/400 model error)
-      if ((response.status === 404 || response.status === 400) && currentUrl.includes(GEMINI_PRIMARY_MODEL)) {
-        console.warn(`[Gemini API] Primary model ${GEMINI_PRIMARY_MODEL} returned ${response.status}. Automatically falling back to ${GEMINI_FALLBACK_MODEL}...`);
-        currentUrl = currentUrl.replace(GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL);
-        continue;
-      }
-
       // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
       if (response.status === 429 || response.status >= 500) {
         const msg = `HTTP ${response.status}`;
@@ -75,24 +72,24 @@ async function fetchWithRetry(
           onRetry(attempt + 1, maxRetries, msg);
         }
         await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        delay += Math.floor(Math.random() * 200); // add jitter
+        delay *= 1.5;
         continue;
       }
       
       return response;
     } catch (error: any) {
-      const msg = error?.message || String(error);
-      console.warn(`Network error during Gemini API request: ${error}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+      clearTimeout(timeoutId);
+      const isAbort = error.name === 'AbortError';
+      const msg = isAbort ? 'API 요청 시간 초과 (15초)' : (error?.message || String(error));
+      console.warn(`Network error during Gemini API request: ${msg}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
       if (onRetry) {
         onRetry(attempt + 1, maxRetries, msg);
       }
       if (attempt === maxRetries - 1) {
-        throw error;
+        throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (15초). 다시 시도해 주세요.' : msg);
       }
       await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
-      delay += Math.floor(Math.random() * 200); // add jitter
+      delay *= 1.5;
     }
   }
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
@@ -416,7 +413,7 @@ export async function generateReadingLesson(
     throw new Error("분석할 독해 지문 텍스트가 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -564,7 +561,7 @@ export async function generateCustomVocabItem(
     throw new Error("분석할 단어 또는 표현이 비어 있습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an elite academic English linguist and ESL curriculum developer.
 Analyze the following English target word or phrase: "${cleanWord}"
@@ -647,7 +644,7 @@ export async function analyzeParagraphChunkSentences(
   apiKey: string,
   onRetry?: (attempt: number, maxRetries: number, statusOrError: string) => void
 ): Promise<SentenceAnalysis[]> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const targetText = sentences.join(' ');
 
@@ -927,7 +924,7 @@ export async function determineSemanticChapters(
     return `[Paragraph ${idx}] (${wordCount} English words): "${snippet}"`;
   }).join('\n\n');
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an elite academic textbook editor and ESL curriculum architect.
 Your task is to analyze the outline of a long English passage and group its paragraphs semantically into EXACTLY ${targetChapterCount} coherent, natural thematic chapters/sections.

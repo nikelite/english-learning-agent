@@ -1,48 +1,46 @@
 import { shuffleChoicesAndRemapRationale } from './types';
 import type { MochiCard } from './types';
 
-export const GEMINI_PRIMARY_MODEL = "gemini-3.6-flash";
-export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
-
-// Helper function to call fetch with exponential backoff retry
+// Helper function to call fetch with 15s timeout and fast retries
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 5,
-  initialDelay = 1000
+  maxRetries = 2,
+  initialDelay = 500
 ): Promise<Response> {
-  let currentUrl = url;
   let delay = initialDelay;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const response = await fetch(currentUrl, options);
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (response.ok) {
         return response;
-      }
-
-      // Auto-fallback if 3.6-flash model is not supported for this key (404/400 model error)
-      if ((response.status === 404 || response.status === 400) && currentUrl.includes(GEMINI_PRIMARY_MODEL)) {
-        console.warn(`[Gemini API] Primary model ${GEMINI_PRIMARY_MODEL} returned ${response.status}. Automatically falling back to ${GEMINI_FALLBACK_MODEL}...`);
-        currentUrl = currentUrl.replace(GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL);
-        continue;
       }
 
       if (response.status === 429 || response.status >= 500) {
         console.warn(`Gemini API returned status ${response.status}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        delay += Math.floor(Math.random() * 200);
+        delay *= 1.5;
         continue;
       }
       return response;
-    } catch (error) {
-      console.warn(`Network error during Gemini API request: ${error}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      const isAbort = error.name === 'AbortError';
+      const msg = isAbort ? 'API 요청 시간 초과 (15초)' : (error?.message || String(error));
+      console.warn(`Network error during Gemini API request: ${msg}. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
       if (attempt === maxRetries - 1) {
-        throw error;
+        throw new Error(isAbort ? 'Gemini API 응답 시간이 초과되었습니다 (15초). 다시 시도해 주세요.' : msg);
       }
       await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
-      delay += Math.floor(Math.random() * 200);
+      delay *= 1.5;
     }
   }
   throw new Error("Gemini API 요청 실패: 최대 재시도 횟수를 초과했습니다.");
@@ -88,7 +86,7 @@ export async function generateMochiCards(
   }
 
   const chunks = chunkInputText(cleanText, 10);
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const generateChunk = async (chunkText: string, chunkIdx: number): Promise<MochiCard[]> => {
     let prompt = "";
