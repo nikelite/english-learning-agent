@@ -137,7 +137,23 @@ export default function App() {
     return (val === 200 || val === 400 || val === 800) ? 'preset' : 'custom';
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingSeconds, setLoadingSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: any = null;
+    if (isLoading) {
+      setLoadingSeconds(0);
+      timer = setInterval(() => {
+        setLoadingSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      setLoadingSeconds(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isLoading]);
 
   const [splitConfirm, setSplitConfirm] = useState<{
     show: boolean;
@@ -2888,23 +2904,31 @@ ${quiz.rationale}`;
 
       {/* Full-screen Cyber Loading Overlay */}
       {isLoading && (
-        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 12, 0.75)', backdropFilter: 'blur(10px)', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(6, 182, 212, 0.4)', borderRadius: '20px', boxShadow: '0 0 30px rgba(6, 182, 212, 0.25)', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
-            <div className="pulse-glow" style={{ width: '68px', height: '68px', background: 'rgba(6, 182, 212, 0.12)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--secondary)', animation: 'spin 3s linear infinite' }}>
-              <Sparkles size={32} style={{ color: 'var(--secondary)' }} />
+        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 12, 0.75)', backdropFilter: 'blur(12px)', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(6, 182, 212, 0.4)', borderRadius: '24px', boxShadow: '0 0 40px rgba(6, 182, 212, 0.25)', maxWidth: '440px', width: '92%', textAlign: 'center' }}>
+            <div className="pulse-glow" style={{ width: '72px', height: '72px', background: 'rgba(6, 182, 212, 0.12)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--secondary)', animation: 'spin 3s linear infinite' }}>
+              <Sparkles size={34} style={{ color: 'var(--secondary)' }} />
             </div>
             
             <div>
-              <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                ⚡ Gemini 3.6 Flash Active
-              </span>
-              <h3 style={{ fontSize: '1.2rem', color: 'white', fontWeight: 'bold', margin: '0.75rem 0 0.5rem 0' }}>
-                AI 심층 분석 및 퀴즈 출제 중
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700' }}>
+                  ⚡ Gemini 3.6 Flash
+                </span>
+                <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: '700' }}>
+                  ⏱️ {loadingSeconds}초 경과 중
+                </span>
+              </div>
+              <h3 style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold', margin: '0.5rem 0 0.5rem 0' }}>
+                AI 심층 분석 &amp; 퀴즈 출제 중
               </h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                최신 Gemini 3.6 Flash 모델이 지문의 SVOC 문법 구조,<br />
-                단어 뉘앙스 및 맞춤형 퀴즈를 심층 생성 중입니다.<br />
-                <span style={{ color: '#22d3ee', fontWeight: '600' }}>약 15 ~ 30초 정도 소요됩니다. (정상 생성 진행 중)</span>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
+                {loadingSeconds < 6 && '🚀 Gemini 3.6 Flash 엔진에 지문 전달 중...'}
+                {loadingSeconds >= 6 && loadingSeconds < 15 && '🔍 단락별 문법 구조(SVOC) 및 직독직해 파싱 중...'}
+                {loadingSeconds >= 15 && loadingSeconds < 28 && '✍️ 맞춤형 TOEFL/TOEIC 퀴즈 및 한글 해설 심층 생성 중...'}
+                {loadingSeconds >= 28 && '✨ 마무리 응답 검증 및 화면에 렌더링하는 중...'}
+                <br />
+                <span style={{ color: '#22d3ee', fontSize: '0.8rem', fontWeight: '600' }}>(보통 15~30초 소요됩니다)</span>
               </p>
             </div>
             
@@ -2912,6 +2936,19 @@ ${quiz.rationale}`;
             <div style={{ width: '100%', background: 'rgba(255,255,255,0.06)', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
               <div className="animate-pulse" style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, #06b6d4 0%, #8b5cf6 50%, #06b6d4 100%)', backgroundSize: '200% 100%', animation: 'shimmer 2s infinite linear' }}></div>
             </div>
+
+            {/* Cancel Button */}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setIsLoading(false);
+                setError("사용자가 생성 작업을 중단했습니다.");
+              }}
+              style={{ padding: '0.4rem 1rem', fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}
+            >
+              생성 중단
+            </button>
           </div>
         </div>
       )}
