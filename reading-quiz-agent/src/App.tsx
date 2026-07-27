@@ -473,8 +473,12 @@ export default function App() {
       if (lesson.isPending) {
         totalApiCallsNeeded += 1; // 1 call for generateReadingLesson
       }
-      const sentences = splitIntoSentences(lesson.passageText);
-      totalApiCallsNeeded += Math.ceil(sentences.length / CHUNK_SIZE);
+      const rawText = lesson.passageText.trim();
+      const paras = rawText.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+      paras.forEach(para => {
+        const sentences = splitIntoSentences(para);
+        totalApiCallsNeeded += Math.ceil(sentences.length / CHUNK_SIZE);
+      });
     });
 
     setIsBulkAnalyzing(true);
@@ -527,6 +531,7 @@ export default function App() {
           setBulkAnalyzeProgress(prev => ({
             ...prev,
             completed: previouslyCompletedApiCalls,
+            total: Math.max(prev.total, previouslyCompletedApiCalls),
             statusPhase: 'analyzing'
           }));
         } catch (error) {
@@ -534,7 +539,8 @@ export default function App() {
           previouslyCompletedApiCalls += 1; // Count as completed to keep progress bar moving
           setBulkAnalyzeProgress(prev => ({
             ...prev,
-            completed: previouslyCompletedApiCalls
+            completed: previouslyCompletedApiCalls,
+            total: Math.max(prev.total, previouslyCompletedApiCalls)
           }));
           // Skip sentence analysis since generation failed
           continue;
@@ -557,6 +563,7 @@ export default function App() {
             setBulkAnalyzeProgress(prev => ({
               ...prev,
               completed: overallCompleted,
+              total: Math.max(prev.total, overallCompleted),
               retryCount: 0,
               retryReason: ''
             }));
@@ -2193,7 +2200,7 @@ ${quiz.rationale}`;
                       <RefreshCw size={14} className="animate-spin" />
                       {bulkAnalyzeProgress.statusPhase === 'generating' ? '⚡ AI 일괄 지문 & 퀴즈 생성 중...' : '🔍 AI 일괄 지문 전체 분석 중...'}
                     </span>
-                    <span>API 호출 완료: {bulkAnalyzeProgress.completed} / {bulkAnalyzeProgress.total}</span>
+                    <span>API 호출 완료: {bulkAnalyzeProgress.completed} / {Math.max(bulkAnalyzeProgress.completed, bulkAnalyzeProgress.total)}</span>
                   </div>
                   {bulkAnalyzeProgress.currentTitle && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
@@ -2207,7 +2214,7 @@ ${quiz.rationale}`;
                         ? 'linear-gradient(90deg, #f59e0b 0%, var(--primary) 100%)' 
                         : 'linear-gradient(90deg, #06b6d4 0%, var(--primary) 100%)',
                       height: '100%',
-                      width: `${bulkAnalyzeProgress.total > 0 ? (bulkAnalyzeProgress.completed / bulkAnalyzeProgress.total) * 100 : 0}%`,
+                      width: `${bulkAnalyzeProgress.total > 0 ? Math.min(100, Math.round((bulkAnalyzeProgress.completed / Math.max(bulkAnalyzeProgress.completed, bulkAnalyzeProgress.total)) * 100)) : 0}%`,
                       transition: 'width 0.3s ease'
                     }}></div>
                   </div>
