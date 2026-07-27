@@ -247,9 +247,14 @@ export const Header: React.FC<HeaderProps> = ({
                     {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  독해 지문을 AI로 정밀 분석하기 위해 Gemini API Key가 필요합니다. 입력된 키는 오직 브라우저 로컬 스토리지에만 저장됩니다.
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, flex: 1 }}>
+                    독해 지문을 AI로 정밀 분석하기 위해 Gemini API Key가 필요합니다. 입력된 키는 오직 브라우저 로컬 스토리지에만 저장됩니다.
+                  </p>
+                  <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '6px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                    ⚡ Gemini 3.6 Flash (Primary)
+                  </span>
+                </div>
               </div>
 
               {/* User ID Section */}
