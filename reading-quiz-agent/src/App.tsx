@@ -2888,28 +2888,29 @@ ${quiz.rationale}`;
 
       {/* Full-screen Cyber Loading Overlay */}
       {isLoading && (
-        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 10, 0.85)', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: '20px', boxShadow: 'var(--shadow-glow)', maxWidth: '400px', width: '90%', textAlign: 'center' }}>
-            <div className="pulse-glow" style={{ width: '64px', height: '64px', background: 'rgba(6, 182, 212, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--secondary)', animation: 'spin 4s linear infinite' }}>
-              <Sparkles size={28} style={{ color: 'var(--secondary)' }} />
+        <div className="modal-overlay" style={{ zIndex: 3000, background: 'rgba(5, 5, 12, 0.75)', backdropFilter: 'blur(10px)', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', padding: '2.5rem', background: 'var(--bg-secondary)', border: '1px solid rgba(6, 182, 212, 0.4)', borderRadius: '20px', boxShadow: '0 0 30px rgba(6, 182, 212, 0.25)', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
+            <div className="pulse-glow" style={{ width: '68px', height: '68px', background: 'rgba(6, 182, 212, 0.12)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed var(--secondary)', animation: 'spin 3s linear infinite' }}>
+              <Sparkles size={32} style={{ color: 'var(--secondary)' }} />
             </div>
             
             <div>
-              <h3 style={{ fontSize: '1.15rem', color: 'white', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                AI 정밀 분석 및 출제 중
+              <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                ⚡ Gemini 3.6 Flash Active
+              </span>
+              <h3 style={{ fontSize: '1.2rem', color: 'white', fontWeight: 'bold', margin: '0.75rem 0 0.5rem 0' }}>
+                AI 심층 분석 및 퀴즈 출제 중
               </h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Gemini AI가 영어 지문을 다각도로 분석하고<br />
-                맞춤형 실전 퀴즈를 출제하는 중입니다.<br />
-                <span style={{ color: 'var(--secondary)', fontWeight: '600' }}>약 10 ~ 15초 정도 소요됩니다.</span>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                최신 Gemini 3.6 Flash 모델이 지문의 SVOC 문법 구조,<br />
+                단어 뉘앙스 및 맞춤형 퀴즈를 심층 생성 중입니다.<br />
+                <span style={{ color: '#22d3ee', fontWeight: '600' }}>약 15 ~ 30초 정도 소요됩니다. (정상 생성 진행 중)</span>
               </p>
             </div>
             
-            {/* Loading dots */}
-            <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.5rem' }}>
-              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--secondary)', borderRadius: '50%' }}></span>
-              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></span>
-              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--accent)', borderRadius: '50%' }}></span>
+            {/* Animated Progress Bar */}
+            <div style={{ width: '100%', background: 'rgba(255,255,255,0.06)', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+              <div className="animate-pulse" style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, #06b6d4 0%, #8b5cf6 50%, #06b6d4 100%)', backgroundSize: '200% 100%', animation: 'shimmer 2s infinite linear' }}></div>
             </div>
           </div>
         </div>
