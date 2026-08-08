@@ -340,39 +340,38 @@ export default function App() {
     }
   }, []);
 
-  // Trigger cloud sync when userId changes or on mount
-  useEffect(() => {
-    if (!userId) {
+  // Perform comprehensive multi-device cloud synchronization
+  const performCloudSync = async (targetUserId?: string) => {
+    const uid = targetUserId || userId;
+    if (!uid) {
       setSyncStatus('idle');
       return;
     }
-    
-    let isMounted = true;
+
     setSyncStatus('syncing');
     setSyncError(null);
-    
-    // Fetch local history to merge
-    const localSaved = localStorage.getItem('eng_reading_lessons_history');
-    const localList: ReadingLesson[] = localSaved ? JSON.parse(localSaved) : [];
-    
-    // Sync Lesson History
-    syncUserLessons(userId, localList).then((syncedList) => {
-      if (isMounted) {
-        setLessonsHistory(syncedList);
-        safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(syncedList));
-        setSyncStatus('synced');
-      }
-    }).catch((err: any) => {
-      if (isMounted) {
-        console.error("Auto sync failed:", err);
-        setSyncStatus('error');
-        setSyncError(err.message || "동기화 오류");
-      }
-    });
 
-    // Sync lifetime stats in parallel
-    loadStatsFromCloud(userId).then((cloudStats) => {
-      if (cloudStats && isMounted) {
+    try {
+      const localSaved = localStorage.getItem('eng_reading_lessons_history');
+      const localList: ReadingLesson[] = localSaved ? JSON.parse(localSaved) : [];
+
+      // 1. Sync Custom Lesson History
+      const syncedList = await syncUserLessons(uid, localList);
+      setLessonsHistory(syncedList);
+      safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(syncedList));
+
+      // Update activeLesson if it matches a synced custom lesson
+      setActiveLesson(prev => {
+        if (prev && !prev.id.startsWith('preset-')) {
+          const match = syncedList.find(l => l.id === prev.id);
+          if (match) return match;
+        }
+        return prev;
+      });
+
+      // 2. Sync Lifetime Stats
+      const cloudStats = await loadStatsFromCloud(uid);
+      if (cloudStats) {
         setStats(prev => ({
           streak: Math.max(prev.streak, cloudStats.streak),
           lastActiveDate: prev.lastActiveDate || cloudStats.lastActiveDate,
@@ -381,80 +380,107 @@ export default function App() {
           masteredCount: Math.max(prev.masteredCount, cloudStats.masteredCount)
         }));
       }
-    }).catch(err => console.error("Cloud stats load failed:", err));
 
-    // Sync mistakes notebook in parallel
-    loadWrongAnswersFromCloud(userId).then((cloudData) => {
-      if (isMounted) {
-        const localSavedTime = localStorage.getItem('eng_reading_wrong_answers_updated_at');
-        const localTime = localSavedTime ? parseInt(localSavedTime, 10) : 0;
-        
-        if (!cloudData) {
-          // Initialize cloud
-          saveWrongAnswersToCloud(userId, wrongAnswers, localTime || Date.now());
-          if (!localSavedTime) {
-            safeSetLocalStorage('eng_reading_wrong_answers_updated_at', (localTime || Date.now()).toString());
-          }
-        } else if (cloudData.updatedAt > localTime) {
-          isSyncingWrongAnswersRef.current = true;
-          setWrongAnswers(cloudData.list);
-          safeSetLocalStorage('eng_reading_wrong_answers', JSON.stringify(cloudData.list));
-          safeSetLocalStorage('eng_reading_wrong_answers_updated_at', cloudData.updatedAt.toString());
-        } else if (localTime > cloudData.updatedAt) {
-          saveWrongAnswersToCloud(userId, wrongAnswers, localTime);
-        } else {
-          // Equal: set local just to sync lists, no update needed
-          isSyncingWrongAnswersRef.current = true;
-          setWrongAnswers(cloudData.list);
+      // 3. Sync Wrong Answers Notebook
+      const cloudData = await loadWrongAnswersFromCloud(uid);
+      const localSavedTime = localStorage.getItem('eng_reading_wrong_answers_updated_at');
+      const localTime = localSavedTime ? parseInt(localSavedTime, 10) : 0;
+
+      if (!cloudData) {
+        saveWrongAnswersToCloud(uid, wrongAnswers, localTime || Date.now());
+        if (!localSavedTime) {
+          safeSetLocalStorage('eng_reading_wrong_answers_updated_at', (localTime || Date.now()).toString());
         }
+      } else if (cloudData.updatedAt > localTime) {
+        isSyncingWrongAnswersRef.current = true;
+        setWrongAnswers(cloudData.list);
+        safeSetLocalStorage('eng_reading_wrong_answers', JSON.stringify(cloudData.list));
+        safeSetLocalStorage('eng_reading_wrong_answers_updated_at', cloudData.updatedAt.toString());
+      } else if (localTime > cloudData.updatedAt) {
+        saveWrongAnswersToCloud(uid, wrongAnswers, localTime);
+      } else {
+        isSyncingWrongAnswersRef.current = true;
+        setWrongAnswers(cloudData.list);
       }
-    }).catch(err => console.error("Cloud wrong answers load failed:", err));
-    
-    // Sync presets progress in parallel
-    loadPresetsProgressFromCloud(userId).then((cloudPresetsProgress) => {
-      if (isMounted) {
-        const localSaved = localStorage.getItem('eng_reading_presets_progress');
-        const localPresetsProgress = localSaved ? JSON.parse(localSaved) : {};
-        
-        const mergedPresetsProgress = { ...localPresetsProgress };
-        let hasChanges = false;
-        
-        if (cloudPresetsProgress) {
-          Object.keys(cloudPresetsProgress).forEach((presetId) => {
-            const localVal = localPresetsProgress[presetId];
-            const cloudVal = cloudPresetsProgress[presetId];
-            
-            if (!localVal) {
+
+      // 4. Sync Presets Progress
+      const cloudPresetsProgress = await loadPresetsProgressFromCloud(uid);
+      const localPresetsSaved = localStorage.getItem('eng_reading_presets_progress');
+      const localPresetsProgress = localPresetsSaved ? JSON.parse(localPresetsSaved) : {};
+      const mergedPresetsProgress = { ...localPresetsProgress };
+      let hasChanges = false;
+
+      if (cloudPresetsProgress) {
+        Object.keys(cloudPresetsProgress).forEach((presetId) => {
+          const localVal = localPresetsProgress[presetId];
+          const cloudVal = cloudPresetsProgress[presetId];
+
+          if (!localVal) {
+            mergedPresetsProgress[presetId] = cloudVal;
+            hasChanges = true;
+          } else {
+            const lTime = localVal.solvedAt || 0;
+            const cTime = cloudVal.solvedAt || 0;
+            if (cTime >= lTime) {
               mergedPresetsProgress[presetId] = cloudVal;
               hasChanges = true;
-            } else {
-              const localTime = localVal.solvedAt || 0;
-              const cloudTime = cloudVal.solvedAt || 0;
-              if (cloudTime > localTime) {
-                mergedPresetsProgress[presetId] = cloudVal;
-                hasChanges = true;
-              } else if (localTime > cloudTime) {
-                hasChanges = true;
-              }
             }
-          });
-        }
-        
-        Object.keys(localPresetsProgress).forEach((presetId) => {
-          if (!cloudPresetsProgress || !cloudPresetsProgress[presetId]) {
-            hasChanges = true;
           }
         });
-        
-        if (hasChanges) {
-          safeSetLocalStorage('eng_reading_presets_progress', JSON.stringify(mergedPresetsProgress));
-          savePresetsProgressToCloud(userId, mergedPresetsProgress);
-        }
       }
-    }).catch(err => console.error("Cloud presets progress load failed:", err));
-    
+
+      if (hasChanges || cloudPresetsProgress) {
+        safeSetLocalStorage('eng_reading_presets_progress', JSON.stringify(mergedPresetsProgress));
+        savePresetsProgressToCloud(uid, mergedPresetsProgress);
+
+        // Update activeLesson if preset
+        setActiveLesson(prev => {
+          if (prev && prev.id.startsWith('preset-')) {
+            const progress = mergedPresetsProgress[prev.id];
+            if (progress) {
+              const uAns = progress.userAnswers !== undefined ? progress.userAnswers : progress;
+              return {
+                ...prev,
+                userAnswers: uAns,
+                solvedAt: progress.solvedAt,
+                firstAttemptScore: progress.firstAttemptScore,
+                retryHistory: progress.retryHistory
+              };
+            }
+          }
+          return prev;
+        });
+      }
+
+      setSyncStatus('synced');
+    } catch (err: any) {
+      console.error("Cloud sync failed:", err);
+      setSyncStatus('error');
+      setSyncError(err.message || "동기화 오류");
+    }
+  };
+
+  // Trigger cloud sync when userId changes, on window focus, and on 30s interval
+  useEffect(() => {
+    if (!userId) {
+      setSyncStatus('idle');
+      return;
+    }
+
+    performCloudSync(userId);
+
+    const onFocus = () => {
+      performCloudSync(userId);
+    };
+    window.addEventListener('focus', onFocus);
+
+    const interval = setInterval(() => {
+      performCloudSync(userId);
+    }, 30000);
+
     return () => {
-      isMounted = false;
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
     };
   }, [userId]);
 
@@ -679,18 +705,18 @@ export default function App() {
         if (lesson.ownerId && lesson.ownerId !== userId) {
           const { saveSharedLessonProgress } = await import('./firebaseService');
           await saveSharedLessonProgress(lesson.id, userId, {
-            userAnswers: lesson.userAnswers,
-            solvedAt: lesson.solvedAt,
-            firstAttemptScore: lesson.firstAttemptScore,
-            retryHistory: lesson.retryHistory
+            userAnswers: updatedLesson.userAnswers,
+            solvedAt: updatedLesson.solvedAt,
+            firstAttemptScore: updatedLesson.firstAttemptScore,
+            retryHistory: updatedLesson.retryHistory
           });
         } else {
-          const docId = await saveLessonToCloud(lesson, userId);
+          const docId = await saveLessonToCloud(updatedLesson, userId);
           const cloudLesson = {
-            ...lesson,
+            ...updatedLesson,
             id: docId,
             ownerId: userId,
-            sharedWith: lesson.sharedWith || []
+            sharedWith: updatedLesson.sharedWith || []
           };
           
           // If docId changed, update history and localStorage again
@@ -1902,12 +1928,17 @@ ${quiz.rationale}`;
   const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers && !item.isPending).length;
   const pendingCount = lessonsHistory.filter(item => item.isPending).length;
 
+  const activeWrongCount = wrongAnswers.filter(wa => !wa.isArchived).length;
+  const archivedWrongCount = wrongAnswers.filter(wa => wa.isArchived).length;
+
   return (
     <div className="app-container">
       {/* Universal header */}
       <Header
         stats={stats}
         wrongAnswersCount={wrongAnswers.length}
+        activeWrongCount={activeWrongCount}
+        archivedWrongCount={archivedWrongCount}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         apiKey={apiKey}
@@ -1922,6 +1953,8 @@ ${quiz.rationale}`;
         mochiDecks={mochiDecks}
         mochiQuizDeckId={mochiQuizDeckId}
         onSaveMochiQuizDeckId={handleSaveMochiQuizDeckId}
+        syncStatus={syncStatus}
+        onTriggerCloudSync={() => performCloudSync()}
       />
 
       {/* Shared quiz exit warning overlay banner */}

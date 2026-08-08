@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Flame, Settings, X, Eye, EyeOff, Check } from 'lucide-react';
+import { BookOpen, Flame, Settings, X, Eye, EyeOff, Check, RefreshCw } from 'lucide-react';
 import { AppStats } from '../types';
 import { fetchMochiDecks } from '../mochiService';
 
 interface HeaderProps {
   stats: AppStats;
   wrongAnswersCount: number;
+  activeWrongCount?: number;
+  archivedWrongCount?: number;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   apiKey: string;
@@ -20,11 +22,15 @@ interface HeaderProps {
   mochiDecks: any[];
   mochiQuizDeckId: string;
   onSaveMochiQuizDeckId: (deckId: string) => void;
+  syncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
+  onTriggerCloudSync?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   stats,
   wrongAnswersCount,
+  activeWrongCount = 0,
+  archivedWrongCount = 0,
   activeTab,
   setActiveTab,
   apiKey,
@@ -38,7 +44,9 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveMochiApiKey,
   mochiDecks,
   mochiQuizDeckId,
-  onSaveMochiQuizDeckId
+  onSaveMochiQuizDeckId,
+  syncStatus = 'idle',
+  onTriggerCloudSync
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
@@ -152,10 +160,16 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('review')}
             >
               오답 복습방
-              {wrongAnswersCount > 0 && (
-                <span className="badge" style={{ marginLeft: '0.25rem' }}>
-                  {wrongAnswersCount}
+              {(activeWrongCount > 0 || archivedWrongCount > 0) ? (
+                <span className="badge" style={{ marginLeft: '0.35rem', padding: '0.15rem 0.45rem', fontSize: '0.725rem' }} title={`복습 대기중: ${activeWrongCount}개 | 정복 완료(아카이브): ${archivedWrongCount}개`}>
+                  {activeWrongCount} | {archivedWrongCount}
                 </span>
+              ) : (
+                wrongAnswersCount > 0 && (
+                  <span className="badge" style={{ marginLeft: '0.25rem' }}>
+                    {wrongAnswersCount}
+                  </span>
+                )
               )}
             </button>
 
@@ -183,11 +197,31 @@ export const Header: React.FC<HeaderProps> = ({
           <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>{stats.streak}일 스트릭</span>
         </div>
 
-        {/* User Account ID Badge if exists */}
+        {/* User Account ID & Interactive Sync Badge */}
         {userId && (
-          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.1)', borderColor: 'rgba(6, 182, 212, 0.3)' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--secondary)', fontWeight: '700' }}>☁️ {userId}</span>
-          </div>
+          <button 
+            type="button"
+            onClick={onTriggerCloudSync}
+            className="glass-panel" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              padding: '0.45rem 0.75rem', 
+              borderRadius: '10px', 
+              background: syncStatus === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(6, 182, 212, 0.1)', 
+              borderColor: syncStatus === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(6, 182, 212, 0.3)',
+              cursor: 'pointer',
+              color: 'white',
+              transition: 'all 0.2s ease'
+            }}
+            title="클라우드 멀티 디바이스 동기화 (클릭 시 수동 동기화)"
+          >
+            <RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} style={{ color: syncStatus === 'error' ? '#ef4444' : 'var(--secondary)' }} />
+            <span style={{ fontSize: '0.8rem', color: syncStatus === 'error' ? '#ef4444' : 'var(--secondary)', fontWeight: '700' }}>
+              {userId} {syncStatus === 'syncing' ? '(동기화 중...)' : syncStatus === 'error' ? '(오류)' : ''}
+            </span>
+          </button>
         )}
 
         {/* API Settings */}

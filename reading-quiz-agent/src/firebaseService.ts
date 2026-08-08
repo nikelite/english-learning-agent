@@ -205,9 +205,15 @@ export async function loadSharedLessonsProgress(
   }
 }
 
+function isLessonSolved(lesson: ReadingLesson): boolean {
+  if (lesson.firstAttemptScore !== undefined) return true;
+  if (lesson.userAnswers && Object.keys(lesson.userAnswers).length > 0) return true;
+  return false;
+}
+
 function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: ReadingLesson, needsUpload: boolean } {
-  const localSolved = !!local.userAnswers;
-  const cloudSolved = !!cloud.userAnswers;
+  const localSolved = isLessonSolved(local);
+  const cloudSolved = isLessonSolved(cloud);
   
   if (localSolved && !cloudSolved) {
     return { merged: local, needsUpload: true };
@@ -218,8 +224,8 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
   }
   
   if (localSolved && cloudSolved) {
-    const localTime = local.solvedAt || 0;
-    const cloudTime = cloud.solvedAt || 0;
+    const localTime = local.solvedAt || local.createdAt || 0;
+    const cloudTime = cloud.solvedAt || cloud.createdAt || 0;
     if (localTime >= cloudTime) {
       return { merged: local, needsUpload: localTime > cloudTime };
     } else {
