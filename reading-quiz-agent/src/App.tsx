@@ -254,6 +254,9 @@ export default function App() {
     const cleanedId = newId.trim().toLowerCase();
     setUserId(cleanedId);
     safeSetLocalStorage('eng_user_id', cleanedId);
+    if (cleanedId) {
+      performCloudSync(cleanedId, true);
+    }
   };
 
   // Injected quizzes (includes standard ones + oldest past mistakes) calculated synchronously
@@ -341,8 +344,8 @@ export default function App() {
   }, []);
 
   // Perform comprehensive multi-device cloud synchronization
-  const performCloudSync = async (targetUserId?: string) => {
-    const uid = targetUserId || userId;
+  const performCloudSync = async (targetUserId?: string, showToast = false) => {
+    const uid = (targetUserId || userId || '').trim().toLowerCase();
     if (!uid) {
       setSyncStatus('idle');
       return;
@@ -359,6 +362,23 @@ export default function App() {
       const syncedList = await syncUserLessons(uid, localList);
       setLessonsHistory(syncedList);
       safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(syncedList));
+
+      // 1.1 Pre-fetch sentence analysis caches for synced lessons in parallel
+      syncedList.forEach(async (l) => {
+        if (!l || !l.id || l.id.startsWith('preset-')) return;
+        try {
+          const localC = localStorage.getItem(`eng_passage_analysis_${l.id}`);
+          if (!localC) {
+            const cloudAnalysis = await loadPassageAnalysisFromCloud(l.id);
+            if (cloudAnalysis) {
+              safeSetLocalStorage(`eng_passage_analysis_${l.id}`, JSON.stringify(cloudAnalysis));
+              saveToIndexedDB(STORE_ANALYSIS, l.id, cloudAnalysis);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to prefetch passage analysis for lesson:", l.id, e);
+        }
+      });
 
       // Update activeLesson if it matches a synced custom lesson
       setActiveLesson(prev => {
@@ -453,10 +473,16 @@ export default function App() {
       }
 
       setSyncStatus('synced');
+      if (showToast) {
+        alert(`☁️ [클라우드 데이터 복사 완료]\n\n계정 '${uid}'에 보관된 총 ${syncedList.length}개의 지문 및 모든 SVOC 문법 분석/오답 노트를 완벽하게 이 기기로 복사해왔습니다! ✨`);
+      }
     } catch (err: any) {
       console.error("Cloud sync failed:", err);
       setSyncStatus('error');
       setSyncError(err.message || "동기화 오류");
+      if (showToast) {
+        alert(`⚠️ 클라우드 동기화 중 오류 발생: ${err.message || "동기화 실패"}`);
+      }
     }
   };
 
@@ -2012,7 +2038,7 @@ ${quiz.rationale}`;
         mochiQuizDeckId={mochiQuizDeckId}
         onSaveMochiQuizDeckId={handleSaveMochiQuizDeckId}
         syncStatus={syncStatus}
-        onTriggerCloudSync={() => performCloudSync()}
+        onTriggerCloudSync={() => performCloudSync(userId, true)}
       />
 
       {/* Shared quiz exit warning overlay banner */}

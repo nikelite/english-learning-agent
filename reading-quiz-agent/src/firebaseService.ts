@@ -47,8 +47,11 @@ export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string |
       createdAt: lesson.createdAt || Date.now()
     };
     
-    if (userId && !docData.ownerId) {
-      docData.ownerId = userId;
+    if (userId) {
+      const normalizedUid = userId.trim().toLowerCase();
+      if (!docData.ownerId || docData.ownerId === 'guest') {
+        docData.ownerId = normalizedUid;
+      }
     }
     if (!docData.sharedWith) {
       docData.sharedWith = [];
