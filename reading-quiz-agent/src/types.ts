@@ -38,6 +38,7 @@ export interface ReadingLesson {
   solvedAt?: number;
   firstAttemptScore?: { score: number; total: number };
   retryHistory?: Array<{ score: number; total: number; solvedAt: number }>;
+  isArchived?: boolean;
 }
 
 export interface WrongReadingAnswer {

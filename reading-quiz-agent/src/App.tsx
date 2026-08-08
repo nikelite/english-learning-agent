@@ -219,7 +219,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'pending'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'unsolved' | 'solved' | 'pending' | 'archived'>('all');
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
   const [isBulkGenerating, setIsBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
@@ -802,6 +802,54 @@ export default function App() {
         }
       }
     }
+  };
+
+  const handleToggleArchiveSingleLesson = async (e: React.MouseEvent, lessonId: string) => {
+    e.stopPropagation();
+    let isArchivedNow = false;
+
+    setLessonsHistory(prev => {
+      const updated = prev.map(item => {
+        if (item.id === lessonId) {
+          isArchivedNow = !item.isArchived;
+          const updatedItem = { ...item, isArchived: isArchivedNow };
+          if (userId && !updatedItem.id.startsWith('preset-')) {
+            saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive single update failed:", err));
+          }
+          return updatedItem;
+        }
+        return item;
+      });
+      safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleBulkArchiveLessons = async (archiveState: boolean) => {
+    if (selectedPendingIds.size === 0) return;
+    const idsToToggle = Array.from(selectedPendingIds);
+
+    setLessonsHistory(prev => {
+      const updated = prev.map(item => {
+        if (selectedPendingIds.has(item.id)) {
+          const updatedItem = { ...item, isArchived: archiveState };
+          if (userId && !updatedItem.id.startsWith('preset-')) {
+            saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive bulk update failed:", err));
+          }
+          return updatedItem;
+        }
+        return item;
+      });
+      safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
+      return updated;
+    });
+
+    setSelectedPendingIds(new Set());
+    
+    alert(archiveState 
+      ? `📦 선택하신 ${idsToToggle.length}개 지문이 보관함(아카이브)으로 이동되었습니다.` 
+      : `📥 선택하신 ${idsToToggle.length}개 지문이 보관함에서 복원되었습니다.`
+    );
   };
 
   const handleBulkDeleteLessons = async () => {
@@ -1907,10 +1955,19 @@ ${quiz.rationale}`;
 
   const nextUnsolvedLesson = getNextUnsolvedLesson();
 
+  const nonArchivedHistory = lessonsHistory.filter(item => !item.isArchived);
+  const archivedHistory = lessonsHistory.filter(item => !!item.isArchived);
+
   const filteredHistory = lessonsHistory.filter(item => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.passageText.toLowerCase().includes(q);
     if (!matchesSearch) return false;
+
+    if (filterMode === 'archived') {
+      return !!item.isArchived;
+    }
+
+    if (item.isArchived) return false;
 
     if (filterMode === 'solved') {
       return !!item.userAnswers && !item.isPending;
@@ -1924,9 +1981,10 @@ ${quiz.rationale}`;
     return true;
   });
 
-  const solvedCount = lessonsHistory.filter(item => item.userAnswers && !item.isPending).length;
-  const unsolvedCount = lessonsHistory.filter(item => !item.userAnswers && !item.isPending).length;
-  const pendingCount = lessonsHistory.filter(item => item.isPending).length;
+  const solvedCount = nonArchivedHistory.filter(item => item.userAnswers && !item.isPending).length;
+  const unsolvedCount = nonArchivedHistory.filter(item => !item.userAnswers && !item.isPending).length;
+  const pendingCount = nonArchivedHistory.filter(item => item.isPending).length;
+  const archivedLessonCount = archivedHistory.length;
 
   const activeWrongCount = wrongAnswers.filter(wa => !wa.isArchived).length;
   const archivedWrongCount = wrongAnswers.filter(wa => wa.isArchived).length;
@@ -2218,7 +2276,7 @@ ${quiz.rationale}`;
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  전체 ({lessonsHistory.length})
+                  전체 ({nonArchivedHistory.length})
                 </button>
                 <button
                   onClick={() => setFilterMode('unsolved')}
@@ -2267,6 +2325,22 @@ ${quiz.rationale}`;
                   }}
                 >
                   분석 대기중 ({pendingCount})
+                </button>
+                <button
+                  onClick={() => setFilterMode('archived')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    border: filterMode === 'archived' ? '1px solid #c084fc' : '1px solid var(--border-color)',
+                    background: filterMode === 'archived' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    color: filterMode === 'archived' ? '#c084fc' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: filterMode === 'archived' ? '700' : '500',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  📦 보관함 ({archivedLessonCount})
                 </button>
               </div>
 
@@ -2425,6 +2499,25 @@ ${quiz.rationale}`;
                     >
                       📄 선택 일괄 PDF 출력
                     </button>
+                    {filterMode === 'archived' ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+                        onClick={() => handleBulkArchiveLessons(false)}
+                      >
+                        📥 선택 보관 해제 (복원)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+                        onClick={() => handleBulkArchiveLessons(true)}
+                      >
+                        📦 선택 아카이브 (보관)
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-danger btn-sm"
@@ -2623,6 +2716,24 @@ ${quiz.rationale}`;
                           title="제목 수정"
                         >
                           <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => handleToggleArchiveSingleLesson(e, item.id)}
+                          className="btn"
+                          style={{
+                            padding: '0.45rem',
+                            borderRadius: '6px',
+                            background: item.isArchived ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)',
+                            color: '#c084fc',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title={item.isArchived ? "보관함에서 복원" : "보관함(아카이브)으로 이동"}
+                        >
+                          {item.isArchived ? '📥' : '📦'}
                         </button>
                         <button
                           onClick={(e) => handleDeleteHistory(e, item.id)}
