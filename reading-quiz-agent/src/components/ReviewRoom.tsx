@@ -300,7 +300,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                     {quizItem.question}
                   </h4>
 
-                  <QuizContextSentence questionText={quizItem.question} lesson={lesson} />
+                  <QuizContextSentence questionText={quizItem.question} lesson={lesson} choices={quizItem.choices} />
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {quizItem.choices.map((choice, idx) => {

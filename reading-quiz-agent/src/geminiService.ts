@@ -405,6 +405,10 @@ Strict Target & Formatting Rules:
      - 'expression': Key idioms, collocations, or common English expressions found in the text.
      - 'context': Thematic terms, context markers, or cultural backgrounds essential to understand the passage.
    - For each item, you must specify the 'type' (which must be 'vocabulary', 'grammar', 'expression', or 'context') and a 'contextNote' in KOREAN providing a clear grammatical explanation, context detail, or translation tip.
+5. CRITICAL COMPLETE QUESTION RULE FOR FILL-IN-THE-BLANK / GRAMMAR QUIZZES:
+   - When asking fill-in-the-blank or sentence completion questions (e.g., "Select the grammatically correct phrase...", "Which word best fits...", "Complete the sentence..."), you MUST INCLUDE THE FULL TARGET SENTENCE WITH A BLANK ("_______") directly inside the "question" text string!
+   - Example CORRECT: "Select the grammatically correct phrase to complete the sentence: 'Looking up at the sky, we saw _______ moving across the horizon.'"
+   - Example INCORRECT (FORBIDDEN): "Select the grammatically correct phrase to complete the sentence:" (WITHOUT any sentence or blank). NEVER output empty or sentence-less question stems!
 
 Strict JSON Schema Requirements:
 {
@@ -573,9 +577,26 @@ export async function generateReadingLesson(
           remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
         });
 
+        let questionText = q.question || "문제가 생성되지 않았습니다.";
+        
+        // Auto-repair fill-in-the-blank questions if Gemini omitted the target sentence string
+        const lowerQ = questionText.toLowerCase();
+        if (
+          (lowerQ.includes("complete the sentence") || lowerQ.includes("fill in the blank") || lowerQ.includes("grammatically correct phrase")) &&
+          !questionText.includes("_______") &&
+          !questionText.includes("_") &&
+          !questionText.includes('"') &&
+          !questionText.includes("'")
+        ) {
+          const matchQuote = remappedRationale?.match(/["']([^"']{10,})["']/);
+          if (matchQuote) {
+            questionText = `${questionText} "${matchQuote[1]}"`;
+          }
+        }
+
         return {
           id: `read-q-${Date.now()}-${idx}`,
-          question: q.question || "문제가 생성되지 않았습니다.",
+          question: questionText,
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
           rationale: remappedRationale,

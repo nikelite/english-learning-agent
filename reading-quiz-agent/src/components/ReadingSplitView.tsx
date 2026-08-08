@@ -1341,7 +1341,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                             </button>
                           </h5>
                           
-                          <QuizContextSentence questionText={quiz.question} lesson={lesson} />
+                          <QuizContextSentence questionText={quiz.question} lesson={lesson} choices={quiz.choices} />
                           
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', marginTop: '1rem' }}>
                             {quiz.choices.map((choice, cIdx) => {
@@ -1435,7 +1435,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                       {activeQuestion.question}
                     </div>
 
-                    <QuizContextSentence questionText={activeQuestion.question} lesson={lesson} />
+                    <QuizContextSentence questionText={activeQuestion.question} lesson={lesson} choices={activeQuestion.choices} />
 
                     {/* Choices buttons */}
                     <div className="quiz-choices">

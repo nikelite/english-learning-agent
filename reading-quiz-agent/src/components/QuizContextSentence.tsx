@@ -8,21 +8,33 @@ export interface ContextSentenceMatch {
   paragraphNum: number | null;
 }
 
-export const getContextSentence = (questionText: string, lesson?: ReadingLesson | null): ContextSentenceMatch | null => {
+export const getContextSentence = (questionText: string, lesson?: ReadingLesson | null, choices?: string[]): ContextSentenceMatch | null => {
   if (!lesson || !lesson.paragraphs || lesson.paragraphs.length === 0) return null;
 
   // 1. Extract the target word/phrase inside single/double quotes or standard quotes
-  const wordMatch = questionText.match(/['"“‘]([^'"“”‘’.?!\r\n]{2,60})['"”’]/);
-  if (!wordMatch) return null;
-  const targetWord = wordMatch[1].trim();
+  let wordMatch = questionText.match(/['"“‘]([^'"“”‘’.?!\r\n]{2,60})['"”’]/);
+  let targetWord = wordMatch ? wordMatch[1].trim() : '';
+
+  // If no quoted target word, check if choices contain candidate target words to match in passage
+  if (!targetWord && choices && choices.length > 0) {
+    for (const choice of choices) {
+      const cleanChoice = choice.trim();
+      if (cleanChoice.length >= 3 && !cleanChoice.includes(' ') && !cleanChoice.includes('\n')) {
+        targetWord = cleanChoice;
+        break;
+      }
+    }
+  }
+
+  if (!targetWord && choices && choices.length > 0) {
+    targetWord = choices[0].trim();
+  }
+
+  if (!targetWord || targetWord.length < 2) return null;
 
   // 2. Extract paragraph number if present
   const paragraphMatch = questionText.match(/paragraph\s+(\d+)/i);
   const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1], 10) : null;
-
-  const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ''); // keep space!
-  const targetClean = clean(targetWord);
-  if (targetClean.length < 2) return null;
 
   // Helper to match target word inside a sentence
   const findSentenceMatch = (sentences: string[]): string | null => {
@@ -39,7 +51,7 @@ export const getContextSentence = (questionText: string, lesson?: ReadingLesson 
     if (match) return match;
 
     // Try stem/prefix match for longer single words
-    if (targetWord.length >= 5 && !targetWord.includes(' ')) {
+    if (targetWord.length >= 4 && !targetWord.includes(' ')) {
       const stem = targetWord.substring(0, targetWord.length - 2).toLowerCase();
       match = sentences.find(s => s.toLowerCase().includes(stem));
       if (match) return match;
@@ -83,10 +95,11 @@ export const getContextSentence = (questionText: string, lesson?: ReadingLesson 
 interface QuizContextSentenceProps {
   questionText: string;
   lesson?: ReadingLesson | null;
+  choices?: string[];
 }
 
-export const QuizContextSentence: React.FC<QuizContextSentenceProps> = ({ questionText, lesson }) => {
-  const match = getContextSentence(questionText, lesson);
+export const QuizContextSentence: React.FC<QuizContextSentenceProps> = ({ questionText, lesson, choices }) => {
+  const match = getContextSentence(questionText, lesson, choices);
   if (!match) return null;
 
   const { sentence, word, paragraphNum } = match;
