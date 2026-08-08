@@ -838,7 +838,7 @@ export default function App() {
       const updated = prev.map(item => {
         if (item.id === lessonId) {
           isArchivedNow = !item.isArchived;
-          const updatedItem = { ...item, isArchived: isArchivedNow };
+          const updatedItem = { ...item, isArchived: isArchivedNow, updatedAt: Date.now() };
           if (userId && !updatedItem.id.startsWith('preset-')) {
             saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive single update failed:", err));
           }
@@ -858,7 +858,7 @@ export default function App() {
     setLessonsHistory(prev => {
       const updated = prev.map(item => {
         if (selectedPendingIds.has(item.id)) {
-          const updatedItem = { ...item, isArchived: archiveState };
+          const updatedItem = { ...item, isArchived: archiveState, updatedAt: Date.now() };
           if (userId && !updatedItem.id.startsWith('preset-')) {
             saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive bulk update failed:", err));
           }

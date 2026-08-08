@@ -44,7 +44,8 @@ export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string |
     const docData: any = {
       ...lesson,
       id: docId,
-      createdAt: lesson.createdAt || Date.now()
+      createdAt: lesson.createdAt || Date.now(),
+      updatedAt: lesson.updatedAt || Date.now()
     };
     
     if (userId) {
@@ -215,34 +216,31 @@ function isLessonSolved(lesson: ReadingLesson): boolean {
 }
 
 function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: ReadingLesson, needsUpload: boolean } {
-  const localSolved = isLessonSolved(local);
-  const cloudSolved = isLessonSolved(cloud);
-  
-  if (localSolved && !cloudSolved) {
+  const localUpdated = local.updatedAt || local.solvedAt || local.createdAt || 0;
+  const cloudUpdated = cloud.updatedAt || cloud.solvedAt || cloud.createdAt || 0;
+
+  if (cloudUpdated > localUpdated) {
+    return { merged: cloud, needsUpload: false };
+  }
+
+  if (localUpdated > cloudUpdated) {
     return { merged: local, needsUpload: true };
   }
-  
-  if (!localSolved && cloudSolved) {
-    return { merged: cloud, needsUpload: false };
-  }
-  
-  if (localSolved && cloudSolved) {
-    const localTime = local.solvedAt || local.createdAt || 0;
-    const cloudTime = cloud.solvedAt || cloud.createdAt || 0;
-    if (localTime >= cloudTime) {
-      return { merged: local, needsUpload: localTime > cloudTime };
-    } else {
-      return { merged: cloud, needsUpload: false };
-    }
-  }
-  
-  const localCreated = local.createdAt || 0;
-  const cloudCreated = cloud.createdAt || 0;
-  if (localCreated >= cloudCreated) {
-    return { merged: local, needsUpload: localCreated > cloudCreated };
-  } else {
-    return { merged: cloud, needsUpload: false };
-  }
+
+  // Equal timestamps: Merge properties safely, preserving cloud archive & progress state
+  const merged: ReadingLesson = {
+    ...cloud,
+    ...local,
+    isArchived: cloud.isArchived !== undefined ? cloud.isArchived : local.isArchived,
+    userAnswers: cloud.userAnswers || local.userAnswers,
+    solvedAt: cloud.solvedAt || local.solvedAt,
+    firstAttemptScore: cloud.firstAttemptScore || local.firstAttemptScore,
+    retryHistory: cloud.retryHistory || local.retryHistory,
+    updatedAt: Math.max(localUpdated, cloudUpdated)
+  };
+
+  const needsUpload = merged.isArchived !== cloud.isArchived || !!merged.userAnswers !== !!cloud.userAnswers;
+  return { merged, needsUpload };
 }
 
 /**
