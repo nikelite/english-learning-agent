@@ -219,27 +219,29 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
   const localUpdated = local.updatedAt || local.solvedAt || local.createdAt || 0;
   const cloudUpdated = cloud.updatedAt || cloud.solvedAt || cloud.createdAt || 0;
 
-  if (cloudUpdated > localUpdated) {
+  // Backfill Rule: If EITHER local or cloud marked the lesson as archived, preserve true!
+  const isArchived = (local.isArchived === true || cloud.isArchived === true);
+
+  if (cloudUpdated > localUpdated && local.isArchived === cloud.isArchived) {
     return { merged: cloud, needsUpload: false };
   }
 
-  if (localUpdated > cloudUpdated) {
-    return { merged: local, needsUpload: true };
-  }
-
-  // Equal timestamps: Merge properties safely, preserving cloud archive & progress state
   const merged: ReadingLesson = {
     ...cloud,
     ...local,
-    isArchived: cloud.isArchived !== undefined ? cloud.isArchived : local.isArchived,
+    isArchived: isArchived,
     userAnswers: cloud.userAnswers || local.userAnswers,
     solvedAt: cloud.solvedAt || local.solvedAt,
     firstAttemptScore: cloud.firstAttemptScore || local.firstAttemptScore,
     retryHistory: cloud.retryHistory || local.retryHistory,
-    updatedAt: Math.max(localUpdated, cloudUpdated)
+    updatedAt: Math.max(localUpdated, cloudUpdated, isArchived ? Date.now() : 0)
   };
 
-  const needsUpload = merged.isArchived !== cloud.isArchived || !!merged.userAnswers !== !!cloud.userAnswers;
+  const needsUpload = (local.isArchived === true && cloud.isArchived !== true) ||
+                      merged.isArchived !== cloud.isArchived ||
+                      (!!local.userAnswers && !cloud.userAnswers) ||
+                      localUpdated > cloudUpdated;
+
   return { merged, needsUpload };
 }
 
