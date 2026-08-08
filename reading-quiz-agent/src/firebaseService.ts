@@ -216,31 +216,67 @@ function isLessonSolved(lesson: ReadingLesson): boolean {
 }
 
 function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: ReadingLesson, needsUpload: boolean } {
-  const localUpdated = local.updatedAt || local.solvedAt || local.createdAt || 0;
-  const cloudUpdated = cloud.updatedAt || cloud.solvedAt || cloud.createdAt || 0;
+  const localSolved = isLessonSolved(local);
+  const cloudSolved = isLessonSolved(cloud);
+  const localSolvedTime = local.solvedAt || 0;
+  const cloudSolvedTime = cloud.solvedAt || 0;
+  const localUpdated = local.updatedAt || localSolvedTime || local.createdAt || 0;
+  const cloudUpdated = cloud.updatedAt || cloudSolvedTime || cloud.createdAt || 0;
 
-  // Backfill Rule: If EITHER local or cloud marked the lesson as archived, preserve true!
+  // 1. Determine Archive state (OR-backfill rule: if either is true, preserve true)
   const isArchived = (local.isArchived === true || cloud.isArchived === true);
 
-  if (cloudUpdated > localUpdated && local.isArchived === cloud.isArchived) {
-    return { merged: cloud, needsUpload: false };
+  // 2. Determine Solved Progress state (userAnswers, solvedAt, firstAttemptScore, retryHistory)
+  let userAnswers = cloud.userAnswers;
+  let solvedAt = cloud.solvedAt;
+  let firstAttemptScore = cloud.firstAttemptScore;
+  let retryHistory = cloud.retryHistory;
+
+  if (localSolved && !cloudSolved) {
+    // Local is solved, Cloud is not -> Use local progress & backfill Cloud!
+    userAnswers = local.userAnswers;
+    solvedAt = local.solvedAt;
+    firstAttemptScore = local.firstAttemptScore;
+    retryHistory = local.retryHistory;
+  } else if (localSolved && cloudSolved) {
+    // Both are solved -> Pick whichever solved most recently, keeping best score records
+    if (localSolvedTime >= cloudSolvedTime) {
+      userAnswers = local.userAnswers;
+      solvedAt = local.solvedAt;
+      firstAttemptScore = local.firstAttemptScore || cloud.firstAttemptScore;
+      retryHistory = local.retryHistory || cloud.retryHistory;
+    } else {
+      userAnswers = cloud.userAnswers;
+      solvedAt = cloud.solvedAt;
+      firstAttemptScore = cloud.firstAttemptScore || local.firstAttemptScore;
+      retryHistory = cloud.retryHistory || local.retryHistory;
+    }
+  } else if (!localSolved && !cloudSolved) {
+    userAnswers = undefined;
+    solvedAt = undefined;
+    firstAttemptScore = undefined;
+    retryHistory = undefined;
   }
 
+  // Combine base fields (preferring newer content/edits)
+  const base = (cloudUpdated > localUpdated) ? { ...local, ...cloud } : { ...cloud, ...local };
+
   const merged: ReadingLesson = {
-    ...cloud,
-    ...local,
-    isArchived: isArchived,
-    userAnswers: cloud.userAnswers || local.userAnswers,
-    solvedAt: cloud.solvedAt || local.solvedAt,
-    firstAttemptScore: cloud.firstAttemptScore || local.firstAttemptScore,
-    retryHistory: cloud.retryHistory || local.retryHistory,
-    updatedAt: Math.max(localUpdated, cloudUpdated, isArchived ? Date.now() : 0)
+    ...base,
+    isArchived,
+    userAnswers,
+    solvedAt,
+    firstAttemptScore,
+    retryHistory,
+    updatedAt: Math.max(localUpdated, cloudUpdated, localSolvedTime, cloudSolvedTime)
   };
 
-  const needsUpload = (local.isArchived === true && cloud.isArchived !== true) ||
-                      merged.isArchived !== cloud.isArchived ||
-                      (!!local.userAnswers && !cloud.userAnswers) ||
-                      localUpdated > cloudUpdated;
+  // Determine if Cloud needs an upload/backfill
+  const needsUpload = 
+    (localSolved && !cloudSolved) || 
+    (local.isArchived === true && cloud.isArchived !== true) || 
+    (localSolved && cloudSolved && localSolvedTime > cloudSolvedTime) || 
+    localUpdated > cloudUpdated;
 
   return { merged, needsUpload };
 }
