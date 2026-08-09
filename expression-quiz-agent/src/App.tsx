@@ -482,21 +482,23 @@ export default function App() {
         }
       });
 
-      // Pad min time by 24 hours prior to startLocalTime to allow backward sliding
-      const paddedMinTime = Math.min(startLocalTime - 24 * 60 * 60 * 1000, globalMinTime);
-      const paddedMaxTime = Math.max(endLocalTime, globalMaxTime);
+      // Set maximum 3-day backward margin prior to the chosen startLocalTime
+      const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+      const fetchStartTime = startLocalTime - THREE_DAYS_MS;
+      const sliderMin = fetchStartTime;
+      const sliderMax = Math.max(endLocalTime, globalMaxTime);
 
-      const range = paddedMaxTime - paddedMinTime;
-      const startPct = range > 0 ? Math.max(0, Math.min(100, Math.round(((startLocalTime - paddedMinTime) / range) * 100))) : 0;
-      const endPct = range > 0 ? Math.max(0, Math.min(100, Math.round(((endLocalTime - paddedMinTime) / range) * 100))) : 100;
+      const range = sliderMax - sliderMin;
+      const startPct = range > 0 ? Math.max(0, Math.min(99, Math.round(((startLocalTime - sliderMin) / range) * 100))) : 0;
+      const endPct = 100;
 
       setRawFetchedMochiCards(allCards);
-      setSliderMinTime(paddedMinTime);
-      setSliderMaxTime(paddedMaxTime);
+      setSliderMinTime(sliderMin);
+      setSliderMaxTime(sliderMax);
       setSliderStartPercent(startPct);
       setSliderEndPercent(endPct);
 
-      applySliderFilter(allCards, paddedMinTime, paddedMaxTime, startPct, endPct);
+      applySliderFilter(allCards, sliderMin, sliderMax, startPct, endPct);
 
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
       const initialFiltered = allCards.filter(card => {
@@ -2431,7 +2433,7 @@ ${quiz.rationale}`;
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: 'white' }}>
-                              <span>🎛️ 실시간 타임 슬라이더 정밀 필터</span>
+                              <span>🎛️ 실시간 타임 슬라이더 (선택 시각 기준 최대 3일 전 여유 탐색)</span>
                               <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>⚡ 0ms 즉시반영</span>
                             </div>
                             <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#c084fc', fontFamily: 'monospace', background: 'rgba(0,0,0,0.3)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(192, 132, 252, 0.3)' }}>
