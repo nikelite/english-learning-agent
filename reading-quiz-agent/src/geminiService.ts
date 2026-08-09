@@ -1214,8 +1214,8 @@ export async function splitPassageIntoLessons(
     
     if (totalParts === 1) {
       // Create a single placeholder lesson for this chapter
-      const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
-      const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
+      const suffix = totalLessonsCount > 1 ? ` (${lessonCounter}/${totalLessonsCount})` : '';
+      const lessonTitle = `${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '') + suffix;
       lessonCounter++;
 
       lessons.push({
@@ -1256,8 +1256,8 @@ export async function splitPassageIntoLessons(
       for (let pIdx = 0; pIdx < totalPartsCount; pIdx++) {
         const partText = parts[pIdx].join(' ');
 
-        const prefix = totalLessonsCount > 1 ? `(${lessonCounter}/${totalLessonsCount}) ` : '';
-        const lessonTitle = `${prefix}${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '');
+        const suffix = totalLessonsCount > 1 ? ` (${lessonCounter}/${totalLessonsCount})` : '';
+        const lessonTitle = `${cleanBase}` + (semanticChapters.length > 1 ? ` - ${cleanChapterTitle}` : '') + suffix;
         lessonCounter++;
 
         lessons.push({
@@ -1387,9 +1387,19 @@ export function formatPdfFileName(title: string): string {
 
   let clean = title.trim();
 
-  // 1. Convert slash part notation (1/4) or (1-4) to clean (1of4) for file system safety
-  clean = clean.replace(/\((\d+)\s*[/|-]\s*(\d+)\)/g, '($1of$2)');
-  clean = clean.replace(/\b(\d+)\s*[/|-]\s*(\d+)\b/g, '$1of$2');
+  // 1. Extract part notation (e.g. (1/4), (1-4), (1of4)) if present anywhere in title
+  let partStr = '';
+  const partMatch = clean.match(/\((\d+)\s*[/|-|of]\s*(\d+)\)/i);
+  if (partMatch) {
+    partStr = `(${partMatch[1]}of${partMatch[2]})`;
+    clean = clean.replace(/\((\d+)\s*[/|-|of]\s*(\d+)\)/gi, '').trim();
+  } else {
+    const inlinePartMatch = clean.match(/\b(\d+)\s*[/|-|of]\s*(\d+)\b/i);
+    if (inlinePartMatch) {
+      partStr = `(${inlinePartMatch[1]}of${inlinePartMatch[2]})`;
+      clean = clean.replace(/\b(\d+)\s*[/|-|of]\s*(\d+)\b/gi, '').trim();
+    }
+  }
 
   // 2. Replace illegal filename characters with space: / \ : * ? " < > |
   clean = clean.replace(/[/\\:*?"<>|]/g, ' ').trim();
@@ -1408,9 +1418,15 @@ export function formatPdfFileName(title: string): string {
   // 5. Clean trailing dots, dashes, underscores, spaces
   clean = clean.replace(/[\s._-]+$/g, '').trim();
 
-  // 6. Limit overall length to max 40 characters for OS filename safety
-  if (clean.length > 40) {
-    clean = clean.substring(0, 37).trim() + "...";
+  // 6. Limit base title length so total filename length (including partStr suffix) <= 40
+  const maxBaseLength = partStr ? Math.max(15, 38 - partStr.length) : 40;
+  if (clean.length > maxBaseLength) {
+    clean = clean.substring(0, maxBaseLength - 3).trim() + "...";
+  }
+
+  // 7. Append partStr at the VERY BACK of filename
+  if (partStr) {
+    clean = `${clean} ${partStr}`;
   }
 
   return clean || "Reading_Lesson";
