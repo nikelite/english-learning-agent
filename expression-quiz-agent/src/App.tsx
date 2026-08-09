@@ -140,18 +140,18 @@ function extractMochiReviews(card: any): NormalizedReview[] {
     });
   }
 
-  // Fallback: If card has no reviews array/map, check card-level timestamps
+  // Fallback ONLY to explicit last-reviewed-at timestamp, NEVER created-at or updated-at!
   if (result.length === 0) {
-    const cardTimeRaw = card['last-reviewed-at'] || card.lastReviewedAt || card['updated-at'] || card.updatedAt || card['created-at'] || card.createdAt;
-    if (cardTimeRaw) {
+    const lastReviewedRaw = card['last-reviewed-at'] || card.lastReviewedAt;
+    if (lastReviewedRaw) {
       let tMs = 0;
-      if (typeof cardTimeRaw === 'number') {
-        tMs = cardTimeRaw < 1e11 ? cardTimeRaw * 1000 : cardTimeRaw;
-      } else if (typeof cardTimeRaw === 'string') {
-        const dateStr = cardTimeRaw.includes(' ') && !cardTimeRaw.includes('T') ? cardTimeRaw.replace(' ', 'T') : cardTimeRaw;
+      if (typeof lastReviewedRaw === 'number') {
+        tMs = lastReviewedRaw < 1e11 ? lastReviewedRaw * 1000 : lastReviewedRaw;
+      } else if (typeof lastReviewedRaw === 'string') {
+        const dateStr = lastReviewedRaw.includes(' ') && !lastReviewedRaw.includes('T') ? lastReviewedRaw.replace(' ', 'T') : lastReviewedRaw;
         tMs = new Date(dateStr).getTime();
-      } else if (typeof cardTimeRaw === 'object') {
-        const inner = cardTimeRaw.$date || cardTimeRaw.date;
+      } else if (typeof lastReviewedRaw === 'object') {
+        const inner = lastReviewedRaw.$date || lastReviewedRaw.date;
         if (inner) tMs = new Date(inner).getTime();
       }
 
