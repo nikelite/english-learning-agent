@@ -125,6 +125,31 @@ function extractMochiReviews(card: any): NormalizedReview[] {
     });
   }
 
+  // Fallback: If card has no reviews array/map, check card-level timestamps
+  if (result.length === 0) {
+    const cardTimeRaw = card['last-reviewed-at'] || card.lastReviewedAt || card['updated-at'] || card.updatedAt || card['created-at'] || card.createdAt;
+    if (cardTimeRaw) {
+      let tMs = 0;
+      if (typeof cardTimeRaw === 'number') {
+        tMs = cardTimeRaw < 1e11 ? cardTimeRaw * 1000 : cardTimeRaw;
+      } else if (typeof cardTimeRaw === 'string') {
+        const dateStr = cardTimeRaw.includes(' ') && !cardTimeRaw.includes('T') ? cardTimeRaw.replace(' ', 'T') : cardTimeRaw;
+        tMs = new Date(dateStr).getTime();
+      } else if (typeof cardTimeRaw === 'object') {
+        const inner = cardTimeRaw.$date || cardTimeRaw.date;
+        if (inner) tMs = new Date(inner).getTime();
+      }
+
+      if (!isNaN(tMs) && tMs > 0) {
+        result.push({
+          time: tMs,
+          dateStr: formatDisplayDateTime(tMs),
+          remembered: card.forgotten === true || card['forgotten?'] === true ? false : true
+        });
+      }
+    }
+  }
+
   return result;
 }
 
@@ -222,6 +247,13 @@ export default function App() {
   const [bulkProgress, setBulkProgress] = useState<{current: number, total: number} | null>(null);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState<boolean>(false);
 
+  // Time Range Slider States for Instant Real-Time Filtering
+  const [rawFetchedMochiCards, setRawFetchedMochiCards] = useState<any[]>([]);
+  const [sliderMinTime, setSliderMinTime] = useState<number>(0);
+  const [sliderMaxTime, setSliderMaxTime] = useState<number>(0);
+  const [sliderStartPercent, setSliderStartPercent] = useState<number>(0);
+  const [sliderEndPercent, setSliderEndPercent] = useState<number>(100);
+
   const handleApplyTimePreset = (preset: 'last_import' | '1h' | '6h' | '24h' | 'today' | '7d') => {
     const now = new Date();
     setSelectedMochiEndDateTime(formatDateTimeLocal(now));
@@ -278,6 +310,71 @@ export default function App() {
     }
   };
 
+  const applySliderFilter = (
+    cardsList: any[],
+    minT: number,
+    maxT: number,
+    startPct: number,
+    endPct: number,
+    incorrectOnly = filterIncorrectOnly,
+    pinnedInc = includePinned,
+    newInc = includeNewToReview,
+    excludeImp = excludeAlreadyImported
+  ) => {
+    if (!cardsList || cardsList.length === 0) {
+      setMochiCards([]);
+      setMochiTotalMatches(0);
+      return;
+    }
+
+    const range = maxT - minT;
+    const filterStartTime = range > 0 ? minT + (startPct / 100) * range : minT;
+    const filterEndTime = range > 0 ? minT + (endPct / 100) * range : maxT;
+
+    let reviewedInSlider = 0;
+    let forgottenInSlider = 0;
+
+    const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
+
+    const filtered = cardsList.filter(card => {
+      const reviews = extractMochiReviews(card);
+      const reviewsInSlider = reviews.filter(r => r.time >= filterStartTime && r.time <= filterEndTime);
+
+      let cardMatchesPeriod = false;
+      let cardForgetCountInSlider = 0;
+
+      if (reviewsInSlider.length > 0) {
+        cardMatchesPeriod = true;
+        reviewedInSlider++;
+        const failed = reviewsInSlider.filter(r => !r.remembered);
+        if (failed.length > 0) {
+          cardForgetCountInSlider = failed.length;
+          forgottenInSlider++;
+        }
+      }
+
+      card.mochiForgetCount = cardForgetCountInSlider;
+      card.mochiReviewedInPeriod = cardMatchesPeriod;
+
+      if (excludeImp && card.alreadyImported) return false;
+
+      const matchesPeriod = cardMatchesPeriod && (!incorrectOnly || cardForgetCountInSlider > 0);
+      const matchesPinned = pinnedInc && isCardPinned(card);
+      const matchesNew = newInc && card.mochiNewToReviewInPeriod;
+
+      return matchesPeriod || matchesPinned || matchesNew;
+    });
+
+    filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
+
+    setMochiTotalMatches(filtered.length);
+    setMochiTotalReviewed(reviewedInSlider);
+    setMochiTotalForgotten(forgottenInSlider);
+    setMochiTotalPinnedCount(filtered.filter(isCardPinned).length);
+    setMochiTotalNewToReviewCount(filtered.filter(c => c.mochiNewToReviewInPeriod).length);
+    setMochiCards(filtered.slice(0, 300));
+  };
+
   const handleSearchMochiCards = async () => {
     if (!mochiApiKey.trim()) return;
 
@@ -303,11 +400,8 @@ export default function App() {
         setMochiLoadedCount(count);
       });
       
-      const startLocalTime = new Date(selectedMochiStartDateTime).getTime();
-      const endLocalTime = new Date(selectedMochiEndDateTime).getTime();
-
-      let reviewed = 0;
-      let forgotten = 0;
+      let globalMinTime = startLocalTime;
+      let globalMaxTime = endLocalTime;
 
       allCards.forEach(card => {
         card.mochiForgetCount = 0;
@@ -322,6 +416,14 @@ export default function App() {
         // Compute total overall forgets in entire history
         const allFailedReviews = normalizedReviews.filter(r => !r.remembered);
         card.mochiTotalForgetCount = allFailedReviews.length;
+
+        // Track global min and max review times for slider bounds
+        normalizedReviews.forEach(r => {
+          if (r.time > 0) {
+            if (r.time < globalMinTime) globalMinTime = r.time;
+            if (r.time > globalMaxTime) globalMaxTime = r.time;
+          }
+        });
 
         // Compute overall latest review
         const sortedReviews = [...normalizedReviews].sort((a, b) => b.time - a.time);
@@ -340,12 +442,10 @@ export default function App() {
         const reviewsInPeriod = normalizedReviews.filter(r => r.time >= startLocalTime && r.time <= endLocalTime);
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
-          reviewed++;
 
           const failedInPeriod = reviewsInPeriod.filter(r => !r.remembered);
           if (failedInPeriod.length > 0) {
             card.mochiForgetCount = failedInPeriod.length;
-            forgotten++;
           }
 
           const latestInPeriod = [...reviewsInPeriod].sort((a, b) => b.time - a.time)[0];
@@ -365,13 +465,16 @@ export default function App() {
         }
       });
 
-      setMochiTotalReviewed(reviewed);
-      setMochiTotalForgotten(forgotten);
+      setRawFetchedMochiCards(allCards);
+      setSliderMinTime(globalMinTime);
+      setSliderMaxTime(globalMaxTime);
+      setSliderStartPercent(0);
+      setSliderEndPercent(100);
 
-      // Display cards reviewed in the selected period OR pinned cards OR new to review cards
+      applySliderFilter(allCards, globalMinTime, globalMaxTime, 0, 100);
+
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
-
-      let filtered = allCards.filter(card => {
+      const initialFiltered = allCards.filter(card => {
         if (excludeAlreadyImported && card.alreadyImported) return false;
         const matchesPeriod = card.mochiReviewedInPeriod && (!filterIncorrectOnly || card.mochiForgetCount > 0);
         const matchesPinned = includePinned && isCardPinned(card);
@@ -379,19 +482,13 @@ export default function App() {
         return matchesPeriod || matchesPinned || matchesNewToReview;
       });
 
-      // Sort: cards reviewed more recently (higher mochiLatestReviewTime) appear first
-      filtered.sort((a, b) => (b.mochiLatestReviewTime || 0) - (a.mochiLatestReviewTime || 0));
-
-      setMochiTotalMatches(filtered.length);
-      setMochiTotalPinnedCount(filtered.filter(isCardPinned).length);
-      setMochiTotalNewToReviewCount(filtered.filter(c => c.mochiNewToReviewInPeriod).length);
-      setMochiCards(filtered.slice(0, 300));
-      if (filtered.length === 0) {
+      if (initialFiltered.length === 0) {
         const periodStr = `${formatDisplayDateTime(startLocalTime)} ~ ${formatDisplayDateTime(endLocalTime)}`;
-        if (reviewed > 0 && filterIncorrectOnly) {
-          setMochiError(`${periodStr} 기간에 복습을 진행한 카드는 총 ${reviewed}개 검색되었으나 모두 맞혀서 틀린(Forgot) 카드가 존재하지 않습니다. ('틀린 카드만 필터링' 체크 해제 시 전체 복습 카드 표시)`);
+        const totalReviewedInAll = allCards.filter(c => c.mochiReviewedInPeriod).length;
+        if (totalReviewedInAll > 0 && filterIncorrectOnly) {
+          setMochiError(`${periodStr} 기간에 복습한 카드는 총 ${totalReviewedInAll}개 검색되었으나 모두 맞혀서 틀린(Forgot) 카드가 존재하지 않습니다. ('틀린 카드만 필터링' 체크 해제 또는 아래 타임 슬라이더를 조절해 보세요)`);
         } else {
-          setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
+          setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다. ('7일 전' 버튼을 눌러 전체 카드를 조회한 후 타임 슬라이더로 조절해 보세요!)`);
         }
         setIsMochiSearchExpanded(true);
       } else {
@@ -2237,7 +2334,11 @@ ${quiz.rationale}`;
                           <input
                             type="checkbox"
                             checked={filterIncorrectOnly}
-                            onChange={(e) => setFilterIncorrectOnly(e.target.checked)}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setFilterIncorrectOnly(val);
+                              applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, sliderStartPercent, sliderEndPercent, val);
+                            }}
                             disabled={isMochiLoading}
                             style={{ accentColor: 'var(--primary)' }}
                           />
@@ -2248,7 +2349,11 @@ ${quiz.rationale}`;
                           <input
                             type="checkbox"
                             checked={includePinned}
-                            onChange={(e) => setIncludePinned(e.target.checked)}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setIncludePinned(val);
+                              applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, sliderStartPercent, sliderEndPercent, filterIncorrectOnly, val);
+                            }}
                             disabled={isMochiLoading}
                             style={{ accentColor: 'var(--primary)' }}
                           />
@@ -2259,7 +2364,11 @@ ${quiz.rationale}`;
                           <input
                             type="checkbox"
                             checked={includeNewToReview}
-                            onChange={(e) => setIncludeNewToReview(e.target.checked)}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setIncludeNewToReview(val);
+                              applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, sliderStartPercent, sliderEndPercent, filterIncorrectOnly, includePinned, val);
+                            }}
                             disabled={isMochiLoading}
                             style={{ accentColor: 'var(--primary)' }}
                           />
@@ -2270,13 +2379,81 @@ ${quiz.rationale}`;
                           <input
                             type="checkbox"
                             checked={excludeAlreadyImported}
-                            onChange={(e) => setExcludeAlreadyImported(e.target.checked)}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setExcludeAlreadyImported(val);
+                              applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, sliderStartPercent, sliderEndPercent, filterIncorrectOnly, includePinned, includeNewToReview, val);
+                            }}
                             disabled={isMochiLoading}
                             style={{ accentColor: 'var(--primary)' }}
                           />
                           <span>이미 보관함에 가져온 카드(✅) 검색 결과에서 자동 제외</span>
                         </label>
                       </div>
+
+                      {/* Interactive Time Range Slider */}
+                      {sliderMaxTime > sliderMinTime && rawFetchedMochiCards.length > 0 && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.12))',
+                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          borderRadius: '12px',
+                          padding: '0.85rem 1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.65rem',
+                          marginTop: '0.4rem'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: 'white' }}>
+                              <span>🎛️ 실시간 타임 슬라이더 정밀 필터</span>
+                              <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>⚡ 0ms 즉시반영</span>
+                            </div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#c084fc', fontFamily: 'monospace', background: 'rgba(0,0,0,0.3)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(192, 132, 252, 0.3)' }}>
+                              🕒 {formatDisplayDateTime(sliderMinTime + (sliderStartPercent / 100) * (sliderMaxTime - sliderMinTime))} ~ {formatDisplayDateTime(sliderMinTime + (sliderEndPercent / 100) * (sliderMaxTime - sliderMinTime))}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span>시작 시각 슬라이더 ({sliderStartPercent}%)</span>
+                                <span style={{ color: 'white', fontWeight: '600' }}>{formatDisplayDateTime(sliderMinTime + (sliderStartPercent / 100) * (sliderMaxTime - sliderMinTime))}</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={Math.min(99, sliderEndPercent - 1)}
+                                value={sliderStartPercent}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setSliderStartPercent(val);
+                                  applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, val, sliderEndPercent);
+                                }}
+                                style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer', height: '6px' }}
+                              />
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span>종료 시각 슬라이더 ({sliderEndPercent}%)</span>
+                                <span style={{ color: 'white', fontWeight: '600' }}>{formatDisplayDateTime(sliderMinTime + (sliderEndPercent / 100) * (sliderMaxTime - sliderMinTime))}</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={Math.max(1, sliderStartPercent + 1)}
+                                max={100}
+                                value={sliderEndPercent}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setSliderEndPercent(val);
+                                  applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, sliderStartPercent, val);
+                                }}
+                                style={{ width: '100%', accentColor: 'var(--secondary)', cursor: 'pointer', height: '6px' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ 
