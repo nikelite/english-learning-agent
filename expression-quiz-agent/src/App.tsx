@@ -26,6 +26,26 @@ import {
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, fetchMochiCards, createMochiCard } from './mochiService';
 
+function formatDateTimeLocal(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function formatDisplayDateTime(timestamp: number): string {
+  if (!timestamp) return '기록 없음';
+  const d = new Date(timestamp);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+
 export default function App() {
   // 1. API Key State
   const [apiKey, setApiKey] = useState<string>(() => {
@@ -83,20 +103,27 @@ export default function App() {
   const [isMochiModalOpen, setIsMochiModalOpen] = useState(false);
   const [mochiDecks, setMochiDecks] = useState<any[]>([]);
   const [selectedMochiDeck, setSelectedMochiDeck] = useState<string>('all');
-  const [selectedMochiStartDate, setSelectedMochiStartDate] = useState<string>(() => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+
+  const [lastImportedReviewTime, setLastImportedReviewTime] = useState<number>(() => {
+    const saved = localStorage.getItem('mochi_last_imported_time');
+    return saved ? parseInt(saved, 10) : 0;
   });
-  const [selectedMochiEndDate, setSelectedMochiEndDate] = useState<string>(() => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+
+  const [selectedMochiStartDateTime, setSelectedMochiStartDateTime] = useState<string>(() => {
+    const saved = localStorage.getItem('mochi_last_imported_time');
+    if (saved) {
+      const t = parseInt(saved, 10);
+      if (!isNaN(t) && t > 0) {
+        return formatDateTimeLocal(new Date(t + 1000));
+      }
+    }
+    return formatDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000));
   });
+
+  const [selectedMochiEndDateTime, setSelectedMochiEndDateTime] = useState<string>(() => {
+    return formatDateTimeLocal(new Date());
+  });
+
   const [mochiCards, setMochiCards] = useState<any[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [mochiTotalMatches, setMochiTotalMatches] = useState<number>(0);
@@ -117,6 +144,32 @@ export default function App() {
   const [bulkProgress, setBulkProgress] = useState<{current: number, total: number} | null>(null);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState<boolean>(false);
 
+  const handleApplyTimePreset = (preset: 'last_import' | '1h' | '6h' | '24h' | 'today' | '7d') => {
+    const now = new Date();
+    setSelectedMochiEndDateTime(formatDateTimeLocal(now));
+
+    if (preset === 'last_import') {
+      const saved = localStorage.getItem('mochi_last_imported_time');
+      const t = saved ? parseInt(saved, 10) : 0;
+      if (t > 0) {
+        setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(t + 1000)));
+        return;
+      }
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+    } else if (preset === '1h') {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 1 * 60 * 60 * 1000)));
+    } else if (preset === '6h') {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 6 * 60 * 60 * 1000)));
+    } else if (preset === '24h') {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+    } else if (preset === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      setSelectedMochiStartDateTime(formatDateTimeLocal(todayStart));
+    } else if (preset === '7d') {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)));
+    }
+  };
+
   const handleOpenMochiModal = async () => {
     setIsMochiModalOpen(true);
     setMochiError(null);
@@ -129,6 +182,16 @@ export default function App() {
     setMochiTotalNewToReviewCount(0);
     setMochiLoadedCount(0);
     setIsMochiSearchExpanded(true);
+
+    const savedLast = localStorage.getItem('mochi_last_imported_time');
+    const lastT = savedLast ? parseInt(savedLast, 10) : 0;
+    setLastImportedReviewTime(lastT);
+    if (lastT > 0) {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(lastT + 1000)));
+    } else {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000)));
+    }
+    setSelectedMochiEndDateTime(formatDateTimeLocal(new Date()));
     
     if (!mochiApiKey.trim()) {
       return;
@@ -147,8 +210,12 @@ export default function App() {
 
   const handleSearchMochiCards = async () => {
     if (!mochiApiKey.trim()) return;
-    if (selectedMochiStartDate > selectedMochiEndDate) {
-      setMochiError("시작 날짜는 종료 날짜보다 이전이어야 합니다.");
+
+    const startLocalTime = new Date(selectedMochiStartDateTime).getTime();
+    const endLocalTime = new Date(selectedMochiEndDateTime).getTime();
+
+    if (startLocalTime > endLocalTime) {
+      setMochiError("시작 일시는 종료 일시보다 이전이어야 합니다.");
       return;
     }
     setIsMochiLoading(true);
@@ -166,8 +233,8 @@ export default function App() {
         setMochiLoadedCount(count);
       });
       
-      const startLocalTime = new Date(selectedMochiStartDate + 'T00:00:00').getTime();
-      const endLocalTime = new Date(selectedMochiEndDate + 'T23:59:59.999').getTime();
+      const startLocalTime = new Date(selectedMochiStartDateTime).getTime();
+      const endLocalTime = new Date(selectedMochiEndDateTime).getTime();
       
       const isWithinDateRangeLocal = (reviewDateObj: any) => {
         if (!reviewDateObj) return false;
@@ -330,9 +397,7 @@ export default function App() {
       setMochiTotalNewToReviewCount(filtered.filter(c => c.mochiNewToReviewInPeriod).length);
       setMochiCards(filtered.slice(0, 300));
       if (filtered.length === 0) {
-        const periodStr = selectedMochiStartDate === selectedMochiEndDate 
-          ? selectedMochiStartDate 
-          : `${selectedMochiStartDate} ~ ${selectedMochiEndDate}`;
+        const periodStr = `${formatDisplayDateTime(startLocalTime)} ~ ${formatDisplayDateTime(endLocalTime)}`;
         setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
         setIsMochiSearchExpanded(true);
       } else {
@@ -357,9 +422,14 @@ export default function App() {
 
     try {
       let lastImportedLesson: Lesson | null = null;
+      let maxReviewTime = 0;
 
       for (let i = 0; i < selectedCardsList.length; i++) {
         const card = selectedCardsList[i];
+        if (card.mochiLatestReviewTime && card.mochiLatestReviewTime > maxReviewTime) {
+          maxReviewTime = card.mochiLatestReviewTime;
+        }
+
         setMochiImportingProgress({ current: i + 1, total: selectedCardsList.length });
 
         const text = card.content 
@@ -387,6 +457,11 @@ export default function App() {
         // Save directly to lessons history library
         const saved = await saveLessonToHistory(draftLesson);
         lastImportedLesson = saved;
+      }
+
+      if (maxReviewTime > 0) {
+        localStorage.setItem('mochi_last_imported_time', maxReviewTime.toString());
+        setLastImportedReviewTime(maxReviewTime);
       }
 
       if (selectedCardsList.length === 1 && lastImportedLesson) {
@@ -2077,6 +2152,38 @@ ${quiz.rationale}`;
                   {/* Search Settings */}
                   {isMochiSearchExpanded ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {/* Timezone and Last Import indicator */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        <span>🌐 시간 기준: <strong style={{ color: 'var(--secondary)' }}>한국 표준시 (KST / UTC+9)</strong> (현지 시각 자동 환산)</span>
+                        {lastImportedReviewTime > 0 && (
+                          <span style={{ color: '#c084fc', fontWeight: '600' }}>
+                            📌 마지막 카드 가져온 시각: <strong>{formatDisplayDateTime(lastImportedReviewTime)}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick Presets Bar */}
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '600' }}>⚡ 빠른 시간 선택:</span>
+                        {lastImportedReviewTime > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.2rem 0.55rem', fontSize: '0.7rem', background: 'rgba(139, 92, 246, 0.2)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontWeight: '700' }}
+                            onClick={() => handleApplyTimePreset('last_import')}
+                            disabled={isMochiLoading}
+                            title={`마지막으로 가져온 복습 시각(${formatDisplayDateTime(lastImportedReviewTime)}) 1분 후부터 자동 지정`}
+                          >
+                            📌 마지막 가져온 시각 이후
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('1h')} disabled={isMochiLoading}>1시간 전</button>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('6h')} disabled={isMochiLoading}>6시간 전</button>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('24h')} disabled={isMochiLoading}>24시간 전</button>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('today')} disabled={isMochiLoading}>오늘 00:00</button>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('7d')} disabled={isMochiLoading}>7일 전</button>
+                      </div>
+
                       <div className="mochi-search-grid">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                           <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>선택 덱 (Deck)</label>
@@ -2097,25 +2204,25 @@ ${quiz.rationale}`;
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>시작 날짜 (Start)</label>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>시작 일시 (Start Time)</label>
                           <input
-                            type="date"
-                            value={selectedMochiStartDate}
-                            onChange={(e) => setSelectedMochiStartDate(e.target.value)}
+                            type="datetime-local"
+                            value={selectedMochiStartDateTime}
+                            onChange={(e) => setSelectedMochiStartDateTime(e.target.value)}
                             className="input-glow"
-                            style={{ height: '40px' }}
+                            style={{ height: '40px', fontSize: '0.8rem' }}
                             disabled={isMochiLoading}
                           />
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>종료 날짜 (End)</label>
+                          <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>종료 일시 (End Time)</label>
                           <input
-                            type="date"
-                            value={selectedMochiEndDate}
-                            onChange={(e) => setSelectedMochiEndDate(e.target.value)}
+                            type="datetime-local"
+                            value={selectedMochiEndDateTime}
+                            onChange={(e) => setSelectedMochiEndDateTime(e.target.value)}
                             className="input-glow"
-                            style={{ height: '40px' }}
+                            style={{ height: '40px', fontSize: '0.8rem' }}
                             disabled={isMochiLoading}
                           />
                         </div>
@@ -2180,7 +2287,7 @@ ${quiz.rationale}`;
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 0.6rem', alignItems: 'center', color: 'var(--text-secondary)' }}>
                         <span style={{ color: 'var(--primary)', fontWeight: '700' }}>🔍 {mochiDecks.find(d => d.id === selectedMochiDeck)?.name || '모든 덱'}</span>
                         <span style={{ opacity: 0.3 }}>|</span>
-                        <span>{selectedMochiStartDate === selectedMochiEndDate ? selectedMochiStartDate : `${selectedMochiStartDate} ~ ${selectedMochiEndDate}`}</span>
+                        <span>{formatDisplayDateTime(new Date(selectedMochiStartDateTime).getTime())} ~ {formatDisplayDateTime(new Date(selectedMochiEndDateTime).getTime())}</span>
                         <span style={{ opacity: 0.3 }}>|</span>
                         <span style={{ opacity: 0.75 }}>
                           {filterIncorrectOnly ? '❌ 틀린 카드만' : '전체 복습 카드'}
