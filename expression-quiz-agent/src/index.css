@@ -700,28 +700,9 @@ h1, h2, h3, h4, h5 {
 /* Custom Responsive Styles for Mochi modal search options */
 .mochi-search-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
   align-items: flex-end;
-}
-
-@media (max-width: 768px) {
-  .mochi-search-grid {
-    grid-template-columns: 1.2fr 1fr 1fr;
-  }
-  .mochi-search-grid button {
-    grid-column: span 3;
-    width: 100%;
-  }
-}
-
-@media (max-width: 580px) {
-  .mochi-search-grid {
-    grid-template-columns: 1fr;
-  }
-  .mochi-search-grid button {
-    grid-column: span 1;
-  }
 }
 
 /* Lesson Item Card (Responsive) */

@@ -2226,17 +2226,17 @@ ${quiz.rationale}`;
                             disabled={isMochiLoading}
                           />
                         </div>
-
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={handleSearchMochiCards}
-                          disabled={isMochiLoading}
-                          style={{ height: '40px', padding: '0 1.25rem' }}
-                        >
-                          {isMochiLoading ? '조회 중...' : '카드 조회'}
-                        </button>
                       </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={handleSearchMochiCards}
+                        disabled={isMochiLoading}
+                        style={{ height: '42px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: '700', fontSize: '0.9rem', marginTop: '0.25rem' }}
+                      >
+                        🔍 {isMochiLoading ? 'Mochi 카드 데이터 불러오는 중...' : '조건에 맞는 Mochi 카드 조회'}
+                      </button>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.25rem' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
