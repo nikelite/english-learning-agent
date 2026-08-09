@@ -46,6 +46,15 @@ function formatDisplayDateTime(timestamp: number): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
+function getNextMinuteStartDateTime(timestamp: number): string {
+  if (!timestamp || isNaN(timestamp) || timestamp <= 0) {
+    return formatDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  }
+  // Ceiling to next minute boundary to prevent second/minute truncation overlap
+  const nextMinuteMs = Math.ceil((timestamp + 1000) / 60000) * 60000;
+  return formatDateTimeLocal(new Date(nextMinuteMs));
+}
+
 export default function App() {
   // 1. API Key State
   const [apiKey, setApiKey] = useState<string>(() => {
@@ -111,13 +120,8 @@ export default function App() {
 
   const [selectedMochiStartDateTime, setSelectedMochiStartDateTime] = useState<string>(() => {
     const saved = localStorage.getItem('mochi_last_imported_time');
-    if (saved) {
-      const t = parseInt(saved, 10);
-      if (!isNaN(t) && t > 0) {
-        return formatDateTimeLocal(new Date(t + 1000));
-      }
-    }
-    return formatDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    const t = saved ? parseInt(saved, 10) : 0;
+    return getNextMinuteStartDateTime(t);
   });
 
   const [selectedMochiEndDateTime, setSelectedMochiEndDateTime] = useState<string>(() => {
@@ -133,6 +137,7 @@ export default function App() {
   const [filterIncorrectOnly, setFilterIncorrectOnly] = useState(true);
   const [includePinned, setIncludePinned] = useState(true);
   const [includeNewToReview, setIncludeNewToReview] = useState(true);
+  const [excludeAlreadyImported, setExcludeAlreadyImported] = useState(true);
   const [mochiTotalReviewed, setMochiTotalReviewed] = useState<number>(0);
   const [mochiTotalForgotten, setMochiTotalForgotten] = useState<number>(0);
   const [mochiTotalPinnedCount, setMochiTotalPinnedCount] = useState<number>(0);
@@ -151,11 +156,7 @@ export default function App() {
     if (preset === 'last_import') {
       const saved = localStorage.getItem('mochi_last_imported_time');
       const t = saved ? parseInt(saved, 10) : 0;
-      if (t > 0) {
-        setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(t + 1000)));
-        return;
-      }
-      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+      setSelectedMochiStartDateTime(getNextMinuteStartDateTime(t));
     } else if (preset === '1h') {
       setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 1 * 60 * 60 * 1000)));
     } else if (preset === '6h') {
@@ -186,11 +187,7 @@ export default function App() {
     const savedLast = localStorage.getItem('mochi_last_imported_time');
     const lastT = savedLast ? parseInt(savedLast, 10) : 0;
     setLastImportedReviewTime(lastT);
-    if (lastT > 0) {
-      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(lastT + 1000)));
-    } else {
-      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000)));
-    }
+    setSelectedMochiStartDateTime(getNextMinuteStartDateTime(lastT));
     setSelectedMochiEndDateTime(formatDateTimeLocal(new Date()));
     
     if (!mochiApiKey.trim()) {
@@ -369,6 +366,11 @@ export default function App() {
           }
         }
 
+        card.alreadyImported = lessonsHistory.some(l => 
+          l.id.startsWith('mochi_' + card.id) || 
+          (card.content && l.sourceText && l.sourceText.trim() === card.content.trim())
+        );
+
         // Fallback to overall latest review if not reviewed in the selected period (mainly for pinned cards)
         if (!card.mochiLatestReviewTime && overallLatestTime > 0) {
           card.mochiLatestReviewTime = overallLatestTime;
@@ -383,6 +385,7 @@ export default function App() {
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
 
       let filtered = allCards.filter(card => {
+        if (excludeAlreadyImported && card.alreadyImported) return false;
         const matchesPeriod = card.mochiReviewedInPeriod && (!filterIncorrectOnly || card.mochiForgetCount > 0);
         const matchesPinned = includePinned && isCardPinned(card);
         const matchesNewToReview = includeNewToReview && card.mochiNewToReviewInPeriod;
@@ -2271,6 +2274,17 @@ ${quiz.rationale}`;
                           />
                           <span>신규 복습 진입 카드(🌱) 포함 (선택 기간 내 첫 복습 진행)</span>
                         </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={excludeAlreadyImported}
+                            onChange={(e) => setExcludeAlreadyImported(e.target.checked)}
+                            disabled={isMochiLoading}
+                            style={{ accentColor: 'var(--primary)' }}
+                          />
+                          <span>이미 보관함에 가져온 카드(✅) 검색 결과에서 자동 제외</span>
+                        </label>
                       </div>
                     </div>
                   ) : (
@@ -2483,6 +2497,7 @@ ${quiz.rationale}`;
                                   <div style={{ fontSize: '0.85rem', color: 'white', whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1 }}>
                                     {isCardPinned && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }} title="고정 카드">📌</span>}
                                     {card.mochiNewToReviewInPeriod && <span style={{ marginRight: '0.35rem', color: 'var(--primary)' }} title="신규 복습 진입">🌱</span>}
+                                    {card.alreadyImported && <span style={{ marginRight: '0.35rem', fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: '600' }}>[보관함에 있음]</span>}
                                     {cardPreview}
                                   </div>
                                   {(card.mochiForgetCount > 0 || card.mochiTotalForgetCount > 0) && (
