@@ -55,6 +55,79 @@ function getNextMinuteStartDateTime(timestamp: number): string {
   return formatDateTimeLocal(new Date(nextMinuteMs));
 }
 
+interface NormalizedReview {
+  time: number;
+  dateStr: string;
+  remembered: boolean;
+}
+
+function extractMochiReviews(card: any): NormalizedReview[] {
+  if (!card) return [];
+  let rawList: any[] = [];
+
+  const reviewsObj = card.reviews || card.history || card['review-history'] || card.reviewHistory;
+  if (!reviewsObj) return [];
+
+  if (Array.isArray(reviewsObj)) {
+    rawList = reviewsObj;
+  } else if (typeof reviewsObj === 'object') {
+    rawList = Object.values(reviewsObj);
+  }
+
+  const result: NormalizedReview[] = [];
+
+  for (const r of rawList) {
+    if (!r) continue;
+
+    let rawDate: any = r.date || r.createdAt || r['created-at'] || r.time || r['reviewed-at'];
+    let timeMs = 0;
+    let dateStr = '';
+
+    if (typeof rawDate === 'number') {
+      timeMs = rawDate < 1e11 ? rawDate * 1000 : rawDate;
+    } else if (typeof rawDate === 'string') {
+      dateStr = rawDate;
+      if (!rawDate.includes('T') && rawDate.includes(' ')) {
+        dateStr = rawDate.replace(' ', 'T');
+      }
+      timeMs = new Date(dateStr).getTime();
+    } else if (rawDate && typeof rawDate === 'object') {
+      const innerDate = rawDate.$date || rawDate.date || rawDate._seconds;
+      if (typeof innerDate === 'number') {
+        timeMs = innerDate < 1e11 ? innerDate * 1000 : innerDate;
+      } else if (typeof innerDate === 'string') {
+        dateStr = innerDate;
+        timeMs = new Date(innerDate).getTime();
+      }
+    }
+
+    if (isNaN(timeMs) || timeMs <= 0) continue;
+
+    let remembered = true;
+    if (r.remembered !== undefined) {
+      remembered = Boolean(r.remembered);
+    } else if (r['remembered?'] !== undefined) {
+      remembered = Boolean(r['remembered?']);
+    } else if (r.forgotten !== undefined) {
+      remembered = !Boolean(r.forgotten);
+    } else if (r['forgotten?'] !== undefined) {
+      remembered = !Boolean(r['forgotten?']);
+    } else if (typeof r.rating === 'number') {
+      remembered = r.rating > 1;
+    } else if (typeof r.grade === 'number') {
+      remembered = r.grade > 1;
+    }
+
+    result.push({
+      time: timeMs,
+      dateStr: dateStr || new Date(timeMs).toISOString(),
+      remembered
+    });
+  }
+
+  return result;
+}
+
 export default function App() {
   // 1. API Key State
   const [apiKey, setApiKey] = useState<string>(() => {
@@ -232,39 +305,10 @@ export default function App() {
       
       const startLocalTime = new Date(selectedMochiStartDateTime).getTime();
       const endLocalTime = new Date(selectedMochiEndDateTime).getTime();
-      
-      const isWithinDateRangeLocal = (reviewDateObj: any) => {
-        if (!reviewDateObj) return false;
-        let dateStr = '';
-        if (typeof reviewDateObj === 'string') {
-          dateStr = reviewDateObj;
-        } else if (reviewDateObj && typeof reviewDateObj === 'object') {
-          if (reviewDateObj.$date) {
-            dateStr = reviewDateObj.$date;
-          } else if (reviewDateObj.date) {
-            dateStr = reviewDateObj.date;
-          }
-        }
-        
-        if (!dateStr) return false;
-        try {
-          const reviewTime = new Date(dateStr).getTime();
-          if (isNaN(reviewTime)) return false;
-          return reviewTime >= startLocalTime && reviewTime <= endLocalTime;
-        } catch (e) {
-          return false;
-        }
-      };
 
-      const isForgotten = (review: any) => {
-        const remembered = review.remembered !== undefined ? review.remembered : review['remembered?'];
-        return remembered === false;
-      };
-
-      // Calculate reviewed and forgotten stats from allCards list
       let reviewed = 0;
       let forgotten = 0;
-      
+
       allCards.forEach(card => {
         card.mochiForgetCount = 0;
         card.mochiTotalForgetCount = 0;
@@ -272,98 +316,41 @@ export default function App() {
         card.mochiLatestReviewTime = 0;
         card.mochiLatestReviewDateStr = '';
 
-        if (!card.reviews || !Array.isArray(card.reviews)) return;
-        
+        const normalizedReviews = extractMochiReviews(card);
+        if (normalizedReviews.length === 0) return;
+
         // Compute total overall forgets in entire history
-        const allFailedReviews = card.reviews.filter((r: any) => isForgotten(r));
+        const allFailedReviews = normalizedReviews.filter(r => !r.remembered);
         card.mochiTotalForgetCount = allFailedReviews.length;
 
         // Compute overall latest review
-        let overallLatestTime = 0;
-        let overallLatestDateStr = '';
-        const allReviewsWithTime = card.reviews.map((r: any) => {
-          let t = 0;
-          let dateStr = '';
-          if (typeof r.date === 'string') {
-            dateStr = r.date;
-          } else if (r.date && typeof r.date === 'object') {
-            dateStr = r.date.$date || r.date.date || '';
-          }
-          if (dateStr) {
-            t = new Date(dateStr).getTime();
-          }
-          return { time: t, dateStr };
-        }).filter(item => item.time > 0);
-
-        if (allReviewsWithTime.length > 0) {
-          allReviewsWithTime.sort((a, b) => b.time - a.time);
-          overallLatestTime = allReviewsWithTime[0].time;
-          try {
-            const d = new Date(overallLatestTime);
-            const yy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            const hh = String(d.getHours()).padStart(2, '0');
-            const min = String(d.getMinutes()).padStart(2, '0');
-            overallLatestDateStr = `${yy}-${mm}-${dd} ${hh}:${min}`;
-          } catch (e) {
-            overallLatestDateStr = allReviewsWithTime[0].dateStr;
-          }
-        }
+        const sortedReviews = [...normalizedReviews].sort((a, b) => b.time - a.time);
+        const overallLatestTime = sortedReviews[0].time;
+        const overallLatestDateStr = formatDisplayDateTime(overallLatestTime);
 
         // Compute overall earliest review (first review ever)
-        let overallEarliestTime = 0;
-        if (allReviewsWithTime.length > 0) {
-          const sortedChronological = [...allReviewsWithTime].sort((a, b) => a.time - b.time);
-          overallEarliestTime = sortedChronological[0].time;
-        }
+        const sortedChronological = [...normalizedReviews].sort((a, b) => a.time - b.time);
+        const overallEarliestTime = sortedChronological[0].time;
 
         card.mochiNewToReviewInPeriod = false;
         if (overallEarliestTime > 0) {
           card.mochiNewToReviewInPeriod = overallEarliestTime >= startLocalTime && overallEarliestTime <= endLocalTime;
         }
 
-        const reviewsInPeriod = card.reviews.filter((r: any) => isWithinDateRangeLocal(r.date));
+        const reviewsInPeriod = normalizedReviews.filter(r => r.time >= startLocalTime && r.time <= endLocalTime);
         if (reviewsInPeriod.length > 0) {
           card.mochiReviewedInPeriod = true;
           reviewed++;
-          
-          const failedReviews = reviewsInPeriod.filter((r: any) => isForgotten(r));
-          if (failedReviews.length > 0) {
-            card.mochiForgetCount = failedReviews.length;
+
+          const failedInPeriod = reviewsInPeriod.filter(r => !r.remembered);
+          if (failedInPeriod.length > 0) {
+            card.mochiForgetCount = failedInPeriod.length;
             forgotten++;
           }
 
-          // Find the latest review within the period
-          const reviewsWithTime = reviewsInPeriod.map((r: any) => {
-            let t = 0;
-            let dateStr = '';
-            if (typeof r.date === 'string') {
-              dateStr = r.date;
-            } else if (r.date && typeof r.date === 'object') {
-              dateStr = r.date.$date || r.date.date || '';
-            }
-            if (dateStr) {
-              t = new Date(dateStr).getTime();
-            }
-            return { time: t, dateStr };
-          }).filter(item => item.time > 0);
-
-          if (reviewsWithTime.length > 0) {
-            reviewsWithTime.sort((a, b) => b.time - a.time);
-            card.mochiLatestReviewTime = reviewsWithTime[0].time;
-            try {
-              const d = new Date(reviewsWithTime[0].time);
-              const yy = d.getFullYear();
-              const mm = String(d.getMonth() + 1).padStart(2, '0');
-              const dd = String(d.getDate()).padStart(2, '0');
-              const hh = String(d.getHours()).padStart(2, '0');
-              const min = String(d.getMinutes()).padStart(2, '0');
-              card.mochiLatestReviewDateStr = `${yy}-${mm}-${dd} ${hh}:${min}`;
-            } catch (e) {
-              card.mochiLatestReviewDateStr = reviewsWithTime[0].dateStr;
-            }
-          }
+          const latestInPeriod = [...reviewsInPeriod].sort((a, b) => b.time - a.time)[0];
+          card.mochiLatestReviewTime = latestInPeriod.time;
+          card.mochiLatestReviewDateStr = formatDisplayDateTime(latestInPeriod.time);
         }
 
         card.alreadyImported = lessonsHistory.some(l => 
@@ -401,7 +388,11 @@ export default function App() {
       setMochiCards(filtered.slice(0, 300));
       if (filtered.length === 0) {
         const periodStr = `${formatDisplayDateTime(startLocalTime)} ~ ${formatDisplayDateTime(endLocalTime)}`;
-        setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
+        if (reviewed > 0 && filterIncorrectOnly) {
+          setMochiError(`${periodStr} 기간에 복습을 진행한 카드는 총 ${reviewed}개 검색되었으나 모두 맞혀서 틀린(Forgot) 카드가 존재하지 않습니다. ('틀린 카드만 필터링' 체크 해제 시 전체 복습 카드 표시)`);
+        } else {
+          setMochiError(`${periodStr} 기간에 ${filterIncorrectOnly ? '복습 시 틀린(Forgot) ' : '복습을 진행한 '}카드가 존재하지 않습니다.`);
+        }
         setIsMochiSearchExpanded(true);
       } else {
         setIsMochiSearchExpanded(false);
