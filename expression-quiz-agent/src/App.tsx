@@ -55,6 +55,21 @@ function getNextMinuteStartDateTime(timestamp: number): string {
   return formatDateTimeLocal(new Date(nextMinuteMs));
 }
 
+function getBrowserTimeZoneInfo(): string {
+  try {
+    const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+    const offsetMin = -new Date().getTimezoneOffset();
+    const offsetHours = offsetMin / 60;
+    const sign = offsetHours >= 0 ? '+' : '';
+    const formattedOffset = Number.isInteger(offsetHours) 
+      ? `UTC${sign}${offsetHours}` 
+      : `UTC${sign}${offsetHours.toFixed(1)}`;
+    return `${tzName} (${formattedOffset})`;
+  } catch (e) {
+    return '브라우저 현지 시각';
+  }
+}
+
 interface NormalizedReview {
   time: number;
   dateStr: string;
@@ -2245,7 +2260,7 @@ ${quiz.rationale}`;
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                       {/* Timezone and Last Import indicator */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '0.4rem' }}>
-                        <span>🌐 시간 기준: <strong style={{ color: 'var(--secondary)' }}>한국 표준시 (KST / UTC+9)</strong> (현지 시각 자동 환산)</span>
+                        <span>🌐 시간 기준: <strong style={{ color: 'var(--secondary)' }}>{getBrowserTimeZoneInfo()}</strong> (브라우저 현지 시각)</span>
                         {lastImportedReviewTime > 0 && (
                           <span style={{ color: '#c084fc', fontWeight: '600' }}>
                             📌 마지막 카드 가져온 시각: <strong>{formatDisplayDateTime(lastImportedReviewTime)}</strong>
