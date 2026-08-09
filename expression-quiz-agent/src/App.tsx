@@ -94,7 +94,7 @@ function extractMochiReviews(card: any): NormalizedReview[] {
   for (const r of rawList) {
     if (!r) continue;
 
-    let rawDate: any = r.date || r.createdAt || r['created-at'] || r.time || r['reviewed-at'];
+    let rawDate: any = r.date || r['reviewed-at'] || (typeof r.time === 'number' ? r.time : null);
     let timeMs = 0;
     let dateStr = '';
 
@@ -269,7 +269,7 @@ export default function App() {
   const [sliderStartPercent, setSliderStartPercent] = useState<number>(0);
   const [sliderEndPercent, setSliderEndPercent] = useState<number>(100);
 
-  const handleApplyTimePreset = (preset: 'last_import' | '1h' | '6h' | '24h' | 'today' | '7d') => {
+  const handleApplyTimePreset = (preset: 'last_import' | '1h' | '6h' | '24h' | '3d' | 'today' | '7d') => {
     const now = new Date();
     setSelectedMochiEndDateTime(formatDateTimeLocal(now));
 
@@ -283,6 +283,8 @@ export default function App() {
       setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 6 * 60 * 60 * 1000)));
     } else if (preset === '24h') {
       setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+    } else if (preset === '3d') {
+      setSelectedMochiStartDateTime(formatDateTimeLocal(new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)));
     } else if (preset === 'today') {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       setSelectedMochiStartDateTime(formatDateTimeLocal(todayStart));
@@ -480,13 +482,21 @@ export default function App() {
         }
       });
 
-      setRawFetchedMochiCards(allCards);
-      setSliderMinTime(globalMinTime);
-      setSliderMaxTime(globalMaxTime);
-      setSliderStartPercent(0);
-      setSliderEndPercent(100);
+      // Pad min time by 24 hours prior to startLocalTime to allow backward sliding
+      const paddedMinTime = Math.min(startLocalTime - 24 * 60 * 60 * 1000, globalMinTime);
+      const paddedMaxTime = Math.max(endLocalTime, globalMaxTime);
 
-      applySliderFilter(allCards, globalMinTime, globalMaxTime, 0, 100);
+      const range = paddedMaxTime - paddedMinTime;
+      const startPct = range > 0 ? Math.max(0, Math.min(100, Math.round(((startLocalTime - paddedMinTime) / range) * 100))) : 0;
+      const endPct = range > 0 ? Math.max(0, Math.min(100, Math.round(((endLocalTime - paddedMinTime) / range) * 100))) : 100;
+
+      setRawFetchedMochiCards(allCards);
+      setSliderMinTime(paddedMinTime);
+      setSliderMaxTime(paddedMaxTime);
+      setSliderStartPercent(startPct);
+      setSliderEndPercent(endPct);
+
+      applySliderFilter(allCards, paddedMinTime, paddedMaxTime, startPct, endPct);
 
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
       const initialFiltered = allCards.filter(card => {
@@ -2286,6 +2296,7 @@ ${quiz.rationale}`;
                         <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('1h')} disabled={isMochiLoading}>1시간 전</button>
                         <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('6h')} disabled={isMochiLoading}>6시간 전</button>
                         <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('24h')} disabled={isMochiLoading}>24시간 전</button>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('3d')} disabled={isMochiLoading}>3일 전</button>
                         <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('today')} disabled={isMochiLoading}>오늘 00:00</button>
                         <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleApplyTimePreset('7d')} disabled={isMochiLoading}>7일 전</button>
                       </div>
