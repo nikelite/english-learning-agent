@@ -7,7 +7,100 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
 import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons, generateAdditionalQuizzes } from './geminiService';
-import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2, X } from 'lucide-react';
+import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2, X, BarChart2 } from 'lucide-react';
+
+interface MochiDeckStats {
+  deckId: string;
+  deckName: string;
+  totalCards: number;
+  newCount: number;
+  reviewCount: number;
+  archivedCount: number;
+  trashedCount: number;
+  forgottenInPeriod: number;
+}
+
+function computeMochiAnalytics(cards: any[], decks: MochiDeckInfo[]) {
+  let totalNew = 0;
+  let totalReview = 0;
+  let totalArchived = 0;
+  let totalTrashed = 0;
+
+  const deckMap = new Map<string, MochiDeckStats>();
+
+  decks.forEach(d => {
+    deckMap.set(d.id, {
+      deckId: d.id,
+      deckName: d.name,
+      totalCards: 0,
+      newCount: 0,
+      reviewCount: 0,
+      archivedCount: 0,
+      trashedCount: 0,
+      forgottenInPeriod: 0
+    });
+  });
+
+  deckMap.set('unknown', {
+    deckId: 'unknown',
+    deckName: '기타 덱',
+    totalCards: 0,
+    newCount: 0,
+    reviewCount: 0,
+    archivedCount: 0,
+    trashedCount: 0,
+    forgottenInPeriod: 0
+  });
+
+  cards.forEach(card => {
+    const isNew = card['new?'] === true || card.new === true || extractMochiReviews(card).length === 0;
+    const isArchived = card['archived?'] === true || card.archived === true;
+    const isTrashed = card['trashed?'] !== undefined && card['trashed?'] !== null;
+    const inReview = !isNew && !isArchived && !isTrashed;
+
+    if (isNew) totalNew++;
+    else if (inReview) totalReview++;
+
+    if (isArchived) totalArchived++;
+    if (isTrashed) totalTrashed++;
+
+    const deckId = card['deck-id'] || card.deckId || 'unknown';
+    let deckStats = deckMap.get(deckId);
+    if (!deckStats) {
+      deckStats = {
+        deckId,
+        deckName: '기타 덱',
+        totalCards: 0,
+        newCount: 0,
+        reviewCount: 0,
+        archivedCount: 0,
+        trashedCount: 0,
+        forgottenInPeriod: 0
+      };
+    }
+
+    deckStats.totalCards++;
+    if (isNew) deckStats.newCount++;
+    if (inReview) deckStats.reviewCount++;
+    if (isArchived) deckStats.archivedCount++;
+    if (isTrashed) deckStats.trashedCount++;
+    if (card.mochiForgetCount > 0) deckStats.forgottenInPeriod++;
+
+    deckMap.set(deckId, deckStats);
+  });
+
+  const deckStatsList = Array.from(deckMap.values()).filter(d => d.totalCards > 0);
+  deckStatsList.sort((a, b) => b.totalCards - a.totalCards);
+
+  return {
+    totalCards: cards.length,
+    totalNew,
+    totalReview,
+    totalArchived,
+    totalTrashed,
+    deckStatsList
+  };
+}
 import { 
   loadLessonFromCloud, 
   saveLessonToCloud, 
@@ -24,7 +117,7 @@ import {
   shareLessonWithUser
 } from './firebaseService';
 import { ShareModal } from './components/ShareModal';
-import { fetchMochiDecks, fetchMochiCards, createMochiCard } from './mochiService';
+import { fetchMochiDecks, fetchMochiCards, createMochiCard, MochiDeckInfo } from './mochiService';
 
 function formatDateTimeLocal(date: Date): string {
   const yyyy = date.getFullYear();
@@ -2574,6 +2667,80 @@ ${quiz.rationale}`;
                           <span>이미 보관함에 가져온 카드(✅) 검색 결과에서 자동 제외</span>
                         </label>
                       </div>
+
+                      {/* Deck & Card Analytics Dashboard Panel */}
+                      {rawFetchedMochiCards.length > 0 && (() => {
+                        const analytics = computeMochiAnalytics(rawFetchedMochiCards, mochiDecks);
+                        return (
+                          <div style={{
+                            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.65))',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            borderRadius: '12px',
+                            padding: '0.85rem 1rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.65rem',
+                            marginTop: '0.4rem'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <div style={{ fontSize: '0.85rem', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <BarChart2 size={16} style={{ color: 'var(--primary)' }} />
+                                <span>📊 Mochi 카드 & 덱 상태별 분포 통계</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '0.72rem' }}>
+                                  전체 {analytics.totalCards}개
+                                </span>
+                                <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.72rem' }}>
+                                  🌱 신규 {analytics.totalNew}개
+                                </span>
+                                <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: '0.72rem' }}>
+                                  🔄 복습 진행중 {analytics.totalReview}개
+                                </span>
+                                {analytics.totalArchived > 0 && (
+                                  <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.72rem' }}>
+                                    📦 보관 (Archived) {analytics.totalArchived}개
+                                  </span>
+                                )}
+                                {analytics.totalTrashed > 0 && (
+                                  <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '0.72rem' }}>
+                                    🗑️ 휴지통 (Trashed) {analytics.totalTrashed}개
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Deck Breakdown Cards Grid */}
+                            {analytics.deckStatsList.length > 0 && (
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.45rem', marginTop: '0.2rem' }}>
+                                {analytics.deckStatsList.map(deck => (
+                                  <div key={deck.deckId} style={{
+                                    background: 'rgba(0, 0, 0, 0.25)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '8px',
+                                    padding: '0.55rem 0.75rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.3rem'
+                                  }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: '700', color: 'white' }}>
+                                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '130px' }}>📁 {deck.deckName}</span>
+                                      <span style={{ color: 'var(--secondary)', fontSize: '0.75rem', fontWeight: '700' }}>{deck.totalCards}개</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.35rem', fontSize: '0.7rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                                      <span>🌱 신규 {deck.newCount}</span>
+                                      <span>•</span>
+                                      <span>🔄 복습중 {deck.reviewCount}</span>
+                                      {deck.archivedCount > 0 && <span>• 📦 보관 {deck.archivedCount}</span>}
+                                      {deck.trashedCount > 0 && <span>• 🗑️ 삭제 {deck.trashedCount}</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Smart Review Session Clusters Bar */}
                       {mochiSessions.length > 0 && rawFetchedMochiCards.length > 0 && (
