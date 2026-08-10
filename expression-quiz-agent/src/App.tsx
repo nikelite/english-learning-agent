@@ -78,84 +78,96 @@ interface NormalizedReview {
 
 function extractMochiReviews(card: any): NormalizedReview[] {
   if (!card) return [];
-  let rawList: any[] = [];
-
-  const reviewsObj = card.reviews || card.history || card['review-history'] || card.reviewHistory;
-  if (!reviewsObj) return [];
-
-  if (Array.isArray(reviewsObj)) {
-    rawList = reviewsObj;
-  } else if (typeof reviewsObj === 'object') {
-    rawList = Object.values(reviewsObj);
-  }
 
   const result: NormalizedReview[] = [];
+  const reviewsObj = card.reviews || card.history || card['review-history'] || card.reviewHistory;
+  
+  if (reviewsObj) {
+    let entries: Array<[string, any]> = [];
 
-  for (const r of rawList) {
-    if (!r) continue;
-
-    let rawDate: any = r.date || r['reviewed-at'] || (typeof r.time === 'number' ? r.time : null);
-    let timeMs = 0;
-    let dateStr = '';
-
-    if (typeof rawDate === 'number') {
-      timeMs = rawDate < 1e11 ? rawDate * 1000 : rawDate;
-    } else if (typeof rawDate === 'string') {
-      dateStr = rawDate;
-      if (!rawDate.includes('T') && rawDate.includes(' ')) {
-        dateStr = rawDate.replace(' ', 'T');
-      }
-      timeMs = new Date(dateStr).getTime();
-    } else if (rawDate && typeof rawDate === 'object') {
-      const innerDate = rawDate.$date || rawDate.date || rawDate._seconds;
-      if (typeof innerDate === 'number') {
-        timeMs = innerDate < 1e11 ? innerDate * 1000 : innerDate;
-      } else if (typeof innerDate === 'string') {
-        dateStr = innerDate;
-        timeMs = new Date(innerDate).getTime();
-      }
+    if (Array.isArray(reviewsObj)) {
+      entries = reviewsObj.map((r, i) => [String(i), r]);
+    } else if (typeof reviewsObj === 'object') {
+      entries = Object.entries(reviewsObj);
     }
 
-    if (isNaN(timeMs) || timeMs <= 0) continue;
+    for (const [key, val] of entries) {
+      if (!val) continue;
 
-    let remembered = true;
-    if (r.remembered !== undefined) {
-      remembered = Boolean(r.remembered);
-    } else if (r['remembered?'] !== undefined) {
-      remembered = Boolean(r['remembered?']);
-    } else if (r.forgotten !== undefined) {
-      remembered = !Boolean(r.forgotten);
-    } else if (r['forgotten?'] !== undefined) {
-      remembered = !Boolean(r['forgotten?']);
-    } else if (typeof r.rating === 'number') {
-      remembered = r.rating > 1;
-    } else if (typeof r.grade === 'number') {
-      remembered = r.grade > 1;
+      let rawDate: any = null;
+      if (typeof val === 'object') {
+        rawDate = val.date || val['reviewed-at'] || val.createdAt || val['created-at'] || val.time;
+      } else if (typeof val === 'string' || typeof val === 'number') {
+        rawDate = val;
+      }
+
+      // Check if key is a date string / timestamp if val didn't have explicit date
+      if (!rawDate && key) {
+        if (key.includes('-') || key.includes('T') || !isNaN(Number(key))) {
+          rawDate = key;
+        }
+      }
+
+      let timeMs = 0;
+      let dateStr = '';
+
+      if (typeof rawDate === 'number') {
+        timeMs = rawDate < 1e11 ? rawDate * 1000 : rawDate;
+      } else if (typeof rawDate === 'string') {
+        dateStr = rawDate;
+        if (!rawDate.includes('T') && rawDate.includes(' ')) {
+          dateStr = rawDate.replace(' ', 'T');
+        }
+        timeMs = new Date(dateStr).getTime();
+      } else if (rawDate && typeof rawDate === 'object') {
+        const innerDate = rawDate.$date || rawDate.date || rawDate._seconds;
+        if (typeof innerDate === 'number') {
+          timeMs = innerDate < 1e11 ? innerDate * 1000 : innerDate;
+        } else if (typeof innerDate === 'string') {
+          dateStr = innerDate;
+          timeMs = new Date(innerDate).getTime();
+        }
+      }
+
+      if (isNaN(timeMs) || timeMs <= 0) continue;
+
+      let remembered = true;
+      if (typeof val === 'boolean') {
+        remembered = val;
+      } else if (val && typeof val === 'object') {
+        if (val.remembered !== undefined) remembered = Boolean(val.remembered);
+        else if (val['remembered?'] !== undefined) remembered = Boolean(val['remembered?']);
+        else if (val.forgotten !== undefined) remembered = !Boolean(val.forgotten);
+        else if (val['forgotten?'] !== undefined) remembered = !Boolean(val['forgotten?']);
+        else if (typeof val.rating === 'number') remembered = val.rating > 1;
+        else if (typeof val.grade === 'number') remembered = val.grade > 1;
+      }
+
+      result.push({
+        time: timeMs,
+        dateStr: dateStr || new Date(timeMs).toISOString(),
+        remembered
+      });
     }
-
-    result.push({
-      time: timeMs,
-      dateStr: dateStr || new Date(timeMs).toISOString(),
-      remembered
-    });
   }
 
-  // Fallback ONLY to explicit last-reviewed-at timestamp, NEVER created-at or updated-at!
-  if (result.length === 0) {
-    const lastReviewedRaw = card['last-reviewed-at'] || card.lastReviewedAt;
-    if (lastReviewedRaw) {
-      let tMs = 0;
-      if (typeof lastReviewedRaw === 'number') {
-        tMs = lastReviewedRaw < 1e11 ? lastReviewedRaw * 1000 : lastReviewedRaw;
-      } else if (typeof lastReviewedRaw === 'string') {
-        const dateStr = lastReviewedRaw.includes(' ') && !lastReviewedRaw.includes('T') ? lastReviewedRaw.replace(' ', 'T') : lastReviewedRaw;
-        tMs = new Date(dateStr).getTime();
-      } else if (typeof lastReviewedRaw === 'object') {
-        const inner = lastReviewedRaw.$date || lastReviewedRaw.date;
-        if (inner) tMs = new Date(inner).getTime();
-      }
+  // Integrate explicit last-reviewed-at timestamp from card level
+  const lastReviewedRaw = card['last-reviewed-at'] || card.lastReviewedAt || card['last-reviewed'] || card.lastReviewed;
+  if (lastReviewedRaw) {
+    let tMs = 0;
+    if (typeof lastReviewedRaw === 'number') {
+      tMs = lastReviewedRaw < 1e11 ? lastReviewedRaw * 1000 : lastReviewedRaw;
+    } else if (typeof lastReviewedRaw === 'string') {
+      const dateStr = lastReviewedRaw.includes(' ') && !lastReviewedRaw.includes('T') ? lastReviewedRaw.replace(' ', 'T') : lastReviewedRaw;
+      tMs = new Date(dateStr).getTime();
+    } else if (typeof lastReviewedRaw === 'object') {
+      const inner = lastReviewedRaw.$date || lastReviewedRaw.date;
+      if (inner) tMs = new Date(inner).getTime();
+    }
 
-      if (!isNaN(tMs) && tMs > 0) {
+    if (!isNaN(tMs) && tMs > 0) {
+      const maxExisting = result.length > 0 ? Math.max(...result.map(r => r.time)) : 0;
+      if (tMs > maxExisting) {
         result.push({
           time: tMs,
           dateStr: formatDisplayDateTime(tMs),
@@ -465,9 +477,8 @@ export default function App() {
             card.mochiForgetCount = failedInPeriod.length;
           }
 
-          const latestInPeriod = [...reviewsInPeriod].sort((a, b) => b.time - a.time)[0];
-          card.mochiLatestReviewTime = latestInPeriod.time;
-          card.mochiLatestReviewDateStr = formatDisplayDateTime(latestInPeriod.time);
+        card.mochiLatestReviewTime = overallLatestTime;
+        card.mochiLatestReviewDateStr = formatDisplayDateTime(overallLatestTime);
         }
 
         card.alreadyImported = lessonsHistory.some(l => 
