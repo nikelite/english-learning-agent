@@ -563,61 +563,75 @@ export default function App() {
         card.mochiForgetCount = 0;
         card.mochiTotalForgetCount = 0;
         card.mochiReviewedInPeriod = false;
+        card.mochiNewToReviewInPeriod = false;
         card.mochiLatestReviewTime = 0;
         card.mochiLatestReviewDateStr = '';
 
         const normalizedReviews = extractMochiReviews(card);
-        if (normalizedReviews.length === 0) return;
+        const createdAtMs = parseMochiTimestamp(card['created-at'] || card.createdAt);
+        const isNewFlag = card['new?'] === true || card.new === true;
+        const isCreatedInPeriod = createdAtMs >= startLocalTime && createdAtMs <= endLocalTime;
 
-        // Compute total overall forgets in entire history
-        const allFailedReviews = normalizedReviews.filter(r => !r.remembered);
-        card.mochiTotalForgetCount = allFailedReviews.length;
-
-        // Track global min and max review times for slider bounds
-        normalizedReviews.forEach(r => {
-          if (r.time > 0) {
-            if (r.time < globalMinTime) globalMinTime = r.time;
-            if (r.time > globalMaxTime) globalMaxTime = r.time;
-          }
-        });
-
-        // Compute overall latest review
-        const sortedReviews = [...normalizedReviews].sort((a, b) => b.time - a.time);
-        const overallLatestTime = sortedReviews[0].time;
-        const overallLatestDateStr = formatDisplayDateTime(overallLatestTime);
-
-        // Compute overall earliest review (first review ever)
-        const sortedChronological = [...normalizedReviews].sort((a, b) => a.time - b.time);
-        const overallEarliestTime = sortedChronological[0].time;
-
-        card.mochiNewToReviewInPeriod = false;
-        if (overallEarliestTime > 0) {
-          card.mochiNewToReviewInPeriod = overallEarliestTime >= startLocalTime && overallEarliestTime <= endLocalTime;
+        if (isNewFlag || isCreatedInPeriod || (normalizedReviews.length === 0 && createdAtMs >= startLocalTime)) {
+          card.mochiNewToReviewInPeriod = true;
         }
 
-        const reviewsInPeriod = normalizedReviews.filter(r => r.time >= startLocalTime && r.time <= endLocalTime);
-        if (reviewsInPeriod.length > 0) {
-          card.mochiReviewedInPeriod = true;
+        if (normalizedReviews.length > 0) {
+          // Compute total overall forgets in entire history
+          const allFailedReviews = normalizedReviews.filter(r => !r.remembered);
+          card.mochiTotalForgetCount = allFailedReviews.length;
 
-          const failedInPeriod = reviewsInPeriod.filter(r => !r.remembered);
-          if (failedInPeriod.length > 0) {
-            card.mochiForgetCount = failedInPeriod.length;
+          // Track global min and max review times for slider bounds
+          normalizedReviews.forEach(r => {
+            if (r.time > 0) {
+              if (r.time < globalMinTime) globalMinTime = r.time;
+              if (r.time > globalMaxTime) globalMaxTime = r.time;
+            }
+          });
+
+          // Compute overall latest review
+          const sortedReviews = [...normalizedReviews].sort((a, b) => b.time - a.time);
+          const overallLatestTime = sortedReviews[0].time;
+          const overallLatestDateStr = formatDisplayDateTime(overallLatestTime);
+
+          // Compute overall earliest review (first review ever)
+          const sortedChronological = [...normalizedReviews].sort((a, b) => a.time - b.time);
+          const overallEarliestTime = sortedChronological[0].time;
+
+          if (overallEarliestTime > 0 && overallEarliestTime >= startLocalTime && overallEarliestTime <= endLocalTime) {
+            card.mochiNewToReviewInPeriod = true;
           }
 
-        card.mochiLatestReviewTime = overallLatestTime;
-        card.mochiLatestReviewDateStr = formatDisplayDateTime(overallLatestTime);
+          const reviewsInPeriod = normalizedReviews.filter(r => r.time >= startLocalTime && r.time <= endLocalTime);
+          if (reviewsInPeriod.length > 0) {
+            card.mochiReviewedInPeriod = true;
+
+            const failedInPeriod = reviewsInPeriod.filter(r => !r.remembered);
+            if (failedInPeriod.length > 0) {
+              card.mochiForgetCount = failedInPeriod.length;
+            }
+
+            card.mochiLatestReviewTime = overallLatestTime;
+            card.mochiLatestReviewDateStr = formatDisplayDateTime(overallLatestTime);
+          }
+
+          if (!card.mochiLatestReviewTime && overallLatestTime > 0) {
+            card.mochiLatestReviewTime = overallLatestTime;
+            card.mochiLatestReviewDateStr = `${overallLatestDateStr} (기간 외)`;
+          }
+        }
+
+        if (!card.mochiLatestReviewTime && createdAtMs > 0) {
+          card.mochiLatestReviewTime = createdAtMs;
+          card.mochiLatestReviewDateStr = createdAtMs >= startLocalTime 
+            ? `${formatDisplayDateTime(createdAtMs)} (신규 진입)` 
+            : `${formatDisplayDateTime(createdAtMs)} (생성/미복습)`;
         }
 
         card.alreadyImported = lessonsHistory.some(l => 
           l.id.startsWith('mochi_' + card.id) || 
           (card.content && l.sourceText && l.sourceText.trim() === card.content.trim())
         );
-
-        // Fallback to overall latest review if not reviewed in the selected period (mainly for pinned cards)
-        if (!card.mochiLatestReviewTime && overallLatestTime > 0) {
-          card.mochiLatestReviewTime = overallLatestTime;
-          card.mochiLatestReviewDateStr = `${overallLatestDateStr} (기간 외)`;
-        }
       });
 
       // Set maximum 3-day backward margin prior to the chosen startLocalTime
