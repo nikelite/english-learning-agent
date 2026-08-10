@@ -2235,13 +2235,13 @@ ${quiz.rationale}`;
       {/* Mochi Import Modal */}
       {isMochiModalOpen && (
         <div className="modal-overlay" onClick={() => setIsMochiModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: '650px', maxHeight: 'calc(100vh - 2rem)', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '920px', width: '94vw', maxHeight: '92vh', height: 'auto', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <button 
               className="btn btn-secondary" 
-              style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.25rem', borderRadius: '50%' }}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.35rem', borderRadius: '50%' }}
               onClick={() => setIsMochiModalOpen(false)}
             >
-              <X size={16} />
+              <X size={18} />
             </button>
 
             <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -2596,7 +2596,8 @@ ${quiz.rationale}`;
 
                   <div 
                     style={{ 
-                      maxHeight: !isMochiSearchExpanded ? '400px' : '200px', 
+                      maxHeight: !isMochiSearchExpanded ? '520px' : '360px', 
+                      minHeight: '220px',
                       overflowY: 'auto', 
                       border: '1px solid var(--border-color)', 
                       borderRadius: '10px', 
