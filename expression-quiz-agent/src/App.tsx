@@ -80,10 +80,34 @@ interface MochiReviewSession {
   id: string;
   startTime: number;
   endTime: number;
-  startTimeStr: string;
-  endTimeStr: string;
+  displayLabel: string;
   totalCards: number;
   forgotCards: number;
+}
+
+function formatSessionTimeRange(startTime: number, endTime: number): string {
+  const startD = new Date(startTime);
+  const endD = new Date(endTime);
+  const now = new Date();
+
+  const isToday = startD.toDateString() === now.toDateString();
+
+  const startMM = String(startD.getMonth() + 1).padStart(2, '0');
+  const startDD = String(startD.getDate()).padStart(2, '0');
+  const startHH = String(startD.getHours()).padStart(2, '0');
+  const startMin = String(startD.getMinutes()).padStart(2, '0');
+
+  const endHH = String(endD.getHours()).padStart(2, '0');
+  const endMin = String(endD.getMinutes()).padStart(2, '0');
+
+  const timePart = (startHH === endHH && startMin === endMin)
+    ? `${startHH}:${startMin}`
+    : `${startHH}:${startMin} ~ ${endHH}:${endMin}`;
+
+  if (isToday) {
+    return `오늘 ${timePart}`;
+  }
+  return `${startMM}/${startDD} ${timePart}`;
 }
 
 function detectReviewSessions(allCards: any[], startBoundMs: number, endBoundMs: number): MochiReviewSession[] {
@@ -148,8 +172,7 @@ function createSessionFromGroup(id: string, group: Array<{ time: number; card: a
     id,
     startTime,
     endTime,
-    startTimeStr: formatDisplayDateTime(startTime),
-    endTimeStr: formatDisplayDateTime(endTime),
+    displayLabel: formatSessionTimeRange(startTime, endTime),
     totalCards: cardSet.size,
     forgotCards: forgotCount
   };
@@ -503,8 +526,12 @@ export default function App() {
   const handleSearchMochiCards = async () => {
     if (!mochiApiKey.trim()) return;
 
+    const now = new Date();
+    const nowStr = formatDateTimeLocal(now);
+    setSelectedMochiEndDateTime(nowStr);
+
     const startLocalTime = new Date(selectedMochiStartDateTime).getTime();
-    const endLocalTime = new Date(selectedMochiEndDateTime).getTime();
+    const endLocalTime = Math.max(new Date(nowStr).getTime(), now.getTime() + 5 * 60 * 1000);
 
     if (startLocalTime > endLocalTime) {
       setMochiError("시작 일시는 종료 일시보다 이전이어야 합니다.");
@@ -2575,7 +2602,7 @@ ${quiz.rationale}`;
                                   }}
                                 >
                                   <span style={{ color: 'var(--primary)', fontWeight: '700' }}>🔥 세션 {mochiSessions.length - idx}</span>
-                                  <span>{session.startTimeStr.split(' ')[1] || session.startTimeStr} ~ {session.endTimeStr.split(' ')[1] || session.endTimeStr}</span>
+                                  <span>{session.displayLabel}</span>
                                   <span style={{ fontSize: '0.7rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
                                     복습 {session.totalCards}개 {session.forgotCards > 0 && <strong style={{ color: '#f43f5e' }}>/ 오답 {session.forgotCards}개</strong>}
                                   </span>
