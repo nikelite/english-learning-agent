@@ -76,6 +76,85 @@ interface NormalizedReview {
   remembered: boolean;
 }
 
+interface MochiReviewSession {
+  id: string;
+  startTime: number;
+  endTime: number;
+  startTimeStr: string;
+  endTimeStr: string;
+  totalCards: number;
+  forgotCards: number;
+}
+
+function detectReviewSessions(allCards: any[], startBoundMs: number, endBoundMs: number): MochiReviewSession[] {
+  const reviewItems: Array<{ time: number; card: any; remembered: boolean }> = [];
+
+  allCards.forEach(card => {
+    const reviews = extractMochiReviews(card);
+    reviews.forEach(r => {
+      if (r.time >= startBoundMs && r.time <= endBoundMs) {
+        reviewItems.push({
+          time: r.time,
+          card,
+          remembered: r.remembered
+        });
+      }
+    });
+  });
+
+  if (reviewItems.length === 0) return [];
+
+  // Sort chronologically by review time
+  reviewItems.sort((a, b) => a.time - b.time);
+
+  // Group into sessions if gap between consecutive reviews <= 45 minutes
+  const MAX_GAP_MS = 45 * 60 * 1000;
+  const sessions: MochiReviewSession[] = [];
+  let currentGroup: typeof reviewItems = [reviewItems[0]];
+
+  for (let i = 1; i < reviewItems.length; i++) {
+    const prevTime = reviewItems[i - 1].time;
+    const currTime = reviewItems[i].time;
+
+    if (currTime - prevTime <= MAX_GAP_MS) {
+      currentGroup.push(reviewItems[i]);
+    } else {
+      sessions.push(createSessionFromGroup(`session_${sessions.length + 1}`, currentGroup));
+      currentGroup = [reviewItems[i]];
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    sessions.push(createSessionFromGroup(`session_${sessions.length + 1}`, currentGroup));
+  }
+
+  // Sort sessions newest first
+  sessions.sort((a, b) => b.endTime - a.endTime);
+  return sessions;
+}
+
+function createSessionFromGroup(id: string, group: Array<{ time: number; card: any; remembered: boolean }>): MochiReviewSession {
+  const startTime = group[0].time;
+  const endTime = group[group.length - 1].time;
+  const cardSet = new Set<string>();
+  let forgotCount = 0;
+
+  group.forEach(item => {
+    cardSet.add(item.card.id);
+    if (!item.remembered) forgotCount++;
+  });
+
+  return {
+    id,
+    startTime,
+    endTime,
+    startTimeStr: formatDisplayDateTime(startTime),
+    endTimeStr: formatDisplayDateTime(endTime),
+    totalCards: cardSet.size,
+    forgotCards: forgotCount
+  };
+}
+
 function extractMochiReviews(card: any): NormalizedReview[] {
   if (!card) return [];
 
@@ -280,6 +359,23 @@ export default function App() {
   const [sliderMaxTime, setSliderMaxTime] = useState<number>(0);
   const [sliderStartPercent, setSliderStartPercent] = useState<number>(0);
   const [sliderEndPercent, setSliderEndPercent] = useState<number>(100);
+
+  // Smart Review Session Clusters State
+  const [mochiSessions, setMochiSessions] = useState<MochiReviewSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  const handleSelectSession = (session: MochiReviewSession) => {
+    setActiveSessionId(session.id);
+    const range = sliderMaxTime - sliderMinTime;
+    if (range > 0) {
+      const startPct = Math.max(0, Math.min(99, Math.floor(((session.startTime - 60000 - sliderMinTime) / range) * 100)));
+      const endPct = Math.max(1, Math.min(100, Math.ceil(((session.endTime + 60000 - sliderMinTime) / range) * 100)));
+
+      setSliderStartPercent(startPct);
+      setSliderEndPercent(endPct);
+      applySliderFilter(rawFetchedMochiCards, sliderMinTime, sliderMaxTime, startPct, endPct);
+    }
+  };
 
   const handleApplyTimePreset = (preset: 'last_import' | '1h' | '6h' | '24h' | '3d' | 'today' | '7d') => {
     const now = new Date();
@@ -502,6 +598,10 @@ export default function App() {
       const range = sliderMax - sliderMin;
       const startPct = range > 0 ? Math.max(0, Math.min(99, Math.round(((startLocalTime - sliderMin) / range) * 100))) : 0;
       const endPct = 100;
+
+      const detectedSessions = detectReviewSessions(allCards, fetchStartTime, sliderMax);
+      setMochiSessions(detectedSessions);
+      setActiveSessionId(null);
 
       setRawFetchedMochiCards(allCards);
       setSliderMinTime(sliderMin);
@@ -2429,6 +2529,62 @@ ${quiz.rationale}`;
                           <span>이미 보관함에 가져온 카드(✅) 검색 결과에서 자동 제외</span>
                         </label>
                       </div>
+
+                      {/* Smart Review Session Clusters Bar */}
+                      {mochiSessions.length > 0 && rawFetchedMochiCards.length > 0 && (
+                        <div style={{
+                          background: 'rgba(255, 255, 255, 0.025)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '12px',
+                          padding: '0.85rem 1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.6rem',
+                          marginTop: '0.4rem'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span>⚡ 자동 감지된 복습 세션 ({mochiSessions.length}개)</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--primary)', background: 'rgba(139, 92, 246, 0.15)', padding: '0.1rem 0.45rem', borderRadius: '4px', border: '1px solid rgba(139, 92, 246, 0.3)' }}>AI 45분 세션 클러스터링</span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>원하는 세션 버튼을 누르면 슬라이더와 카드 목록이 즉시 원클릭으로 지정됩니다.</span>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {mochiSessions.map((session, idx) => {
+                              const isSelected = activeSessionId === session.id;
+                              return (
+                                <button
+                                  key={session.id}
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => handleSelectSession(session)}
+                                  style={{
+                                    padding: '0.4rem 0.75rem',
+                                    fontSize: '0.78rem',
+                                    borderRadius: '8px',
+                                    background: isSelected ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.3))' : 'rgba(255, 255, 255, 0.04)',
+                                    border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                                    color: isSelected ? 'white' : 'var(--text-secondary)',
+                                    fontWeight: isSelected ? '700' : '500',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    transition: 'all 0.15s ease',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <span style={{ color: 'var(--primary)', fontWeight: '700' }}>🔥 세션 {mochiSessions.length - idx}</span>
+                                  <span>{session.startTimeStr.split(' ')[1] || session.startTimeStr} ~ {session.endTimeStr.split(' ')[1] || session.endTimeStr}</span>
+                                  <span style={{ fontSize: '0.7rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                    복습 {session.totalCards}개 {session.forgotCards > 0 && <strong style={{ color: '#f43f5e' }}>/ 오답 {session.forgotCards}개</strong>}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Interactive Time Range Slider */}
                       {sliderMaxTime > sliderMinTime && rawFetchedMochiCards.length > 0 && (
