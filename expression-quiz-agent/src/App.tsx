@@ -178,6 +178,43 @@ function createSessionFromGroup(id: string, group: Array<{ time: number; card: a
   };
 }
 
+function parseMochiTimestamp(raw: any): number {
+  if (!raw) return 0;
+
+  if (typeof raw === 'number') {
+    if (raw > 946684800) { // Year 2000+
+      return raw < 1e11 ? raw * 1000 : raw;
+    }
+    return 0;
+  }
+
+  if (typeof raw === 'string') {
+    let trimmed = raw.trim();
+    // Ignore pure index numbers (e.g. "0", "1", "2")
+    if (/^\d{1,8}$/.test(trimmed)) return 0;
+
+    // Convert space separator to 'T'
+    if (trimmed.includes(' ') && !trimmed.includes('T')) {
+      trimmed = trimmed.replace(' ', 'T');
+    }
+
+    // Mochi API timestamps are ALWAYS UTC! Append trailing 'Z' if no offset indicator is present
+    if (!trimmed.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+      trimmed += 'Z';
+    }
+
+    const ms = new Date(trimmed).getTime();
+    return !isNaN(ms) && ms > 946684800000 ? ms : 0;
+  }
+
+  if (typeof raw === 'object') {
+    const inner = raw.date || raw.$date || raw._seconds || raw['~#dt'];
+    return parseMochiTimestamp(inner);
+  }
+
+  return 0;
+}
+
 function extractMochiReviews(card: any): NormalizedReview[] {
   if (!card) return [];
 
@@ -196,42 +233,20 @@ function extractMochiReviews(card: any): NormalizedReview[] {
     for (const [key, val] of entries) {
       if (!val) continue;
 
-      let rawDate: any = null;
-      if (typeof val === 'object') {
-        rawDate = val.date || val['reviewed-at'] || val.createdAt || val['created-at'] || val.time;
-      } else if (typeof val === 'string' || typeof val === 'number') {
-        rawDate = val;
-      }
-
-      // Check if key is a date string / timestamp if val didn't have explicit date
-      if (!rawDate && key) {
-        if (key.includes('-') || key.includes('T') || !isNaN(Number(key))) {
-          rawDate = key;
-        }
-      }
-
       let timeMs = 0;
-      let dateStr = '';
-
-      if (typeof rawDate === 'number') {
-        timeMs = rawDate < 1e11 ? rawDate * 1000 : rawDate;
-      } else if (typeof rawDate === 'string') {
-        dateStr = rawDate;
-        if (!rawDate.includes('T') && rawDate.includes(' ')) {
-          dateStr = rawDate.replace(' ', 'T');
-        }
-        timeMs = new Date(dateStr).getTime();
-      } else if (rawDate && typeof rawDate === 'object') {
-        const innerDate = rawDate.$date || rawDate.date || rawDate._seconds;
-        if (typeof innerDate === 'number') {
-          timeMs = innerDate < 1e11 ? innerDate * 1000 : innerDate;
-        } else if (typeof innerDate === 'string') {
-          dateStr = innerDate;
-          timeMs = new Date(innerDate).getTime();
-        }
+      if (typeof val === 'object') {
+        const rawDate = val.date || val['reviewed-at'] || val.createdAt || val['created-at'] || val.time;
+        timeMs = parseMochiTimestamp(rawDate);
+      } else if (typeof val === 'string' || typeof val === 'number') {
+        timeMs = parseMochiTimestamp(val);
       }
 
-      if (isNaN(timeMs) || timeMs <= 0) continue;
+      // Check key only if it's a valid date string or large timestamp (not array index "0", "1", "2")
+      if (timeMs <= 0 && key) {
+        timeMs = parseMochiTimestamp(key);
+      }
+
+      if (timeMs <= 0) continue;
 
       let remembered = true;
       if (typeof val === 'boolean') {
@@ -247,7 +262,7 @@ function extractMochiReviews(card: any): NormalizedReview[] {
 
       result.push({
         time: timeMs,
-        dateStr: dateStr || new Date(timeMs).toISOString(),
+        dateStr: formatDisplayDateTime(timeMs),
         remembered
       });
     }
@@ -255,27 +270,16 @@ function extractMochiReviews(card: any): NormalizedReview[] {
 
   // Integrate explicit last-reviewed-at timestamp from card level
   const lastReviewedRaw = card['last-reviewed-at'] || card.lastReviewedAt || card['last-reviewed'] || card.lastReviewed;
-  if (lastReviewedRaw) {
-    let tMs = 0;
-    if (typeof lastReviewedRaw === 'number') {
-      tMs = lastReviewedRaw < 1e11 ? lastReviewedRaw * 1000 : lastReviewedRaw;
-    } else if (typeof lastReviewedRaw === 'string') {
-      const dateStr = lastReviewedRaw.includes(' ') && !lastReviewedRaw.includes('T') ? lastReviewedRaw.replace(' ', 'T') : lastReviewedRaw;
-      tMs = new Date(dateStr).getTime();
-    } else if (typeof lastReviewedRaw === 'object') {
-      const inner = lastReviewedRaw.$date || lastReviewedRaw.date;
-      if (inner) tMs = new Date(inner).getTime();
-    }
+  const lastReviewedMs = parseMochiTimestamp(lastReviewedRaw);
 
-    if (!isNaN(tMs) && tMs > 0) {
-      const maxExisting = result.length > 0 ? Math.max(...result.map(r => r.time)) : 0;
-      if (tMs > maxExisting) {
-        result.push({
-          time: tMs,
-          dateStr: formatDisplayDateTime(tMs),
-          remembered: card.forgotten === true || card['forgotten?'] === true ? false : true
-        });
-      }
+  if (lastReviewedMs > 0) {
+    const maxExisting = result.length > 0 ? Math.max(...result.map(r => r.time)) : 0;
+    if (lastReviewedMs > maxExisting) {
+      result.push({
+        time: lastReviewedMs,
+        dateStr: formatDisplayDateTime(lastReviewedMs),
+        remembered: card.forgotten === true || card['forgotten?'] === true ? false : true
+      });
     }
   }
 
