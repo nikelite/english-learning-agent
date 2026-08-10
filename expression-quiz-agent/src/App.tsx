@@ -203,6 +203,38 @@ function formatSessionTimeRange(startTime: number, endTime: number): string {
   return `${startMM}/${startDD} ${timePart}`;
 }
 
+function getMochiCardPreview(card: any): string {
+  if (!card) return '내용 없음';
+
+  if (card.content && typeof card.content === 'string' && card.content.trim().length > 0) {
+    return card.content.split('---')[0].trim();
+  }
+
+  if (card.name && typeof card.name === 'string' && card.name.trim().length > 0) {
+    return card.name.trim();
+  }
+
+  if (card.fields && typeof card.fields === 'object') {
+    const values: string[] = [];
+    Object.values(card.fields).forEach((f: any) => {
+      if (typeof f === 'string' && f.trim()) {
+        values.push(f.trim());
+      } else if (f && typeof f === 'object') {
+        const val = f.value || f.content || f.text;
+        if (typeof val === 'string' && val.trim()) {
+          values.push(val.trim());
+        }
+      }
+    });
+
+    if (values.length > 0) {
+      return values.join(' / ');
+    }
+  }
+
+  return card.id ? `Mochi Card #${card.id}` : '내용 없음';
+}
+
 function detectReviewSessions(allCards: any[], startBoundMs: number, endBoundMs: number): MochiReviewSession[] {
   const reviewItems: Array<{ time: number; card: any; remembered: boolean }> = [];
 
@@ -739,15 +771,31 @@ export default function App() {
 
       const detectedSessions = detectReviewSessions(allCards, fetchStartTime, sliderMax);
       setMochiSessions(detectedSessions);
-      setActiveSessionId(null);
-
       setRawFetchedMochiCards(allCards);
       setSliderMinTime(sliderMin);
       setSliderMaxTime(sliderMax);
-      setSliderStartPercent(startPct);
-      setSliderEndPercent(endPct);
 
-      applySliderFilter(allCards, sliderMin, sliderMax, startPct, endPct);
+      if (detectedSessions.length > 0) {
+        const latestSession = detectedSessions[0];
+        setActiveSessionId(latestSession.id);
+
+        if (range > 0) {
+          const sPct = Math.max(0, Math.min(99, Math.floor(((latestSession.startTime - 60000 - sliderMin) / range) * 100)));
+          const ePct = Math.max(1, Math.min(100, Math.ceil(((latestSession.endTime + 60000 - sliderMin) / range) * 100)));
+          setSliderStartPercent(sPct);
+          setSliderEndPercent(ePct);
+          applySliderFilter(allCards, sliderMin, sliderMax, sPct, ePct);
+        } else {
+          setSliderStartPercent(0);
+          setSliderEndPercent(100);
+          applySliderFilter(allCards, sliderMin, sliderMax, 0, 100);
+        }
+      } else {
+        setActiveSessionId(null);
+        setSliderStartPercent(startPct);
+        setSliderEndPercent(endPct);
+        applySliderFilter(allCards, sliderMin, sliderMax, startPct, endPct);
+      }
 
       const isCardPinned = (card: any) => card.pinned === true || card['pinned?'] === true;
       const initialFiltered = allCards.filter(card => {
@@ -2519,6 +2567,19 @@ ${quiz.rationale}`;
                   {/* Search Settings */}
                   {isMochiSearchExpanded ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          ⚙️ Mochi 검색 조건 설정
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '700' }}
+                          onClick={() => setIsMochiSearchExpanded(false)}
+                        >
+                          ▲ 검색 옵션 접기
+                        </button>
+                      </div>
                       {/* Timezone and Last Import indicator */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '0.4rem' }}>
                         <span>🌐 시간 기준: <strong style={{ color: 'var(--secondary)' }}>{getBrowserTimeZoneInfo()}</strong> (브라우저 현지 시각)</span>
@@ -3030,9 +3091,7 @@ ${quiz.rationale}`;
                         {mochiCards.map((card) => {
                           const isSelected = selectedCardIds.has(card.id);
                           const isCardPinned = card.pinned === true || card['pinned?'] === true;
-                          const cardPreview = card.content 
-                            ? card.content.split('---')[0].trim() 
-                            : (card.fields ? Object.values(card.fields).map((f: any) => f.value).filter(Boolean)[0] || '내용 없음' : '내용 없음');
+                          const cardPreview = getMochiCardPreview(card);
 
                           return (
                             <label
