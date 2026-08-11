@@ -1197,40 +1197,39 @@ ${quiz.rationale}`;
     loadPresetsProgressFromCloud(userId).then((cloudPresetsProgress) => {
       if (isMounted) {
         const localSaved = localStorage.getItem('eng_expression_presets_progress');
-        const localPresetsProgress = localSaved ? JSON.parse(localSaved) : {};
+        const localPresetsProgress: Record<string, any> = localSaved ? JSON.parse(localSaved) : {};
+        const cloudMap: Record<string, any> = cloudPresetsProgress || {};
         
-        const mergedPresetsProgress = { ...localPresetsProgress };
-        let hasChanges = false;
-        
-        if (cloudPresetsProgress) {
-          Object.keys(cloudPresetsProgress).forEach((presetId) => {
-            const localVal = localPresetsProgress[presetId];
-            const cloudVal = cloudPresetsProgress[presetId];
-            
-            if (!localVal) {
-              mergedPresetsProgress[presetId] = cloudVal;
-              hasChanges = true;
+        const mergedPresetsProgress = { ...cloudMap, ...localPresetsProgress };
+        const allPresetKeys = new Set([...Object.keys(localPresetsProgress), ...Object.keys(cloudMap)]);
+        let needsCloudUpload = false;
+
+        allPresetKeys.forEach((presetId) => {
+          const lVal = localPresetsProgress[presetId];
+          const cVal = cloudMap[presetId];
+
+          const lSolved = lVal && lVal.userAnswers && Object.keys(lVal.userAnswers).length > 0;
+          const cSolved = cVal && cVal.userAnswers && Object.keys(cVal.userAnswers).length > 0;
+
+          if (lSolved && !cSolved) {
+            mergedPresetsProgress[presetId] = lVal;
+            needsCloudUpload = true;
+          } else if (!lSolved && cSolved) {
+            mergedPresetsProgress[presetId] = cVal;
+          } else if (lSolved && cSolved) {
+            const lTime = lVal.solvedAt || 0;
+            const cTime = cVal.solvedAt || 0;
+            if (lTime >= cTime) {
+              mergedPresetsProgress[presetId] = lVal;
+              if (lTime > cTime) needsCloudUpload = true;
             } else {
-              const localTime = localVal.solvedAt || 0;
-              const cloudTime = cloudVal.solvedAt || 0;
-              if (cloudTime > localTime) {
-                mergedPresetsProgress[presetId] = cloudVal;
-                hasChanges = true;
-              } else if (localTime > cloudTime) {
-                hasChanges = true;
-              }
+              mergedPresetsProgress[presetId] = cVal;
             }
-          });
-        }
-        
-        Object.keys(localPresetsProgress).forEach((presetId) => {
-          if (!cloudPresetsProgress || !cloudPresetsProgress[presetId]) {
-            hasChanges = true;
           }
         });
-        
-        if (hasChanges) {
-          localStorage.setItem('eng_expression_presets_progress', JSON.stringify(mergedPresetsProgress));
+
+        localStorage.setItem('eng_expression_presets_progress', JSON.stringify(mergedPresetsProgress));
+        if (needsCloudUpload || !cloudPresetsProgress) {
           savePresetsProgressToCloud(userId, mergedPresetsProgress);
         }
       }

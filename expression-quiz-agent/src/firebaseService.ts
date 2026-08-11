@@ -39,7 +39,7 @@ const db = getFirestore(app);
  */
 export async function saveLessonToCloud(lesson: Lesson, userId?: string | null): Promise<string> {
   try {
-    const docId = lesson.id && !lesson.id.startsWith('preset-') && !lesson.id.startsWith('wrong-') && lesson.id.length > 5
+    const docId = lesson.id && lesson.id.trim().length > 0
       ? lesson.id 
       : `expression-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const lessonRef = doc(collection(db, 'expression_lessons'), docId);
@@ -62,6 +62,43 @@ export async function saveLessonToCloud(lesson: Lesson, userId?: string | null):
   } catch (error: any) {
     console.error("Firebase save failed:", error);
     throw new Error(`클라우드 저장 실패: ${error.message || "알 수 없는 오류가 발생했습니다."}`);
+  }
+}
+
+function isLessonSolved(l: Lesson): boolean {
+  if (!l || !l.userAnswers) return false;
+  if (typeof l.userAnswers !== 'object') return false;
+  return Object.keys(l.userAnswers).length > 0;
+}
+
+function mergeLessons(local: Lesson, cloud: Lesson): { merged: Lesson, needsUpload: boolean } {
+  const localSolved = isLessonSolved(local);
+  const cloudSolved = isLessonSolved(cloud);
+  
+  if (localSolved && !cloudSolved) {
+    return { merged: local, needsUpload: true };
+  }
+  
+  if (!localSolved && cloudSolved) {
+    return { merged: cloud, needsUpload: false };
+  }
+  
+  if (localSolved && cloudSolved) {
+    const localTime = local.solvedAt || 0;
+    const cloudTime = cloud.solvedAt || 0;
+    if (localTime >= cloudTime) {
+      return { merged: local, needsUpload: localTime > cloudTime };
+    } else {
+      return { merged: cloud, needsUpload: false };
+    }
+  }
+  
+  const localCreated = local.createdAt || 0;
+  const cloudCreated = cloud.createdAt || 0;
+  if (localCreated >= cloudCreated) {
+    return { merged: local, needsUpload: localCreated > cloudCreated };
+  } else {
+    return { merged: cloud, needsUpload: false };
   }
 }
 
@@ -214,36 +251,7 @@ export async function loadSharedLessonsProgress(
   }
 }
 
-function mergeLessons(local: Lesson, cloud: Lesson): { merged: Lesson, needsUpload: boolean } {
-  const localSolved = !!local.userAnswers;
-  const cloudSolved = !!cloud.userAnswers;
-  
-  if (localSolved && !cloudSolved) {
-    return { merged: local, needsUpload: true };
-  }
-  
-  if (!localSolved && cloudSolved) {
-    return { merged: cloud, needsUpload: false };
-  }
-  
-  if (localSolved && cloudSolved) {
-    const localTime = local.solvedAt || 0;
-    const cloudTime = cloud.solvedAt || 0;
-    if (localTime >= cloudTime) {
-      return { merged: local, needsUpload: localTime > cloudTime };
-    } else {
-      return { merged: cloud, needsUpload: false };
-    }
-  }
-  
-  const localCreated = local.createdAt || 0;
-  const cloudCreated = cloud.createdAt || 0;
-  if (localCreated >= cloudCreated) {
-    return { merged: local, needsUpload: localCreated > cloudCreated };
-  } else {
-    return { merged: cloud, needsUpload: false };
-  }
-}
+
 
 /**
  * Bidirectionally synchronizes local storage history with cloud Firestore expression lessons
@@ -272,10 +280,25 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
     // 3. Query shared lessons progress for this student
     const progressMap = await loadSharedLessonsProgress(userId);
     
-    // Merge cloud lists and inject student progress for shared lessons
+    // Merge cloud lists and inject student progress for shared lessons and owner lessons
     const cloudLessonsMap = new Map<string, Lesson>();
     ownerLessons.forEach((lesson) => {
-      cloudLessonsMap.set(lesson.id, lesson);
+      let merged = { ...lesson };
+      const studentProgress = progressMap[lesson.id];
+      if (studentProgress) {
+        const pTime = studentProgress.solvedAt || 0;
+        const lTime = merged.solvedAt || 0;
+        if (pTime >= lTime) {
+          merged = {
+            ...merged,
+            userAnswers: studentProgress.userAnswers,
+            solvedAt: studentProgress.solvedAt,
+            firstAttemptScore: studentProgress.firstAttemptScore,
+            retryHistory: studentProgress.retryHistory
+          };
+        }
+      }
+      cloudLessonsMap.set(lesson.id, merged);
     });
     sharedLessons.forEach((lesson) => {
       let mergedShared = { ...lesson };
@@ -355,8 +378,20 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       syncedLessons.push(cloudLesson);
     });
     
-    // Sort by creation date descending
-    return syncedLessons.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // 6. Strict Deduplication Engine: Deduplicate by ID and Title to prevent count inflation
+    const deduplicatedMap = new Map<string, Lesson>();
+    syncedLessons.forEach(lesson => {
+      const existing = deduplicatedMap.get(lesson.id);
+      if (!existing) {
+        deduplicatedMap.set(lesson.id, lesson);
+      } else {
+        const { merged } = mergeLessons(existing, lesson);
+        deduplicatedMap.set(lesson.id, merged);
+      }
+    });
+
+    const finalSynced = Array.from(deduplicatedMap.values());
+    return finalSynced.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error: any) {
     console.error("Firebase sync failed:", error);
     throw new Error(`클라우드 동기화 실패: ${error.message || "알 수 없는 오류가 발생했습니다."}`);
