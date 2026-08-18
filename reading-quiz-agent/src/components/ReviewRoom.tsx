@@ -265,8 +265,12 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.25rem' }}>
           {displayedAnswers.map((wa) => {
-            const { quizItem, lessonTitle, id: wrongId, lessonId } = wa;
-            const lesson = lessonsHistory.find(l => l.id === lessonId);
+            if (!wa) return null;
+            const quizItem = wa.quizItem || wa;
+            if (!quizItem) return null;
+            const lessonTitle = wa.lessonTitle || '개별 독해 세트';
+            const wrongId = wa.id;
+            const lesson = lessonsHistory.find(l => l.id === wa.lessonId);
             const userSelectedIdx = retriedAnswers[wrongId];
             const isCorrect = isAnsweredCorrectly[wrongId];
             const isSelected = selectedIds.has(wrongId);
@@ -292,15 +296,15 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                       📖 {lessonTitle}
                     </span>
                     <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.15rem 0.35rem', borderRadius: '4px' }}>
-                      {quizItem.type === 'comprehension' ? '독해 내용' : '단어 어휘'}
+                      {quizItem?.type === 'comprehension' ? '독해 내용' : '단어 어휘'}
                     </span>
                   </div>
 
                   <h4 style={{ fontSize: '0.925rem', fontWeight: '500', lineHeight: '1.5', marginBottom: '1rem', whiteSpace: 'pre-line', color: 'white' }}>
-                    {quizItem.question}
+                    {quizItem?.question}
                   </h4>
 
-                  <QuizContextSentence questionText={quizItem.question} lesson={lesson} choices={quizItem.choices} />
+                  <QuizContextSentence questionText={quizItem?.question || ''} lesson={lesson} choices={quizItem?.choices || []} />
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {quizItem.choices.map((choice, idx) => {
@@ -338,14 +342,14 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                             borderStyle: 'solid',
                             ...btnStyle
                           }}
-                          onClick={() => handleChoiceClick(wrongId, idx, quizItem.correctIndex)}
+                          onClick={() => handleChoiceClick(wrongId, idx, quizItem?.correctIndex ?? 0)}
                           disabled={isCorrect}
                         >
                           <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                             <strong>{String.fromCharCode(65 + idx)}.</strong> {choice}
                           </span>
                           {userSelectedIdx === idx && (
-                            idx === quizItem.correctIndex ? <Check size={13} /> : <X size={13} />
+                            idx === quizItem?.correctIndex ? <Check size={13} /> : <X size={13} />
                           )}
                         </button>
                       );
@@ -365,7 +369,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                           <X size={13} /> 오답입니다. Rationale를 다시 해독하세요.
                         </span>
                       )}
-                      <p style={{ color: 'var(--text-secondary)' }}>{quizItem.rationale}</p>
+                      <p style={{ color: 'var(--text-secondary)' }}>{quizItem?.rationale}</p>
                     </div>
                   )}
 

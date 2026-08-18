@@ -152,7 +152,13 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
                   type="text"
                   value={questionInput}
                   onChange={(e) => setQuestionInput(e.target.value)}
-                  placeholder={apiKey ? "설명 중 이해가 안 가는 점을 물어보세요..." : "설정에서 API Key를 등록하면 질문할 수 있습니다."}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAskQuestion(e);
+                    }
+                  }}
+                  placeholder={apiKey ? "설명 중 이해가 안 가는 점을 물어보세요... (Ctrl+Enter 전송)" : "설정에서 API Key를 등록하면 질문할 수 있습니다."}
                   className="input-glow"
                   style={{ flex: 1, padding: '0.65rem 1rem' }}
                   disabled={isAsking || !apiKey}
@@ -167,7 +173,7 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
                   }}
                   disabled={isAsking || !questionInput.trim() || !apiKey}
                 >
-                  {isAsking ? '답변 중...' : '질문하기'}
+                  {isAsking ? '답변 중...' : '질문하기 [Ctrl+Enter]'}
                 </button>
               </form>
             </div>

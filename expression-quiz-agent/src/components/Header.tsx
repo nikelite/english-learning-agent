@@ -39,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveMochiQuizDeckId
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempUserId, setTempUserId] = useState(userId);
   const [tempUserEmail, setTempUserEmail] = useState(userEmail);
@@ -174,6 +175,16 @@ export const Header: React.FC<HeaderProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '700' }}>☁️ {userId}</span>
           </div>
         )}
+
+        {/* Keyboard Shortcuts Guide Button */}
+        <button
+          className="btn btn-secondary"
+          onClick={() => setIsShortcutsOpen(true)}
+          title="단축키 안내"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '0.45rem 0.75rem' }}
+        >
+          <span>⌨️ 단축키</span>
+        </button>
 
         {/* API Settings */}
         <button 
@@ -356,6 +367,57 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Guide Modal */}
+      {isShortcutsOpen && (
+        <div className="modal-overlay" onClick={() => setIsShortcutsOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', width: '90vw' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.35rem', borderRadius: '50%' }}
+              onClick={() => setIsShortcutsOpen(false)}
+            >
+              <X size={18} />
+            </button>
+
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              ⌨️ EXPRESS.AGENT 단축키 안내
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.85rem' }}>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ color: 'var(--primary)', fontWeight: '700', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  ✍️ AI 퀴즈 생성 &amp; 질문
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', color: 'var(--text-secondary)' }}>
+                  <li><strong style={{ color: 'white' }}>Ctrl + Enter</strong> (또는 <strong style={{ color: 'white' }}>Cmd + Enter</strong>): AI 퀴즈 &amp; 심화 분석 생성</li>
+                  <li><strong style={{ color: 'white' }}>Ctrl + Enter</strong>: AI 추가 질문(ELI10 Q&amp;A) 전송</li>
+                </ul>
+              </div>
+
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ color: 'var(--secondary)', fontWeight: '700', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  🎯 실전 퀴즈 풀이
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', color: 'var(--text-secondary)' }}>
+                  <li><strong style={{ color: '#c084fc' }}>1, 2, 3, 4</strong> (또는 <strong style={{ color: '#c084fc' }}>A, B, C, D</strong>): 보기 1~4번 선택</li>
+                  <li><strong style={{ color: '#10b981' }}>Enter</strong> / <strong style={{ color: '#10b981' }}>Space</strong>: 정답 제출 &amp; 다음 문제 이동</li>
+                  <li><strong style={{ color: 'white' }}>R</strong>: 오답 재시도 / 퀴즈 재시작</li>
+                  <li><strong style={{ color: 'white' }}>Enter</strong> / <strong style={{ color: 'white' }}>N</strong>: (결과 화면) 다음 미풀이 세트 연속 풀기</li>
+                </ul>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '1.25rem' }}
+              onClick={() => setIsShortcutsOpen(false)}
+            >
+              확인
+            </button>
           </div>
         </div>
       )}

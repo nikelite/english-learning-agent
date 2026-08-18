@@ -1399,6 +1399,13 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     })}
                   </div>
                 </div>
+              ) : !activeQuestion ? (
+                /* EMPTY / NO ACTIVE QUESTION STATE */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '2rem' }}>📝</span>
+                  <div style={{ color: 'white', fontWeight: '600', fontSize: '1rem' }}>풀이할 실전 퀴즈 문항이 없습니다.</div>
+                  <div style={{ fontSize: '0.825rem' }}>상단 퀴즈 탭에서 새로운 문제를 생성하거나 다른 세트를 선택해 주세요.</div>
+                </div>
               ) : (
                 /* PLAY ACTIVE QUESTION */
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -1420,11 +1427,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                       {/* Active Quiz Categories badges */}
                       <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                        {activeQuestion.type === 'comprehension' ? '📚 독해 이해' : '🔤 문맥 어휘'}
+                        {activeQuestion?.type === 'comprehension' ? '📚 독해 이해' : '🔤 문맥 어휘'}
                       </span>
                       
                       {/* Spaced repetition review warning badge */}
-                      {activeQuestion.isReview && (
+                      {activeQuestion?.isReview && (
                         <span className="badge badge-review" style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
                           🔄 과거 오답 복습 문제
                         </span>
@@ -1432,10 +1439,10 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     </div>
 
                     <div style={{ fontSize: '1.05rem', fontWeight: '500', color: 'white', whiteSpace: 'pre-line', marginBottom: '1.25rem', lineHeight: '1.5' }}>
-                      {activeQuestion.question}
+                      {activeQuestion?.question}
                     </div>
 
-                    <QuizContextSentence questionText={activeQuestion.question} lesson={lesson} choices={activeQuestion.choices} />
+                    <QuizContextSentence questionText={activeQuestion?.question || ''} lesson={lesson} choices={activeQuestion?.choices || []} />
 
                     {/* Choices buttons */}
                     <div className="quiz-choices">
@@ -1585,7 +1592,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                 💡 본문에서 엄선한 핵심 어휘, 문법 요소, 중요 표현 및 맥락 정보의 상세 분석 목록입니다.
               </div>
 
-              {lesson.vocabulary.map((v, idx) => {
+              {(lesson.vocabulary || []).map((v, idx) => {
+                if (!v) return null;
                 const itemType = v.type || 'vocabulary';
                 let typeBadge: any = null;
                 if (itemType === 'vocabulary') typeBadge = <span className="badge badge-vocabulary" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>🔤 주요어휘</span>;

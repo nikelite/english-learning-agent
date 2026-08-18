@@ -82,10 +82,61 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
-  const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
   const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
   const [isGeneratingMore, setIsGeneratingMore] = useState(false);
   const [additionalCount, setAdditionalCount] = useState<number>(3);
+
+  // Global Keyboard Shortcuts Engine for Quiz Solving
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+        return;
+      }
+
+      if (showResult) {
+        if (e.key === 'r' || e.key === 'R') {
+          if (attemptWrongs.length > 0) {
+            handleRetryIncorrect();
+          } else {
+            handleRestart();
+          }
+        } else if (e.key === 'Enter' || e.key === 'n' || e.key === 'N') {
+          if (onLoadNextUnsolvedLesson) onLoadNextUnsolvedLesson();
+        }
+        return;
+      }
+
+      if (!activeQuestion) return;
+
+      if (!isSubmitted) {
+        if (e.key === '1' || e.key === 'a' || e.key === 'A') {
+          if (activeQuestion.choices.length > 0) handleSelect(0);
+        } else if (e.key === '2' || e.key === 'b' || e.key === 'B') {
+          if (activeQuestion.choices.length > 1) handleSelect(1);
+        } else if (e.key === '3' || e.key === 'c' || e.key === 'C') {
+          if (activeQuestion.choices.length > 2) handleSelect(2);
+        } else if (e.key === '4' || e.key === 'd' || e.key === 'D') {
+          if (activeQuestion.choices.length > 3) handleSelect(3);
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          if (selectedAns !== null) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }
+      } else {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
+          e.preventDefault();
+          handleNext();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSubmitted, selectedAns, currentIdx, activeQuizzes, showResult, attemptWrongs.length, activeQuestion]);
 
   const handlePushToMochi = async (quiz: QuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
@@ -547,8 +598,19 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 onClick={() => handleSelect(idx)}
                 disabled={isSubmitted}
               >
-                <span>
-                  <strong style={{ marginRight: '0.5rem', opacity: 0.5 }}>{String.fromCharCode(65 + idx)}.</strong>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ 
+                    fontSize: '0.72rem', 
+                    background: 'rgba(139, 92, 246, 0.2)', 
+                    color: '#c084fc', 
+                    padding: '0.1rem 0.35rem', 
+                    borderRadius: '4px',
+                    fontWeight: '700',
+                    border: '1px solid rgba(139, 92, 246, 0.3)'
+                  }}>
+                    [{idx + 1}]
+                  </span>
+                  <strong style={{ marginRight: '0.2rem', opacity: 0.6 }}>{String.fromCharCode(65 + idx)}.</strong>
                   {choice}
                 </span>
                 {iconElement}
@@ -561,11 +623,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         {!isSubmitted ? (
           <button
             className="btn btn-primary"
-            style={{ width: '100%', padding: '1rem' }}
+            style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
             disabled={selectedAns === null}
             onClick={handleSubmit}
           >
-            정답 제출 및 해설 확인
+            <span>정답 제출 및 해설 확인</span>
+            <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
           </button>
         ) : (
           <button
@@ -576,18 +639,40 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
               {currentIdx < activeQuizzes.length - 1 ? (
                 <>
-                  다음 문제 풀기
+                  다음 문제 풀기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
                   <ArrowRight size={16} />
                 </>
               ) : (
                 <>
-                  최종 결과 보러가기
+                  최종 결과 보러가기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
                   <Sparkles size={16} />
                 </>
               )}
             </span>
           </button>
         )}
+
+        {/* Keyboard Shortcuts Indicator Bar */}
+        <div style={{
+          fontSize: '0.75rem',
+          color: 'var(--text-muted)',
+          background: 'rgba(0,0,0,0.25)',
+          padding: '0.45rem 0.75rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '0.75rem',
+          flexWrap: 'wrap',
+          gap: '0.4rem'
+        }}>
+          <span style={{ fontWeight: '600' }}>⌨️ 키보드 단축키</span>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span><strong style={{ color: '#c084fc' }}>1~4 / A~D</strong>: 보기 선택</span>
+            <span><strong style={{ color: '#10b981' }}>Enter / Space</strong>: 제출 &amp; 다음</span>
+          </div>
+        </div>
 
         {/* Answer Rationale Display */}
         {isSubmitted && (

@@ -145,103 +145,118 @@ export const LessonCreator: React.FC<LessonCreatorProps> = ({
         </div>
 
         <div>
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder={
-              mode === 'vocabulary'
-                ? "예시 입력:\n002 affect\naffect의 다른 뜻\naffection\naffectionate\nv. 영향을 미치다\nv. 감정을 유발하다\nn. 애정, 애착\nadj. 다정한, 애정 어린"
-                : "예시 입력:\nDespite our preparation, we failed the exam. / Although we prepared well... 두 표현의 차이를 알려줘."
+        <textarea
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              handleSubmit(e);
             }
-            className="textarea-glow"
-            style={{ minHeight: '140px', fontSize: '0.9rem' }}
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Title Input Field */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>학습 세트 제목 (선택)</label>
-          <input
-            type="text"
-            value={titleInput}
-            onChange={(e) => setTitleInput(e.target.value)}
-            placeholder="미입력 시 지문 내용으로 자동 설정"
-            className="input-glow"
-            style={{ fontSize: '0.85rem', padding: '0.55rem 0.75rem' }}
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Question Count Selector */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>생성할 퀴즈 문항 수</label>
-          <select
-            value={questionCount}
-            onChange={(e) => setQuestionCount(Number(e.target.value))}
-            className="select-glow"
-            disabled={isLoading}
-            style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
-          >
-            <option value={3}>3 문항</option>
-            <option value={5}>5 문항 (기본)</option>
-            <option value={8}>8 문항</option>
-            <option value={10}>10 문항</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.25rem', justifyContent: 'flex-start' }}>
-          <input
-            type="checkbox"
-            id="isRegisterDraftCheckbox"
-            checked={isRegisterDraft}
-            onChange={(e) => setIsRegisterDraft(e.target.checked)}
-            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-            disabled={isLoading}
-          />
-          <label 
-            htmlFor="isRegisterDraftCheckbox" 
-            style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}
-          >
-            ⚡ AI 미생성 초안으로 우선 등록
-          </label>
-        </div>
-
-        {isRegisterDraft && (
-          <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', margin: '0 0 0.25rem 0', lineHeight: '1.4', textAlign: 'left' }}>
-            💡 빈 줄(엔터 2번)로 구분하여 여러 개 입력 시, 한 번에 여러 개의 초안 학습 카드가 보관함에 동시에 등록됩니다!
-          </p>
-        )}
-
-        {error && (
-          <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(239, 68, 68, 0.2)', alignItems: 'flex-start' }}>
-            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          className="btn btn-primary"
-          style={{ width: '100%' }}
+          }}
+          placeholder={
+            mode === 'vocabulary'
+              ? "예시 입력:\n002 affect\naffect의 다른 뜻\naffection\naffectionate\nv. 영향을 미치다\nv. 감정을 유발하다\nn. 애정, 애착\nadj. 다정한, 애정 어린"
+              : "예시 입력:\nDespite our preparation, we failed the exam. / Although we prepared well... 두 표현의 차이를 알려줘."
+          }
+          className="textarea-glow"
+          style={{ minHeight: '140px', fontSize: '0.9rem' }}
           disabled={isLoading}
+        />
+        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '-0.5rem', textAlign: 'right' }}>
+          💡 팁: <strong style={{ color: 'var(--primary)' }}>Ctrl + Enter</strong> 키를 누르면 바로 생성됩니다.
+        </div>
+      </div>
+
+      {/* Title Input Field */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>학습 세트 제목 (선택)</label>
+        <input
+          type="text"
+          value={titleInput}
+          onChange={(e) => setTitleInput(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+          placeholder="미입력 시 지문 내용으로 자동 설정"
+          className="input-glow"
+          style={{ fontSize: '0.85rem', padding: '0.55rem 0.75rem' }}
+          disabled={isLoading}
+        />
+      </div>
+
+      {/* Question Count Selector */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>생성할 퀴즈 문항 수</label>
+        <select
+          value={questionCount}
+          onChange={(e) => setQuestionCount(Number(e.target.value))}
+          className="select-glow"
+          disabled={isLoading}
+          style={{ width: '100%', padding: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-input)', color: 'white' }}
         >
-          {isLoading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%' }}></span>
-              AI가 심화 분석하는 중...
-            </span>
-          ) : isRegisterDraft ? (
-            <>
-              📥 AI 미생성 초안으로 보관함 등록
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              AI 심화 분석 &amp; 퀴즈 생성
-            </>
-          )}
-        </button>
+          <option value={3}>3 문항</option>
+          <option value={5}>5 문항 (기본)</option>
+          <option value={8}>8 문항</option>
+          <option value={10}>10 문항</option>
+        </select>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.25rem', justifyContent: 'flex-start' }}>
+        <input
+          type="checkbox"
+          id="isRegisterDraftCheckbox"
+          checked={isRegisterDraft}
+          onChange={(e) => setIsRegisterDraft(e.target.checked)}
+          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+          disabled={isLoading}
+        />
+        <label 
+          htmlFor="isRegisterDraftCheckbox" 
+          style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}
+        >
+          ⚡ AI 미생성 초안으로 우선 등록
+        </label>
+      </div>
+
+      {isRegisterDraft && (
+        <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', margin: '0 0 0.25rem 0', lineHeight: '1.4', textAlign: 'left' }}>
+          💡 빈 줄(엔터 2번)로 구분하여 여러 개 입력 시, 한 번에 여러 개의 초안 학습 카드가 보관함에 동시에 등록됩니다!
+        </p>
+      )}
+
+      {error && (
+        <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--error)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(239, 68, 68, 0.2)', alignItems: 'flex-start' }}>
+          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <button
+        type="submit"
+        className="btn btn-primary"
+        style={{ width: '100%', position: 'relative' }}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="pulse-glow" style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%' }}></span>
+            AI가 심화 분석하는 중...
+          </span>
+        ) : isRegisterDraft ? (
+          <>
+            📥 AI 미생성 초안으로 보관함 등록 <span style={{ fontSize: '0.72rem', opacity: 0.8, marginLeft: '0.3rem', background: 'rgba(0,0,0,0.25)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>[Ctrl+Enter ↵]</span>
+          </>
+        ) : (
+          <>
+            <Sparkles size={16} />
+            AI 심화 분석 &amp; 퀴즈 생성 <span style={{ fontSize: '0.72rem', opacity: 0.8, marginLeft: '0.3rem', background: 'rgba(0,0,0,0.25)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>[Ctrl+Enter ↵]</span>
+          </>
+        )}
+      </button>
       </form>
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
