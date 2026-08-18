@@ -1594,7 +1594,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
               {(lesson.vocabulary || []).map((v, idx) => {
                 if (!v) return null;
-                const itemType = v.type || 'vocabulary';
+                const itemType = v?.type || 'vocabulary';
                 let typeBadge: any = null;
                 if (itemType === 'vocabulary') typeBadge = <span className="badge badge-vocabulary" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>🔤 주요어휘</span>;
                 else if (itemType === 'grammar') typeBadge = <span className="badge badge-grammar" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>⚖️ 문법구조</span>;

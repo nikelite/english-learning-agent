@@ -527,16 +527,16 @@ export async function generateReadingLesson(
         koreanTranslation: p.koreanTranslation || ""
       })),
       vocabulary: (parsedJson.vocabulary || []).map((v: any) => ({
-        word: v.word || "",
-        meaning: v.meaning || "",
-        sentence: v.sentence || "",
-        pronunciation: v.pronunciation || "",
-        type: v.type || "vocabulary",
-        contextNote: v.contextNote || ""
+        word: v?.word || "",
+        meaning: v?.meaning || "",
+        sentence: v?.sentence || "",
+        pronunciation: v?.pronunciation || "",
+        type: v?.type || "vocabulary",
+        contextNote: v?.contextNote || ""
       })),
       quizzes: (parsedJson.quizzes || []).map((q: any, idx: number) => {
-        const rawChoices = q.choices || ["A", "B", "C", "D"];
-        const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
+        const rawChoices = q?.choices || ["A", "B", "C", "D"];
+        const rawCorrectIndex = typeof q?.correctIndex === 'number' ? q.correctIndex : 0;
         const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
 
         // Shuffle choices using standard Fisher-Yates
@@ -555,7 +555,7 @@ export async function generateReadingLesson(
         choicesWithIndex.forEach((item: any, newIdx: number) => {
           oldToNewIdx[item.cIdx] = newIdx;
         });
-        let remappedRationale = q.rationale || "상세 해설이 없습니다.";
+        let remappedRationale = q?.rationale || "상세 해설이 없습니다.";
         // Phase 1: Replace old labels → temp placeholders (avoid collision)
         const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
         LABELS.forEach((label, oldIdx) => {
@@ -577,7 +577,7 @@ export async function generateReadingLesson(
           remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
         });
 
-        let questionText = q.question || "문제가 생성되지 않았습니다.";
+        let questionText = q?.question || "문제가 생성되지 않았습니다.";
         
         // Auto-repair fill-in-the-blank questions if Gemini omitted the target sentence string
         const lowerQ = questionText.toLowerCase();
@@ -600,7 +600,7 @@ export async function generateReadingLesson(
           choices: shuffledChoices,
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
           rationale: remappedRationale,
-          type: q.type === 'vocab' ? 'vocab' : 'comprehension'
+          type: q?.type === 'vocab' ? 'vocab' : 'comprehension'
         };
       })
     };
@@ -688,12 +688,12 @@ Ensure the response is a single, valid JSON object and nothing else. Do not wrap
 
     const parsed = JSON.parse(responseText);
     return {
-      word: parsed.word || cleanWord,
-      meaning: parsed.meaning || "의미를 분석할 수 없습니다.",
-      sentence: parsed.sentence || "",
-      pronunciation: parsed.pronunciation || "",
-      type: parsed.type || "vocabulary",
-      contextNote: parsed.contextNote || ""
+      word: parsed?.word || cleanWord,
+      meaning: parsed?.meaning || "의미를 분석할 수 없습니다.",
+      sentence: parsed?.sentence || "",
+      pronunciation: parsed?.pronunciation || "",
+      type: parsed?.type || "vocabulary",
+      contextNote: parsed?.contextNote || ""
     };
   } catch (error: any) {
     console.error("Gemini Custom Vocab Generation Error:", error);
