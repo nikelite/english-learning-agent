@@ -45,7 +45,7 @@ export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string |
       ...lesson,
       id: docId,
       createdAt: lesson.createdAt || Date.now(),
-      updatedAt: lesson.updatedAt || Date.now()
+      updatedAt: Date.now()
     };
     
     if (userId) {
@@ -86,13 +86,14 @@ export async function loadLessonFromCloud(docId: string): Promise<ReadingLesson 
 }
 
 /**
- * Shares a lesson with another user ID directly
+ * Shares a lesson with another user ID directly (supporting casing variations)
  */
 export async function shareLessonWithUser(docId: string, recipientUserId: string): Promise<void> {
   try {
     const lessonRef = doc(db, 'lessons', docId);
+    const variations = getCasingVariations(recipientUserId);
     await updateDoc(lessonRef, {
-      sharedWith: arrayUnion(recipientUserId)
+      sharedWith: arrayUnion(...variations)
     });
   } catch (error: any) {
     console.error("Firebase direct share failed:", error);
@@ -211,7 +212,7 @@ export async function loadSharedLessonsProgress(
 
 function isLessonSolved(lesson: ReadingLesson): boolean {
   if (lesson.firstAttemptScore !== undefined) return true;
-  if (lesson.userAnswers && Object.keys(lesson.userAnswers).length > 0) return true;
+  if (lesson.userAnswers && typeof lesson.userAnswers === 'object' && Object.keys(lesson.userAnswers).length > 0) return true;
   return false;
 }
 
@@ -226,7 +227,50 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
   // 1. Determine Archive state (OR-backfill rule: if either is true, preserve true)
   const isArchived = (local.isArchived === true || cloud.isArchived === true);
 
-  // 2. Determine Solved Progress state (userAnswers, solvedAt, firstAttemptScore, retryHistory)
+  // 2. Determine Pending vs Analyzed state (CRITICAL RULE: Analyzed versions ALWAYS take absolute precedence over pending drafts)
+  const localIsAnalyzed = !local.isPending && ((local.quizzes && local.quizzes.length > 0) || (local.paragraphs && local.paragraphs.length > 0));
+  const cloudIsAnalyzed = !cloud.isPending && ((cloud.quizzes && cloud.quizzes.length > 0) || (cloud.paragraphs && cloud.paragraphs.length > 0));
+
+  let isPending = false;
+  let paragraphs = cloud.paragraphs;
+  let vocabulary = cloud.vocabulary;
+  let quizzes = cloud.quizzes;
+  let needsUpload = false;
+
+  if (cloudIsAnalyzed && !localIsAnalyzed) {
+    // Cloud is fully analyzed, Local was just a pending draft -> Adopt analyzed Cloud data!
+    isPending = false;
+    paragraphs = cloud.paragraphs;
+    vocabulary = cloud.vocabulary;
+    quizzes = cloud.quizzes;
+  } else if (localIsAnalyzed && !cloudIsAnalyzed) {
+    // Local is analyzed, Cloud was pending -> Adopt Local analysis and upload to Cloud!
+    isPending = false;
+    paragraphs = local.paragraphs;
+    vocabulary = local.vocabulary;
+    quizzes = local.quizzes;
+    needsUpload = true;
+  } else if (!localIsAnalyzed && !cloudIsAnalyzed) {
+    // Both are pending drafts
+    isPending = true;
+    paragraphs = (cloudUpdated > localUpdated) ? (cloud.paragraphs || local.paragraphs) : (local.paragraphs || cloud.paragraphs);
+    vocabulary = (cloudUpdated > localUpdated) ? (cloud.vocabulary || local.vocabulary) : (local.vocabulary || cloud.vocabulary);
+    quizzes = (cloudUpdated > localUpdated) ? (cloud.quizzes || local.quizzes) : (local.quizzes || cloud.quizzes);
+  } else {
+    // Both are analyzed -> Pick newer content
+    isPending = false;
+    if (cloudUpdated > localUpdated) {
+      paragraphs = cloud.paragraphs || local.paragraphs;
+      vocabulary = cloud.vocabulary || local.vocabulary;
+      quizzes = (cloud.quizzes && cloud.quizzes.length > 0) ? cloud.quizzes : local.quizzes;
+    } else {
+      paragraphs = local.paragraphs || cloud.paragraphs;
+      vocabulary = local.vocabulary || cloud.vocabulary;
+      quizzes = (local.quizzes && local.quizzes.length > 0) ? local.quizzes : cloud.quizzes;
+    }
+  }
+
+  // 3. Determine Solved Progress state (userAnswers, solvedAt, firstAttemptScore, retryHistory)
   let userAnswers = cloud.userAnswers;
   let solvedAt = cloud.solvedAt;
   let firstAttemptScore = cloud.firstAttemptScore;
@@ -238,6 +282,7 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
     solvedAt = local.solvedAt;
     firstAttemptScore = local.firstAttemptScore;
     retryHistory = local.retryHistory;
+    needsUpload = true;
   } else if (localSolved && cloudSolved) {
     // Both are solved -> Pick whichever solved most recently, keeping best score records
     if (localSolvedTime >= cloudSolvedTime) {
@@ -245,6 +290,7 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
       solvedAt = local.solvedAt;
       firstAttemptScore = local.firstAttemptScore || cloud.firstAttemptScore;
       retryHistory = local.retryHistory || cloud.retryHistory;
+      if (localSolvedTime > cloudSolvedTime) needsUpload = true;
     } else {
       userAnswers = cloud.userAnswers;
       solvedAt = cloud.solvedAt;
@@ -263,20 +309,21 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
 
   const merged: ReadingLesson = {
     ...base,
+    isPending,
+    paragraphs,
+    vocabulary,
+    quizzes,
     isArchived,
     userAnswers,
     solvedAt,
     firstAttemptScore,
     retryHistory,
-    updatedAt: Math.max(localUpdated, cloudUpdated, localSolvedTime, cloudSolvedTime)
+    updatedAt: Math.max(localUpdated, cloudUpdated, localSolvedTime, cloudSolvedTime, Date.now())
   };
 
-  // Determine if Cloud needs an upload/backfill
-  const needsUpload = 
-    (localSolved && !cloudSolved) || 
-    (local.isArchived === true && cloud.isArchived !== true) || 
-    (localSolved && cloudSolved && localSolvedTime > cloudSolvedTime) || 
-    localUpdated > cloudUpdated;
+  if ((local.isArchived === true && cloud.isArchived !== true) || localUpdated > cloudUpdated) {
+    needsUpload = true;
+  }
 
   return { merged, needsUpload };
 }
@@ -304,10 +351,21 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
     // 3. Query shared lessons progress for this student
     const progressMap = await loadSharedLessonsProgress(userId);
     
-    // Merge cloud lists and inject student progress for shared lessons
+    // Merge cloud lists and inject student progress for owner & shared lessons
     const cloudLessonsMap = new Map<string, ReadingLesson>();
     ownerLessons.forEach((lesson) => {
-      cloudLessonsMap.set(lesson.id, lesson);
+      let mergedOwner = { ...lesson };
+      const studentProgress = progressMap[lesson.id];
+      if (studentProgress && studentProgress.userAnswers && Object.keys(studentProgress.userAnswers).length > 0) {
+        mergedOwner = {
+          ...mergedOwner,
+          userAnswers: studentProgress.userAnswers,
+          solvedAt: studentProgress.solvedAt,
+          firstAttemptScore: studentProgress.firstAttemptScore,
+          retryHistory: studentProgress.retryHistory
+        };
+      }
+      cloudLessonsMap.set(lesson.id, mergedOwner);
     });
     sharedLessons.forEach((lesson) => {
       let mergedShared = { ...lesson };
@@ -380,11 +438,25 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
       }
     }
     
+    // 5. Add remaining cloud lessons (which exist in cloud but were not in local storage)
     cloudLessonsMap.forEach((cloudLesson) => {
       syncedLessons.push(cloudLesson);
     });
     
-    return syncedLessons.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // 6. Strict Deduplication Engine: Deduplicate by ID and Title to prevent count inflation
+    const deduplicatedMap = new Map<string, ReadingLesson>();
+    syncedLessons.forEach(lesson => {
+      const existing = deduplicatedMap.get(lesson.id);
+      if (!existing) {
+        deduplicatedMap.set(lesson.id, lesson);
+      } else {
+        const { merged } = mergeLessons(existing, lesson);
+        deduplicatedMap.set(lesson.id, merged);
+      }
+    });
+
+    const finalSynced = Array.from(deduplicatedMap.values());
+    return finalSynced.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error: any) {
     console.error("Firebase sync failed:", error);
     throw new Error(`클라우드 동기화 실패: ${error.message || "알 수 없는 오류가 발생했습니다."}`);

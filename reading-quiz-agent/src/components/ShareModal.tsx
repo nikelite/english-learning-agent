@@ -44,13 +44,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       const currentUserId = localStorage.getItem('eng_user_id') || null;
       
       for (const lesson of lessons) {
-        let docId = lesson.id;
-        // If the lesson is not uploaded to cloud yet, upload it first
-        const isLocalOnly = !lesson.ownerId || lesson.id.startsWith('wrong-') || lesson.id.length <= 5;
-        if (isLocalOnly) {
-          docId = await saveLessonToCloud(lesson, currentUserId);
-        }
-        // Share with target user
+        // 1. Always ensure latest analyzed content & quizzes are persisted in cloud before sharing
+        const docId = await saveLessonToCloud({
+          ...lesson,
+          updatedAt: Date.now()
+        }, currentUserId);
+        
+        // 2. Share with recipient user ID
         await shareLessonWithUser(docId, targetId);
       }
       

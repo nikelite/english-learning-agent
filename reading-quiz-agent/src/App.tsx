@@ -423,7 +423,7 @@ export default function App() {
         setWrongAnswers(cloudData.list);
       }
 
-      // 4. Sync Presets Progress
+      // 4. Sync Presets Progress (Solved State & Timestamp comparison)
       const cloudPresetsProgress = await loadPresetsProgressFromCloud(uid);
       const localPresetsSaved = localStorage.getItem('eng_reading_presets_progress');
       const localPresetsProgress = localPresetsSaved ? JSON.parse(localPresetsSaved) : {};
@@ -434,9 +434,16 @@ export default function App() {
         Object.keys(cloudPresetsProgress).forEach((presetId) => {
           const localVal = localPresetsProgress[presetId];
           const cloudVal = cloudPresetsProgress[presetId];
+          const isLocalValSolved = !!localVal && (localVal.firstAttemptScore !== undefined || (localVal.userAnswers && Object.keys(localVal.userAnswers).length > 0) || (typeof localVal === 'object' && Object.keys(localVal).length > 0 && !('userAnswers' in localVal)));
+          const isCloudValSolved = !!cloudVal && (cloudVal.firstAttemptScore !== undefined || (cloudVal.userAnswers && Object.keys(cloudVal.userAnswers).length > 0));
 
           if (!localVal) {
             mergedPresetsProgress[presetId] = cloudVal;
+            hasChanges = true;
+          } else if (!isLocalValSolved && isCloudValSolved) {
+            mergedPresetsProgress[presetId] = cloudVal;
+            hasChanges = true;
+          } else if (isLocalValSolved && !isCloudValSolved) {
             hasChanges = true;
           } else {
             const lTime = localVal.solvedAt || 0;
@@ -595,7 +602,8 @@ export default function App() {
             paragraphs: generated.paragraphs,
             vocabulary: generated.vocabulary,
             quizzes: generated.quizzes,
-            isPending: false
+            isPending: false,
+            updatedAt: Date.now()
           };
 
           // Save to local & cloud history
@@ -728,7 +736,9 @@ export default function App() {
         setSyncStatus('syncing');
         
         // If this is a shared lesson owned by someone else, save progress separately
-        if (lesson.ownerId && lesson.ownerId !== userId) {
+        const normalizedOwner = (lesson.ownerId || '').trim().toLowerCase();
+        const normalizedUser = (userId || '').trim().toLowerCase();
+        if (normalizedOwner && normalizedOwner !== normalizedUser) {
           const { saveSharedLessonProgress } = await import('./firebaseService');
           await saveSharedLessonProgress(lesson.id, userId, {
             userAnswers: updatedLesson.userAnswers,
@@ -1646,7 +1656,8 @@ export default function App() {
           paragraphs: generated.paragraphs,
           vocabulary: generated.vocabulary,
           quizzes: generated.quizzes,
-          isPending: false
+          isPending: false,
+          updatedAt: Date.now()
         };
 
         // 3. Save/sync the completed lesson back to lessonsHistory & Cloud
