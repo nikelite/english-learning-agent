@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Share2, Check, AlertCircle, UserPlus } from 'lucide-react';
 import type { ReadingLesson } from '../types';
-import { saveLessonToCloud, shareLessonWithUser } from '../firebaseService';
+import { saveLessonToCloud, shareLessonWithUser, savePassageAnalysisToCloud } from '../firebaseService';
+import { loadFromIndexedDB, STORE_ANALYSIS } from '../utils/indexedDBStorage';
 
 interface ShareModalProps {
   lessons: ReadingLesson[];
@@ -49,8 +50,24 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           ...lesson,
           updatedAt: Date.now()
         }, currentUserId);
+
+        // 2. Upload passage sentence breakdown/analysis (지문 구문 분석) to Cloud
+        try {
+          const localCached = localStorage.getItem(`eng_passage_analysis_${lesson.id}`) || localStorage.getItem(`eng_passage_analysis_${docId}`);
+          if (localCached) {
+            const parsed = JSON.parse(localCached);
+            await savePassageAnalysisToCloud(docId, parsed);
+          } else {
+            const idbCached = await loadFromIndexedDB(STORE_ANALYSIS, lesson.id) || await loadFromIndexedDB(STORE_ANALYSIS, docId);
+            if (idbCached) {
+              await savePassageAnalysisToCloud(docId, idbCached);
+            }
+          }
+        } catch (analysisErr) {
+          console.warn("Failed to upload passage sentence analysis during direct share:", analysisErr);
+        }
         
-        // 2. Share with recipient user ID
+        // 3. Share with recipient user ID
         await shareLessonWithUser(docId, targetId);
       }
       

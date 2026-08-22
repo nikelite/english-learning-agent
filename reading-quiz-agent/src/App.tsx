@@ -363,20 +363,35 @@ export default function App() {
       setLessonsHistory(syncedList);
       safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(syncedList));
 
-      // 1.1 Pre-fetch sentence analysis caches for synced lessons in parallel
+      // 1.1 Bidirectionally sync sentence analysis caches for synced lessons in parallel
       syncedList.forEach(async (l) => {
         if (!l || !l.id || l.id.startsWith('preset-')) return;
         try {
           const localC = localStorage.getItem(`eng_passage_analysis_${l.id}`);
           if (!localC) {
-            const cloudAnalysis = await loadPassageAnalysisFromCloud(l.id);
-            if (cloudAnalysis) {
-              safeSetLocalStorage(`eng_passage_analysis_${l.id}`, JSON.stringify(cloudAnalysis));
-              saveToIndexedDB(STORE_ANALYSIS, l.id, cloudAnalysis);
+            // Check IndexedDB
+            const idbCache = await loadFromIndexedDB(STORE_ANALYSIS, l.id);
+            if (idbCache) {
+              // Upload to Cloud
+              savePassageAnalysisToCloud(l.id, idbCache).catch(() => {});
+            } else {
+              // Fetch from Cloud
+              const cloudAnalysis = await loadPassageAnalysisFromCloud(l.id);
+              if (cloudAnalysis) {
+                safeSetLocalStorage(`eng_passage_analysis_${l.id}`, JSON.stringify(cloudAnalysis));
+                saveToIndexedDB(STORE_ANALYSIS, l.id, cloudAnalysis);
+              }
             }
+          } else {
+            // If local analysis exists on creator's machine, backfill/upload to Cloud
+            try {
+              const parsed = JSON.parse(localC);
+              savePassageAnalysisToCloud(l.id, parsed).catch(() => {});
+              saveToIndexedDB(STORE_ANALYSIS, l.id, parsed);
+            } catch (pErr) {}
           }
         } catch (e) {
-          console.warn("Failed to prefetch passage analysis for lesson:", l.id, e);
+          console.warn("Failed to sync passage analysis for lesson:", l.id, e);
         }
       });
 
