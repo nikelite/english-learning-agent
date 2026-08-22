@@ -172,15 +172,16 @@ export async function saveSharedLessonProgress(
 ): Promise<void> {
   try {
     const normalizedUid = userId.trim().toLowerCase();
-    const docId = `${lessonId}_${normalizedUid}`;
-    const ref = doc(db, 'reading_shared_progress', docId);
-    const docData = sanitizeForFirestore({
-      lessonId,
-      userId: normalizedUid,
-      progress,
+    const statsRef = doc(db, 'user_stats', normalizedUid);
+    const sanitizedProgress = sanitizeForFirestore({
+      ...progress,
       updatedAt: Date.now()
     });
-    await setDoc(ref, docData);
+    await setDoc(statsRef, {
+      readingProgress: {
+        [lessonId]: sanitizedProgress
+      }
+    }, { merge: true });
   } catch (error: any) {
     console.error("Failed to save user lesson progress:", error);
   }
@@ -201,7 +202,7 @@ export function getCasingVariations(userId: string): string[] {
 }
 
 /**
- * Loads all shared lesson progress documents for a given user (supporting casing variations)
+ * Loads all lesson progress and personal preferences for a given user from user_stats
  */
 export async function loadSharedLessonsProgress(
   userId: string
@@ -213,23 +214,14 @@ export async function loadSharedLessonsProgress(
   isArchived?: boolean;
 }>> {
   try {
-    const variations = getCasingVariations(userId);
-    const q = query(collection(db, 'reading_shared_progress'), where('userId', 'in', variations));
-    const querySnap = await getDocs(q);
-    const progressMap: Record<string, any> = {};
-    querySnap.forEach((docSnap) => {
+    const normalizedUid = userId.trim().toLowerCase();
+    const statsRef = doc(db, 'user_stats', normalizedUid);
+    const docSnap = await getDoc(statsRef);
+    if (docSnap.exists()) {
       const data = docSnap.data();
-      if (data.lessonId && data.progress) {
-        const existing = progressMap[data.lessonId];
-        if (!existing || (data.updatedAt || 0) > (existing.updatedAt || 0)) {
-          progressMap[data.lessonId] = {
-            ...data.progress,
-            updatedAt: data.updatedAt
-          };
-        }
-      }
-    });
-    return progressMap;
+      return (data.readingProgress || {}) as Record<string, any>;
+    }
+    return {};
   } catch (error: any) {
     console.error("Failed to load shared lessons progress:", error);
     return {};
