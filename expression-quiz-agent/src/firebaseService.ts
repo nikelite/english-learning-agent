@@ -147,25 +147,34 @@ export async function shareLessonWithUser(docId: string, recipientUserId: string
  */
 export async function removeLessonAssociation(docId: string, userId: string): Promise<void> {
   try {
+    const normalizedUid = userId.trim().toLowerCase();
+    const variations = getCasingVariations(userId);
     const lessonRef = doc(db, 'expression_lessons', docId);
     const docSnap = await getDoc(lessonRef);
     
+    // 1. Record deletion tombstone in expression_deleted_lessons to prevent stale devices from resurrecting it
+    try {
+      const delDocRef = doc(db, 'expression_deleted_lessons', `${docId}_${normalizedUid}`);
+      await setDoc(delDocRef, {
+        lessonId: docId,
+        userId: normalizedUid,
+        deletedAt: Date.now()
+      });
+    } catch (delErr) {
+      console.warn("Failed to record deleted lesson tombstone:", delErr);
+    }
+
     if (docSnap.exists()) {
       const data = docSnap.data();
-      const ownerId = data.ownerId;
-      const sharedWith = data.sharedWith || [];
+      const ownerId = (data.ownerId || '').trim().toLowerCase();
       
-      if (ownerId === userId) {
-        if (sharedWith.length === 0) {
-          await deleteDoc(lessonRef);
-        } else {
-          await updateDoc(lessonRef, {
-            ownerId: null
-          });
-        }
-      } else if (sharedWith.includes(userId)) {
+      if (!ownerId || ownerId === normalizedUid || ownerId === 'guest') {
+        // Owner deleted -> Delete document completely from Firestore!
+        await deleteDoc(lessonRef);
+      } else {
+        // Shared recipient deleted -> remove user from sharedWith
         await updateDoc(lessonRef, {
-          sharedWith: arrayRemove(userId)
+          sharedWith: arrayRemove(...variations)
         });
       }
     }
@@ -279,10 +288,24 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
     
     // 3. Query shared lessons progress for this student
     const progressMap = await loadSharedLessonsProgress(userId);
+
+    // 4. Query deleted lesson tombstones to prevent resurrecting deleted lessons from stale local storage
+    const deletedLessonIds = new Set<string>();
+    try {
+      const delQ = query(collection(db, 'expression_deleted_lessons'), where('userId', 'in', variations));
+      const delSnap = await getDocs(delQ);
+      delSnap.forEach(d => {
+        const dData = d.data();
+        if (dData.lessonId) deletedLessonIds.add(dData.lessonId);
+      });
+    } catch (e) {
+      console.warn("Failed to load deleted tombstones during sync:", e);
+    }
     
     // Merge cloud lists and inject student progress for shared lessons and owner lessons
     const cloudLessonsMap = new Map<string, Lesson>();
     ownerLessons.forEach((lesson) => {
+      if (deletedLessonIds.has(lesson.id)) return;
       let merged = { ...lesson };
       const studentProgress = progressMap[lesson.id];
       if (studentProgress) {
@@ -301,6 +324,7 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
       cloudLessonsMap.set(lesson.id, merged);
     });
     sharedLessons.forEach((lesson) => {
+      if (deletedLessonIds.has(lesson.id)) return;
       let mergedShared = { ...lesson };
       const studentProgress = progressMap[lesson.id];
       if (studentProgress) {
@@ -320,6 +344,9 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
     // 4. Merge local lessons. If offline local lesson is not in cloud, upload it.
     for (const localLesson of localLessons) {
       if (localLesson.id.startsWith('preset-')) continue;
+      
+      // If deleted by user, skip completely and purge from local state!
+      if (deletedLessonIds.has(localLesson.id)) continue;
       
       const inCloud = cloudLessonsMap.get(localLesson.id);
       if (inCloud) {
@@ -375,7 +402,9 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
     
     // 5. Add remaining cloud lessons (which exist in cloud but were not in local storage)
     cloudLessonsMap.forEach((cloudLesson) => {
-      syncedLessons.push(cloudLesson);
+      if (!deletedLessonIds.has(cloudLesson.id)) {
+        syncedLessons.push(cloudLesson);
+      }
     });
     
     // 6. Strict Deduplication Engine: Deduplicate by ID and Title to prevent count inflation

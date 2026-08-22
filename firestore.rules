@@ -1,61 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Reading Quiz Agent Collections
-    match /lessons/{document} {
-      allow read, write: if true;
-    }
-    match /quiz_attempts/{document} {
-      allow read, write: if true;
-    }
-    match /wrong_answers/{document} {
-      allow read, write: if true;
-    }
-    match /user_stats/{document} {
-      allow read, write: if true;
-    }
-    match /passage_analyses/{document} {
-      allow read, write: if true;
-    }
-    
-    // Expression Quiz Agent Collections
-    match /expression_lessons/{document} {
-      allow read, write: if true;
-    }
-    match /expression_quiz_attempts/{document} {
-      allow read, write: if true;
-    }
-    match /expression_wrong_answers/{document} {
-      allow read, write: if true;
-    }
-    match /expression_user_stats/{document} {
-      allow read, write: if true;
-    }
-    
-    // English Lab Agent Collections (New)
-    match /lab_lessons/{document} {
-      allow read, write: if true;
-    }
-    match /lab_quiz_attempts/{document} {
-      allow read, write: if true;
-    }
-    match /lab_wrong_answers/{document} {
-      allow read, write: if true;
-    }
-    match /lab_custom_personas/{document} {
-      allow read, write: if true;
-    }
-    match /lab_user_stats/{document} {
-      allow read, write: if true;
-    }
-    
-    // Mochi Agent Collections
-    match /mochi_decks/{document} {
-      allow read, write: if true;
-    }
-    
-    // Trigger Email Extension Collection
-    match /mail/{document} {
+    match /{document=**} {
       allow read, write: if true;
     }
   }

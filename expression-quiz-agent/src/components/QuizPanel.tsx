@@ -37,6 +37,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [selectedAns, setSelectedAns] = useState<number | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [score, setScore] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
+  const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
+  const [additionalCount, setAdditionalCount] = useState<number>(3);
 
   const lastLessonIdRef = useRef<string | null>(null);
 
@@ -77,14 +86,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     setSavedWrongId(null);
   }, [lesson.id, lesson.userAnswers, injectedQuizzes]);
 
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [selectedAns, setSelectedAns] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [score, setScore] = useState(0);
-  const [showResult, setShowResult] = useState(false);
-  const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
-  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
-  const [additionalCount, setAdditionalCount] = useState<number>(3);
+  const activeQuestion = activeQuizzes[currentIdx];
 
   // Global Keyboard Shortcuts Engine for Quiz Solving
   useEffect(() => {
@@ -160,7 +162,6 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     }
   };
 
-  const activeQuestion = activeQuizzes[currentIdx];
   const progressPercent = activeQuizzes.length > 0 ? (currentIdx / activeQuizzes.length) * 100 : 0;
 
   const handleSelect = (idx: number) => {
