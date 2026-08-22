@@ -157,7 +157,7 @@ export async function removeLessonAssociation(docId: string, userId: string): Pr
 }
 
 /**
- * Saves student progress on a shared lesson separately
+ * Saves student progress and personal preferences (such as isArchived) on a lesson separately per user
  */
 export async function saveSharedLessonProgress(
   lessonId: string, 
@@ -167,20 +167,22 @@ export async function saveSharedLessonProgress(
     solvedAt?: number;
     firstAttemptScore?: { score: number; total: number };
     retryHistory?: any[];
+    isArchived?: boolean;
   }
 ): Promise<void> {
   try {
-    const docId = `${lessonId}_${userId}`;
+    const normalizedUid = userId.trim().toLowerCase();
+    const docId = `${lessonId}_${normalizedUid}`;
     const ref = doc(db, 'reading_shared_progress', docId);
     const docData = sanitizeForFirestore({
       lessonId,
-      userId,
+      userId: normalizedUid,
       progress,
       updatedAt: Date.now()
     });
     await setDoc(ref, docData);
   } catch (error: any) {
-    console.error("Failed to save shared lesson progress:", error);
+    console.error("Failed to save user lesson progress:", error);
   }
 }
 
@@ -208,6 +210,7 @@ export async function loadSharedLessonsProgress(
   solvedAt?: number;
   firstAttemptScore?: { score: number; total: number };
   retryHistory?: any[];
+  isArchived?: boolean;
 }>> {
   try {
     const variations = getCasingVariations(userId);
@@ -247,8 +250,8 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
   const localUpdated = local.updatedAt || localSolvedTime || local.createdAt || 0;
   const cloudUpdated = cloud.updatedAt || cloudSolvedTime || cloud.createdAt || 0;
 
-  // 1. Determine Archive state (OR-backfill rule: if either is true, preserve true)
-  const isArchived = (local.isArchived === true || cloud.isArchived === true);
+  // 1. Determine Archive state (Local takes precedence if defined)
+  const isArchived = (local.isArchived !== undefined) ? local.isArchived : (cloud.isArchived || false);
 
   // 2. Determine Pending vs Analyzed state (CRITICAL RULE: Analyzed versions ALWAYS take absolute precedence over pending drafts)
   const localIsAnalyzed = !local.isPending && ((local.quizzes && local.quizzes.length > 0) || (local.paragraphs && local.paragraphs.length > 0));
@@ -344,7 +347,7 @@ function mergeLessons(local: ReadingLesson, cloud: ReadingLesson): { merged: Rea
     updatedAt: Math.max(localUpdated, cloudUpdated, localSolvedTime, cloudSolvedTime, Date.now())
   };
 
-  if ((local.isArchived === true && cloud.isArchived !== true) || localUpdated > cloudUpdated) {
+  if ((local.isArchived !== cloud.isArchived) || localUpdated > cloudUpdated) {
     needsUpload = true;
   }
 
@@ -371,7 +374,7 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
       sharedLessons.push(docSnap.data() as ReadingLesson);
     });
     
-    // 3. Query shared lessons progress for this student
+    // 3. Query shared lessons progress and user preferences for this student
     const progressMap = await loadSharedLessonsProgress(userId);
 
     // 4. Query deleted lesson tombstones to prevent resurrecting deleted lessons from stale local storage
@@ -392,14 +395,15 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
     ownerLessons.forEach((lesson) => {
       if (deletedLessonIds.has(lesson.id)) return;
       let mergedOwner = { ...lesson };
-      const studentProgress = progressMap[lesson.id];
-      if (studentProgress && studentProgress.userAnswers && Object.keys(studentProgress.userAnswers).length > 0) {
+      const userProgress = progressMap[lesson.id];
+      if (userProgress) {
         mergedOwner = {
           ...mergedOwner,
-          userAnswers: studentProgress.userAnswers,
-          solvedAt: studentProgress.solvedAt,
-          firstAttemptScore: studentProgress.firstAttemptScore,
-          retryHistory: studentProgress.retryHistory
+          userAnswers: userProgress.userAnswers,
+          solvedAt: userProgress.solvedAt,
+          firstAttemptScore: userProgress.firstAttemptScore,
+          retryHistory: userProgress.retryHistory,
+          isArchived: userProgress.isArchived !== undefined ? userProgress.isArchived : (lesson.isArchived || false)
         };
       }
       cloudLessonsMap.set(lesson.id, mergedOwner);
@@ -414,7 +418,18 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
           userAnswers: studentProgress.userAnswers,
           solvedAt: studentProgress.solvedAt,
           firstAttemptScore: studentProgress.firstAttemptScore,
-          retryHistory: studentProgress.retryHistory
+          retryHistory: studentProgress.retryHistory,
+          isArchived: studentProgress.isArchived !== undefined ? studentProgress.isArchived : false
+        };
+      } else {
+        // Shared recipient has not solved/archived -> Start fresh unsolved & unarchived for recipient!
+        mergedShared = {
+          ...mergedShared,
+          userAnswers: undefined,
+          solvedAt: undefined,
+          firstAttemptScore: undefined,
+          retryHistory: undefined,
+          isArchived: false
         };
       }
       cloudLessonsMap.set(lesson.id, mergedShared);
@@ -433,14 +448,14 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
         const { merged, needsUpload } = mergeLessons(localLesson, inCloud);
         if (needsUpload) {
           try {
-            if (merged.ownerId && merged.ownerId !== userId) {
-              await saveSharedLessonProgress(merged.id, userId, {
-                userAnswers: merged.userAnswers,
-                solvedAt: merged.solvedAt,
-                firstAttemptScore: merged.firstAttemptScore,
-                retryHistory: merged.retryHistory
-              });
-            } else {
+            await saveSharedLessonProgress(merged.id, userId, {
+              userAnswers: merged.userAnswers,
+              solvedAt: merged.solvedAt,
+              firstAttemptScore: merged.firstAttemptScore,
+              retryHistory: merged.retryHistory,
+              isArchived: merged.isArchived
+            });
+            if (!merged.ownerId || merged.ownerId === userId) {
               await saveLessonToCloud(merged, userId);
             }
           } catch (err) {
@@ -451,16 +466,16 @@ export async function syncUserLessons(userId: string, localLessons: ReadingLesso
         cloudLessonsMap.delete(localLesson.id);
       } else {
         try {
+          await saveSharedLessonProgress(localLesson.id, userId, {
+            userAnswers: localLesson.userAnswers,
+            solvedAt: localLesson.solvedAt,
+            firstAttemptScore: localLesson.firstAttemptScore,
+            retryHistory: localLesson.retryHistory,
+            isArchived: localLesson.isArchived
+          });
+
           if (localLesson.ownerId && localLesson.ownerId !== userId) {
             await shareLessonWithUser(localLesson.id, userId);
-            if (localLesson.userAnswers) {
-              await saveSharedLessonProgress(localLesson.id, userId, {
-                userAnswers: localLesson.userAnswers,
-                solvedAt: localLesson.solvedAt,
-                firstAttemptScore: localLesson.firstAttemptScore,
-                retryHistory: localLesson.retryHistory
-              });
-            }
             syncedLessons.push(localLesson);
           } else {
             const uploadedId = await saveLessonToCloud(localLesson, userId);

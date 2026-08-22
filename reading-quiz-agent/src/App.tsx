@@ -26,7 +26,8 @@ import {
   sendEmailReport,
   savePassageAnalysisToCloud,
   loadPassageAnalysisFromCloud,
-  shareLessonWithUser
+  shareLessonWithUser,
+  saveSharedLessonProgress
 } from './firebaseService';
 
 interface SentenceItem {
@@ -750,18 +751,20 @@ export default function App() {
       try {
         setSyncStatus('syncing');
         
-        // If this is a shared lesson owned by someone else, save progress separately
+        // 1. Always save personal progress and preferences (including isArchived) to per-user progress store
+        const { saveSharedLessonProgress } = await import('./firebaseService');
+        await saveSharedLessonProgress(lesson.id, userId, {
+          userAnswers: updatedLesson.userAnswers,
+          solvedAt: updatedLesson.solvedAt,
+          firstAttemptScore: updatedLesson.firstAttemptScore,
+          retryHistory: updatedLesson.retryHistory,
+          isArchived: updatedLesson.isArchived
+        });
+
+        // 2. Only update shared root document if user is owner
         const normalizedOwner = (lesson.ownerId || '').trim().toLowerCase();
         const normalizedUser = (userId || '').trim().toLowerCase();
-        if (normalizedOwner && normalizedOwner !== normalizedUser) {
-          const { saveSharedLessonProgress } = await import('./firebaseService');
-          await saveSharedLessonProgress(lesson.id, userId, {
-            userAnswers: updatedLesson.userAnswers,
-            solvedAt: updatedLesson.solvedAt,
-            firstAttemptScore: updatedLesson.firstAttemptScore,
-            retryHistory: updatedLesson.retryHistory
-          });
-        } else {
+        if (!normalizedOwner || normalizedOwner === normalizedUser) {
           const docId = await saveLessonToCloud(updatedLesson, userId);
           const cloudLesson = {
             ...updatedLesson,
@@ -787,7 +790,7 @@ export default function App() {
         }
         setSyncStatus('synced');
       } catch (err: any) {
-        console.error("Failed to upload lesson on save:", err);
+        console.error("Failed to sync lesson to cloud on save:", err);
         setSyncStatus('error');
       }
     }
@@ -806,11 +809,11 @@ export default function App() {
       setActiveLesson(prev => prev ? { ...prev, title: newTitle } : null);
     }
 
-    let updatedLesson: ReadingLesson | null = null;
+    let updatedLesson: ReadingLesson | undefined;
     setLessonsHistory(prev => {
       const updated = prev.map(item => {
         if (item.id === lessonId) {
-          updatedLesson = { ...item, title: newTitle };
+          updatedLesson = { ...item, title: newTitle.trim(), updatedAt: Date.now() };
           return updatedLesson;
         }
         return item;
@@ -883,7 +886,13 @@ export default function App() {
           isArchivedNow = !item.isArchived;
           const updatedItem = { ...item, isArchived: isArchivedNow, updatedAt: Date.now() };
           if (userId && !updatedItem.id.startsWith('preset-')) {
-            saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive single update failed:", err));
+            saveSharedLessonProgress(updatedItem.id, userId, {
+              userAnswers: updatedItem.userAnswers,
+              solvedAt: updatedItem.solvedAt,
+              firstAttemptScore: updatedItem.firstAttemptScore,
+              retryHistory: updatedItem.retryHistory,
+              isArchived: isArchivedNow
+            }).catch(err => console.error("User archive update failed:", err));
           }
           return updatedItem;
         }
@@ -905,7 +914,13 @@ export default function App() {
         if (toggleSet.has(item.id)) {
           const updatedItem = { ...item, isArchived: archiveState, updatedAt: Date.now() };
           if (userId && !updatedItem.id.startsWith('preset-')) {
-            saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive bulk update failed:", err));
+            saveSharedLessonProgress(updatedItem.id, userId, {
+              userAnswers: updatedItem.userAnswers,
+              solvedAt: updatedItem.solvedAt,
+              firstAttemptScore: updatedItem.firstAttemptScore,
+              retryHistory: updatedItem.retryHistory,
+              isArchived: archiveState
+            }).catch(err => console.error("User bulk archive update failed:", err));
           }
           return updatedItem;
         }
