@@ -32,6 +32,14 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
 /**
+ * Deeply strips undefined values from an object to prevent Firestore "Unsupported field value: undefined" errors
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined || data === null) return data;
+  return JSON.parse(JSON.stringify(data));
+}
+
+/**
  * Saves a ReadingLesson object directly to Firebase Firestore with optional Owner ID
  */
 export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string | null): Promise<string> {
@@ -58,7 +66,8 @@ export async function saveLessonToCloud(lesson: ReadingLesson, userId?: string |
       docData.sharedWith = [];
     }
     
-    await setDoc(lessonRef, docData);
+    const sanitized = sanitizeForFirestore(docData);
+    await setDoc(lessonRef, sanitized);
     return docId;
   } catch (error: any) {
     console.error("Firebase save failed:", error);
@@ -163,12 +172,13 @@ export async function saveSharedLessonProgress(
   try {
     const docId = `${lessonId}_${userId}`;
     const ref = doc(db, 'reading_shared_progress', docId);
-    await setDoc(ref, {
+    const docData = sanitizeForFirestore({
       lessonId,
       userId,
       progress,
       updatedAt: Date.now()
     });
+    await setDoc(ref, docData);
   } catch (error: any) {
     console.error("Failed to save shared lesson progress:", error);
   }
@@ -796,7 +806,8 @@ export async function savePassageAnalysisToCloud(
   try {
     if (!lessonId || !analysis) return;
     const analysisRef = doc(db, 'passage_analyses', lessonId);
-    await setDoc(analysisRef, { analysis, updatedAt: Date.now() }, { merge: true });
+    const sanitized = sanitizeForFirestore({ analysis, updatedAt: Date.now() });
+    await setDoc(analysisRef, sanitized, { merge: true });
   } catch (error) {
     console.error("Firebase save passage analysis failed:", error);
   }

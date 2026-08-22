@@ -32,6 +32,14 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
 /**
+ * Deeply strips undefined values from an object to prevent Firestore "Unsupported field value: undefined" errors
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined || data === null) return data;
+  return JSON.parse(JSON.stringify(data));
+}
+
+/**
  * Saves an expression Lesson object directly to Firebase Firestore with optional Owner ID
  * @param lesson The Lesson to save
  * @param userId The User ID of the creator (optional)
@@ -57,7 +65,8 @@ export async function saveLessonToCloud(lesson: Lesson, userId?: string | null):
       docData.sharedWith = [];
     }
     
-    await setDoc(lessonRef, docData);
+    const sanitized = sanitizeForFirestore(docData);
+    await setDoc(lessonRef, sanitized);
     return docId;
   } catch (error: any) {
     console.error("Firebase save failed:", error);
