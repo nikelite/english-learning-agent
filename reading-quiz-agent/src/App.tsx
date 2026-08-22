@@ -833,10 +833,28 @@ export default function App() {
 
   const handleDeleteHistory = async (e: React.MouseEvent, lessonId: string) => {
     e.stopPropagation(); // Prevent loading the lesson
-    if (window.confirm("이 학습 세트를 보관함에서 삭제하시겠습니까?")) {
-      // Remove locally immediately
+    const isPartOfSelection = selectedPendingIds.has(lessonId) && selectedPendingIds.size > 1;
+    const idsToDelete = isPartOfSelection ? Array.from(selectedPendingIds) : [lessonId];
+    const deleteSet = new Set(idsToDelete);
+
+    const confirmMsg = idsToDelete.length > 1
+      ? `선택하신 ${idsToDelete.length}개의 학습 세트를 완전히 삭제하시겠습니까?`
+      : "이 학습 세트를 보관함에서 삭제하시겠습니까?";
+
+    if (window.confirm(confirmMsg)) {
+      if (isPartOfSelection) {
+        setSelectedPendingIds(new Set());
+      } else {
+        setSelectedPendingIds(prev => {
+          const next = new Set(prev);
+          next.delete(lessonId);
+          return next;
+        });
+      }
+
+      // Remove locally immediately using immutable deleteSet
       setLessonsHistory(prev => {
-        const updated = prev.filter(item => item.id !== lessonId);
+        const updated = prev.filter(item => !deleteSet.has(item.id));
         safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
         return updated;
       });
@@ -845,7 +863,7 @@ export default function App() {
       if (userId) {
         try {
           setSyncStatus('syncing');
-          await removeLessonAssociation(lessonId, userId);
+          await Promise.all(idsToDelete.map(id => removeLessonAssociation(id, userId)));
           setSyncStatus('synced');
         } catch (err: any) {
           console.error("Failed to remove cloud association on delete:", err);
@@ -879,10 +897,12 @@ export default function App() {
   const handleBulkArchiveLessons = async (archiveState: boolean) => {
     if (selectedPendingIds.size === 0) return;
     const idsToToggle = Array.from(selectedPendingIds);
+    const toggleSet = new Set(idsToToggle);
+    setSelectedPendingIds(new Set());
 
     setLessonsHistory(prev => {
       const updated = prev.map(item => {
-        if (selectedPendingIds.has(item.id)) {
+        if (toggleSet.has(item.id)) {
           const updatedItem = { ...item, isArchived: archiveState, updatedAt: Date.now() };
           if (userId && !updatedItem.id.startsWith('preset-')) {
             saveLessonToCloud(updatedItem, userId).catch(err => console.error("Cloud archive bulk update failed:", err));
@@ -894,8 +914,6 @@ export default function App() {
       safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
       return updated;
     });
-
-    setSelectedPendingIds(new Set());
     
     alert(archiveState 
       ? `📦 선택하신 ${idsToToggle.length}개 지문이 보관함(아카이브)으로 이동되었습니다.` 
@@ -905,21 +923,22 @@ export default function App() {
 
   const handleBulkDeleteLessons = async () => {
     if (selectedPendingIds.size === 0) return;
-    if (window.confirm(`선택한 ${selectedPendingIds.size}개의 학습 세트를 완전히 삭제하시겠습니까?`)) {
-      const idsToDelete = Array.from(selectedPendingIds);
+    const idsToDelete = Array.from(selectedPendingIds);
+    const deleteSet = new Set(idsToDelete);
+
+    if (window.confirm(`선택한 ${idsToDelete.length}개의 학습 세트를 완전히 삭제하시겠습니까?`)) {
+      setSelectedPendingIds(new Set());
+
       setLessonsHistory(prev => {
-        const updated = prev.filter(item => !selectedPendingIds.has(item.id));
+        const updated = prev.filter(item => !deleteSet.has(item.id));
         safeSetLocalStorage('eng_reading_lessons_history', JSON.stringify(updated));
         return updated;
       });
-      setSelectedPendingIds(new Set());
       
       if (userId) {
         try {
           setSyncStatus('syncing');
-          for (const id of idsToDelete) {
-            await removeLessonAssociation(id, userId);
-          }
+          await Promise.all(idsToDelete.map(id => removeLessonAssociation(id, userId)));
           setSyncStatus('synced');
         } catch (err: any) {
           console.error("Failed to remove cloud association on bulk delete:", err);
