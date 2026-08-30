@@ -170,6 +170,32 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     return clean;
   };
 
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const handleRetryEdit = () => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const handleUseCorrectedSentence = () => {
+    if (feedback?.correctedSentence) {
+      setUserSentence(feedback.correctedSentence);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
+
+  const handleResetSentence = () => {
+    setUserSentence('');
+    setFeedback(null);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
   return (
     <div className="card-section animate-fade-in" style={{
       marginTop: '1.5rem',
@@ -419,6 +445,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       <form onSubmit={handleEvaluate} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div style={{ position: 'relative' }}>
           <textarea
+            ref={textareaRef}
             value={userSentence}
             onChange={(e) => setUserSentence(e.target.value)}
             placeholder="위 상황과 의도에 맞게 나만의 영어 문장을 직접 완성해보세요..."
@@ -438,7 +465,20 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {feedback ? (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleResetSentence}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+              >
+                🔄 처음부터 다시 쓰기
+              </button>
+            </div>
+          ) : <div />}
+
           <button
             type="submit"
             className="btn btn-primary"
@@ -462,7 +502,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             ) : (
               <>
                 <Sparkles size={16} />
-                <span>AI 실시간 상황 첨삭 및 코칭 받기</span>
+                <span>{feedback ? "🚀 수정된 문장 다시 첨삭받기 (재도전)" : "AI 실시간 상황 첨삭 및 코칭 받기"}</span>
               </>
             )}
           </button>
@@ -578,6 +618,44 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
               💡 {feedback.explanation}
             </p>
           )}
+
+          {/* Action Bar to Retry / Refine based on feedback */}
+          <div style={{
+            marginTop: '0.5rem',
+            paddingTop: '0.75rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '0.5rem',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              type="button"
+              onClick={handleUseCorrectedSentence}
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+            >
+              <Copy size={13} />
+              <span>교정 완성 문장 불러오기</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRetryEdit}
+              className="btn btn-primary btn-sm"
+              style={{
+                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
+                fontWeight: '700'
+              }}
+            >
+              <Edit3 size={13} />
+              <span>✏️ 피드백 반영해서 문장 고쳐 쓰기 (재도전)</span>
+            </button>
+          </div>
         </div>
       )}
     </div>
