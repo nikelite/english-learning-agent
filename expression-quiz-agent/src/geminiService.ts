@@ -1400,29 +1400,32 @@ export async function evaluateUserSentence(
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an encouraging, expert native English writing coach and tutor.
-The student is practicing this English topic:
-- Topic Title: "${lesson.title}"
-- Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
-- Decision Trigger / Key Rule: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
+The student is practicing this specific English lesson:
+- Lesson Title: "${lesson.title}"
+- Target Expression A: "${lesson.decisionTrigger?.triggerA?.expression || ''}" (${lesson.decisionTrigger?.triggerA?.condition || ''})
+- Target Expression B: "${lesson.decisionTrigger?.triggerB?.expression || ''}" (${lesson.decisionTrigger?.triggerB?.condition || ''})
+- Core Rule: "${lesson.decisionTrigger?.keyRuleSummary || lesson.eli10?.corePrinciple || ''}"
 - Real-Life Situation Given: "${activeContext?.situation || lesson.writingTemplate?.situation || ''}"
 - Target Korean Intent: "${activeContext?.koreanIntent || lesson.writingTemplate?.koreanIntent || ''}"
-- Writing Template Given: "${activeContext?.template || lesson.writingTemplate?.template || ''}"
+- Given Template: "${activeContext?.template || lesson.writingTemplate?.template || ''}"
 - Student's Written Sentence: "${userSentence.trim()}"
 
-Evaluate the student's sentence based on:
-1. Did they accurately convey the intended Korean meaning in this specific real-world situation?
-2. Did they apply the target grammar/expression correctly?
-3. Naturalness in native English business/daily contexts.
-4. Minor grammar, preposition, or spelling errors.
+CRITICAL EVALUATION INSTRUCTIONS:
+1. PRIMARY GOAL: Check whether the student correctly applied the LESSON'S TARGET EXPRESSIONS ("${lesson.decisionTrigger?.triggerA?.expression || ''}" or "${lesson.decisionTrigger?.triggerB?.expression || ''}") in their sentence.
+2. NEVER REPLACE THE TARGET EXPRESSION with an unrelated synonym! (For example, if the lesson is teaching 'configured / handled', DO NOT replace it with 'deployed' or other verbs. You MUST keep the target expression and polish the sentence around it).
+3. If the student correctly applied the target expression to match the intent and situation, award a HIGH SCORE (85~100) and praise their usage of the expression!
+4. 'correctedSentence' MUST ALWAYS PRESERVE the lesson's target expression while fixing any minor grammar, prepositions, or word order.
+5. 'nativeAlternative' should demonstrate how a native speaker naturally says this exact thought in this context.
+6. 'feedback' and 'explanation' in Korean must specifically comment on the student's usage of the target expression.
 
 Return a JSON object matching this schema:
 {
   "isNatural": true or false,
   "score": integer between 1 and 100,
-  "feedback": "Warm, encouraging 1-2 sentences in Korean evaluating how well their sentence fits the situation and what they did well.",
-  "correctedSentence": "The grammatically perfected version of their sentence in English.",
-  "nativeAlternative": "An even more natural/idiomatic alternative expression a native speaker would say in this exact situation in English.",
-  "explanation": "Clear, punchy 1-2 sentence Korean explanation of why this correction/alternative is better in this situation."
+  "feedback": "Warm, encouraging 1-2 sentences in Korean evaluating how well they used the target expression in this situation.",
+  "correctedSentence": "The perfected English sentence PRESERVING the lesson's target expression.",
+  "nativeAlternative": "A natural native speaker alternative sentence in English in this situation.",
+  "explanation": "Clear, punchy 1-2 sentence Korean explanation of why this target expression works well in this context."
 }
 
 Do not wrap in markdown \`\`\`json. Return raw JSON string only. Use single quotes inside string values if needed.`;
