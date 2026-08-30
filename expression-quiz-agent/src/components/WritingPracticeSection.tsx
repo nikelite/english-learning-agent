@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { Sparkles, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Copy, RefreshCw, Volume2, Award, Lightbulb, Edit3 } from 'lucide-react';
-import { Lesson, WritingTemplateData, WritingEvaluationResult } from '../types';
+import React, { useState, useEffect } from 'react';
+import { 
+  Sparkles, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Copy, 
+  RefreshCw, Volume2, Award, Lightbulb, Edit3, Briefcase, Coffee, Target, Plus
+} from 'lucide-react';
+import { Lesson, WritingTemplateData, WritingScenarioOption, WritingEvaluationResult } from '../types';
 import { evaluateUserSentence } from '../geminiService';
 
 interface WritingPracticeSectionProps {
@@ -19,17 +22,41 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   initialFeedback = null
 }) => {
   const writingTemplate: WritingTemplateData = lesson.writingTemplate || {
-    prompt: "오늘 배운 핵심 개념을 실사용 맥락에서 직접 1문장으로 작문해보세요.",
+    situation: "오늘 배운 핵심 원리를 실전 대화에서 적용해야 하는 상황입니다.",
+    koreanIntent: "배운 표현을 활용해 자연스러운 1문장을 완성해보세요.",
+    prompt: "주어진 실전 상황에 맞춰 1문장으로 작문해보세요.",
     template: `I need to ... ____________________.`,
     sampleSentence: lesson.eli10?.contrastiveExample || lesson.eli5?.example || "I need to check who is available for the team meeting.",
-    tip: "실제 업무나 일상에서 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요."
+    tip: "실제 업무나 일상에서 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요.",
+    keyKeywords: ["available", "check", "meeting"]
   };
+
+  const scenarios: WritingScenarioOption[] = writingTemplate.scenarios && writingTemplate.scenarios.length > 0 
+    ? writingTemplate.scenarios 
+    : [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: writingTemplate.situation || "업무 진행 중 팀원들과 상황을 확인하고 공유해야 하는 시나리오입니다.",
+          koreanIntent: writingTemplate.koreanIntent || "상황에 알맞은 1문장을 영어로 완성해보세요.",
+          template: writingTemplate.template,
+          sampleSentence: writingTemplate.sampleSentence,
+          keyKeywords: writingTemplate.keyKeywords || [],
+          tip: writingTemplate.tip
+        }
+      ];
+
+  const [activeScenarioIdx, setActiveScenarioIdx] = useState(0);
+  const currentScenario = scenarios[activeScenarioIdx] || scenarios[0];
 
   const [userSentence, setUserSentence] = useState(lesson.userWritingSentence || initialSentence);
   const [feedback, setFeedback] = useState<WritingEvaluationResult | null>(lesson.userWritingFeedback || initialFeedback);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    // When switching scenario, if user hasn't typed anything custom, don't clear, but suggest template
+  }, [activeScenarioIdx]);
 
   const handleEvaluate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -41,7 +68,12 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
 
     setIsEvaluating(true);
     try {
-      const result = await evaluateUserSentence(lesson, userSentence.trim(), apiKey);
+      const activeContext = {
+        situation: currentScenario.situation,
+        koreanIntent: currentScenario.koreanIntent,
+        template: currentScenario.template
+      };
+      const result = await evaluateUserSentence(lesson, userSentence.trim(), apiKey, activeContext);
       setFeedback(result);
       if (onSaveWriting) {
         onSaveWriting(userSentence.trim(), result);
@@ -54,8 +86,12 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   };
 
   const handleCopyTemplate = () => {
-    const rawTemplate = writingTemplate.template.replace(/_{3,}/g, '');
+    const rawTemplate = currentScenario.template.replace(/_{3,}/g, '');
     setUserSentence(rawTemplate);
+  };
+
+  const handleAppendKeyword = (kw: string) => {
+    setUserSentence(prev => prev ? `${prev} ${kw}` : kw);
   };
 
   const handleCopyCorrected = () => {
@@ -78,52 +114,112 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   return (
     <div className="card-section animate-fade-in" style={{
       marginTop: '1.5rem',
-      backgroundColor: 'rgba(15, 23, 42, 0.65)',
-      border: '1px solid rgba(139, 92, 246, 0.35)',
+      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+      border: '1px solid rgba(236, 72, 153, 0.35)',
       borderRadius: '16px',
       padding: '1.5rem',
-      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)'
+      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.35)'
     }}>
       {/* Section Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
+            width: '34px',
+            height: '34px',
+            borderRadius: '9px',
             background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white'
+            color: 'white',
+            boxShadow: '0 4px 12px rgba(236, 72, 153, 0.3)'
           }}>
             <Edit3 size={18} />
           </div>
           <div>
-            <h4 style={{ fontSize: '1.05rem', fontWeight: '800', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <h4 style={{ fontSize: '1.1rem', fontWeight: '800', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span>5단계: 1초 내 상황 작문</span>
               <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-secondary)' }}>(Self-Reference Generation)</span>
             </h4>
           </div>
         </div>
 
-        <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '9999px', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', fontWeight: '700' }}>
-          실전 체화 트레이닝
+        <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.7rem', borderRadius: '9999px', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', fontWeight: '800' }}>
+          실전 상황 시뮬레이션
         </span>
       </div>
 
-      {/* Challenge Prompt */}
+      {/* Scenario Selector Tabs if multiple scenarios available */}
+      {scenarios.length > 1 && (
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          {scenarios.map((sc, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setActiveScenarioIdx(idx)}
+              style={{
+                padding: '0.45rem 0.9rem',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backgroundColor: activeScenarioIdx === idx ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                color: activeScenarioIdx === idx ? '#f472b6' : 'var(--text-secondary)',
+                border: activeScenarioIdx === idx ? '1px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              {sc.category.includes('비즈니스') || sc.category.includes('업무') ? <Briefcase size={14} /> : <Coffee size={14} />}
+              <span>{sc.category}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Realistic Situation Card */}
       <div style={{
-        padding: '1rem 1.25rem',
+        padding: '1.25rem',
         borderRadius: '12px',
         backgroundColor: 'rgba(255, 255, 255, 0.03)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        marginBottom: '1rem'
+        marginBottom: '1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.85rem'
       }}>
-        <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600', lineHeight: '1.5', marginBottom: '0.6rem' }}>
-          ✍️ {writingTemplate.prompt}
+        {/* Scenario Description */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f472b6', fontWeight: '800', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+            <Target size={15} />
+            <span>실전 상황 시나리오 (Context Situation)</span>
+          </div>
+          <p style={{ fontSize: '0.925rem', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
+            {currentScenario.situation}
+          </p>
         </div>
 
+        {/* Korean Target Intent Speech Bubble */}
+        <div style={{
+          padding: '0.9rem 1.15rem',
+          borderRadius: '10px',
+          backgroundColor: 'rgba(236, 72, 153, 0.08)',
+          borderLeft: '4px solid #ec4899',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.25rem'
+        }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#f472b6', textTransform: 'uppercase' }}>
+            🎯 내가 전달하고자 하는 의도 (말하고 싶은 문장)
+          </span>
+          <p style={{ fontSize: '1.05rem', fontWeight: '800', color: 'white', margin: 0, lineHeight: '1.4' }}>
+            "{currentScenario.koreanIntent}"
+          </p>
+        </div>
+
+        {/* Template Box */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -138,7 +234,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '240px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#c084fc', textTransform: 'uppercase' }}>Template:</span>
             <code style={{ fontSize: '0.9rem', color: 'white', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
-              {writingTemplate.template}
+              {currentScenario.template}
             </code>
           </div>
           <button
@@ -150,6 +246,36 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             📋 템플릿 가져오기
           </button>
         </div>
+
+        {/* Suggested Keyword Chips */}
+        {currentScenario.keyKeywords && currentScenario.keyKeywords.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>💡 추천 표현 힌트:</span>
+            {currentScenario.keyKeywords.map((kw, kwIdx) => (
+              <button
+                key={kwIdx}
+                type="button"
+                onClick={() => handleAppendKeyword(kw)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '6px',
+                  color: '#e2e8f0',
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}
+                title="클릭하여 입력창에 추가"
+              >
+                <span>{kw}</span>
+                <Plus size={11} style={{ opacity: 0.6 }} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Sample Sentence Toggle */}
@@ -171,7 +297,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           }}
         >
           {showSample ? <EyeOff size={14} /> : <Eye size={14} />}
-          <span>{showSample ? '모범 예시 문장 숨기기' : '💡 모범 예시 문장 및 팁 보기'}</span>
+          <span>{showSample ? '모범 예시 문장 숨기기' : '💡 모범 예시 문장 및 코칭 팁 보기'}</span>
         </button>
 
         {showSample && (
@@ -185,12 +311,12 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             color: 'var(--text-secondary)'
           }}>
             <p style={{ margin: '0 0 0.4rem 0', color: 'white', fontWeight: '600' }}>
-              🎯 <strong>Sample:</strong> "{writingTemplate.sampleSentence}"
+              🎯 <strong>Sample:</strong> "{currentScenario.sampleSentence}"
             </p>
-            {writingTemplate.tip && (
+            {currentScenario.tip && (
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                 <Lightbulb size={13} style={{ color: 'var(--secondary)', flexShrink: 0 }} />
-                <span>{writingTemplate.tip}</span>
+                <span>{currentScenario.tip}</span>
               </p>
             )}
           </div>
@@ -203,7 +329,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           <textarea
             value={userSentence}
             onChange={(e) => setUserSentence(e.target.value)}
-            placeholder="위 템플릿을 활용해 나만의 실사용 문장을 영어로 완성해보세요..."
+            placeholder="위 상황과 의도에 맞게 나만의 영어 문장을 직접 완성해보세요..."
             rows={2}
             className="input-glow"
             style={{
@@ -239,12 +365,12 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             {isEvaluating ? (
               <>
                 <RefreshCw className="animate-spin" size={16} />
-                <span>AI 첨삭 및 뉘앙스 분석 중...</span>
+                <span>AI 상황 적합도 및 뉘앙스 첨삭 중...</span>
               </>
             ) : (
               <>
                 <Sparkles size={16} />
-                <span>AI 실시간 첨삭 및 피드백 받기</span>
+                <span>AI 실시간 상황 첨삭 및 코칭 받기</span>
               </>
             )}
           </button>
@@ -272,7 +398,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
                 <Sparkles size={20} style={{ color: 'var(--primary)' }} />
               )}
               <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'white' }}>
-                {feedback.isNatural ? "🎉 훌륭합니다! 자연스러운 문장입니다." : "💡 조금 더 다듬으면 완벽해집니다!"}
+                {feedback.isNatural ? "🎉 상황에 딱 맞고 자연스러운 문장입니다!" : "💡 주어진 상황에 맞게 조금 더 다듬어볼까요?"}
               </span>
             </div>
             
@@ -288,7 +414,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
               fontSize: '0.8rem'
             }}>
               <Award size={14} />
-              <span>완성도 {feedback.score}점</span>
+              <span>상황 완성도 {feedback.score}점</span>
             </div>
           </div>
 
@@ -306,7 +432,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
-                교정된 완성 문장
+                상황 맞춤 교정 완성 문장
               </span>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
                 <button
@@ -346,7 +472,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
               border: '1px solid rgba(6, 182, 212, 0.2)'
             }}>
               <span style={{ fontSize: '0.75rem', color: '#22d3ee', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '0.25rem' }}>
-                🌟 원어민 추천 자연스러운 대체 표현
+                🌟 원어민 실사용 추천 대체 표현
               </span>
               <p style={{ fontSize: '0.95rem', fontWeight: '600', color: 'white', margin: 0, lineHeight: '1.4' }}>
                 "{feedback.nativeAlternative}"

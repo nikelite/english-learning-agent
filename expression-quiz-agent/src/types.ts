@@ -60,11 +60,25 @@ export interface DecisionTriggerData {
 }
 
 // 5단계: 1초 내 상황 작문 (Self-Reference Generation)
+export interface WritingScenarioOption {
+  category: string; // 예: "🏢 비즈니스 / 업무", "☕ 일상 / 대화"
+  situation: string; // 구체적 실전 상황 설명 (예: "내일 긴급 팀 미팅에 참석할 수 있는 사람이 누구인지 명단을 확인해야 할 때")
+  koreanIntent: string; // 말하고자 하는 한국어 의도 (예: "내일 회의에 누가 참석 가능한지 확인해 볼게요.")
+  template: string; // 빈칸 템플릿 (예: "I will check (who / if anyone) ____________________.")
+  sampleSentence: string; // 모범 완성 문장 (예: "I will check who is available for tomorrow's meeting.")
+  keyKeywords?: string[]; // 추천 단어/표현 힌트 (예: ["available", "join the meeting"])
+  tip?: string; // 팁
+}
+
 export interface WritingTemplateData {
-  prompt: string; // 작문 상황 제시 (예: "오늘 업무/일상에서 확인할 일 1가지를 직접 작문해보세요.")
+  situation?: string; // 구체적 실전 상황 맥락
+  koreanIntent?: string; // 표현하고자 하는 한국어 문장 의도
+  prompt: string; // 작문 챌린지 지시문
   template: string; // 빈칸 템플릿 (예: "I need to check (who / if anyone) ____________________.")
   sampleSentence: string; // 모범 예시 문장
   tip: string; // 작문 팁
+  keyKeywords?: string[]; // 추천 단어/표현 힌트
+  scenarios?: WritingScenarioOption[]; // 다각도 상황 선택지 (비즈니스 / 일상)
 }
 
 export interface WritingEvaluationResult {

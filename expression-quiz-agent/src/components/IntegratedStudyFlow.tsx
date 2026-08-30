@@ -105,6 +105,16 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
     }
   };
 
+  const cleanSentenceDisplay = (str: string) => {
+    if (!str) return '';
+    return str
+      .replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '')
+      .replace(/^\s*[ABab]\s*[:.)-]\s*/, '')
+      .replace(/\s*vs\s*.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const isAIncorrect = prediction.incorrectChoice === 'A';
   const isBIncorrect = prediction.incorrectChoice === 'B';
 
@@ -245,7 +255,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
               )}
             </div>
             <p style={{ fontSize: '1.05rem', fontWeight: '700', color: 'white', margin: '0 0 0.5rem 0', lineHeight: '1.4' }}>
-              "{prediction.sentenceA}"
+              "{cleanSentenceDisplay(prediction.sentenceA)}"
             </p>
             {!showPredictionAnswer && (
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -286,7 +296,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
               )}
             </div>
             <p style={{ fontSize: '1.05rem', fontWeight: '700', color: 'white', margin: '0 0 0.5rem 0', lineHeight: '1.4' }}>
-              "{prediction.sentenceB}"
+              "{cleanSentenceDisplay(prediction.sentenceB)}"
             </p>
             {!showPredictionAnswer && (
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

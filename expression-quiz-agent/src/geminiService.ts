@@ -1113,7 +1113,8 @@ export async function generateVocabularyLessons(
 export async function evaluateUserSentence(
   lesson: Lesson,
   userSentence: string,
-  apiKey: string
+  apiKey: string,
+  activeContext?: { situation?: string; koreanIntent?: string; template?: string }
 ): Promise<WritingEvaluationResult> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
   if (!userSentence.trim()) throw new Error("작문 문장을 입력해 주세요.");
@@ -1125,22 +1126,25 @@ The student is practicing this English topic:
 - Topic Title: "${lesson.title}"
 - Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
 - Decision Trigger / Key Rule: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
-- Writing Template Given: "${lesson.writingTemplate?.template || ''}"
+- Real-Life Situation Given: "${activeContext?.situation || lesson.writingTemplate?.situation || ''}"
+- Target Korean Intent: "${activeContext?.koreanIntent || lesson.writingTemplate?.koreanIntent || ''}"
+- Writing Template Given: "${activeContext?.template || lesson.writingTemplate?.template || ''}"
 - Student's Written Sentence: "${userSentence.trim()}"
 
 Evaluate the student's sentence based on:
-1. Did they apply the target grammar/expression correctly?
-2. Naturalness in native English business/daily contexts.
-3. Minor grammar, preposition, or spelling errors.
+1. Did they accurately convey the intended Korean meaning in this specific real-world situation?
+2. Did they apply the target grammar/expression correctly?
+3. Naturalness in native English business/daily contexts.
+4. Minor grammar, preposition, or spelling errors.
 
 Return a JSON object matching this schema:
 {
   "isNatural": true or false,
   "score": integer between 1 and 100,
-  "feedback": "Warm, encouraging 1-2 sentences in Korean highlighting what they did well.",
+  "feedback": "Warm, encouraging 1-2 sentences in Korean evaluating how well their sentence fits the situation and what they did well.",
   "correctedSentence": "The grammatically perfected version of their sentence in English.",
-  "nativeAlternative": "An even more natural/idiomatic alternative expression a native speaker would say in this context in English.",
-  "explanation": "Clear, punchy 1-2 sentence Korean explanation of why this correction/alternative is better."
+  "nativeAlternative": "An even more natural/idiomatic alternative expression a native speaker would say in this exact situation in English.",
+  "explanation": "Clear, punchy 1-2 sentence Korean explanation of why this correction/alternative is better in this situation."
 }
 
 Do not wrap in markdown \`\`\`json. Return raw JSON string only. Use single quotes inside string values if needed.`;
