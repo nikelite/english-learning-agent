@@ -142,6 +142,34 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     window.speechSynthesis.speak(utterance);
   };
 
+  const cleanKoreanIntentDisplay = (intent: string) => {
+    if (!intent) return '';
+    let clean = intent
+      .replace(/상황을 영어로 말해보세요\.?/g, '')
+      .replace(/상황을 영어 1문장으로 표현해보세요\.?/g, '')
+      .replace(/상황을 영어로 표현해보세요\.?/g, '')
+      .replace(/영어로 표현해보세요\.?/g, '')
+      .replace(/영어로 말해보세요\.?/g, '')
+      .replace(/영작해보세요\.?/g, '')
+      .replace(/말해보세요\.?/g, '')
+      .replace(/^["'\s]+|["'\s]+$/g, '')
+      .trim();
+
+    if (clean.includes('바꿀') || clean.includes('전환할') || clean.includes('설정할')) {
+      return clean.replace(/바꿀.*$/, '바꿔 둘게요.').replace(/전환할.*$/, '전환했어요.').replace(/설정할.*$/, '설정해 둘게요.');
+    }
+    if (clean.includes('지정할') || clean.includes('표시할')) {
+      return clean.replace(/지정할.*$/, '지정해 두었습니다.').replace(/표시할.*$/, '표시해 둘게요.');
+    }
+    if (clean.includes('확인할') || clean.includes('알아볼')) {
+      return clean.replace(/확인할.*$/, '확인해 볼게요.').replace(/알아볼.*$/, '알아볼게요.');
+    }
+    if (!clean.endsWith('요') && !clean.endsWith('다') && !clean.endsWith('어') && !clean.endsWith('음') && !clean.endsWith('죠') && !clean.endsWith('.')) {
+      clean += '해 볼게요.';
+    }
+    return clean;
+  };
+
   return (
     <div className="card-section animate-fade-in" style={{
       marginTop: '1.5rem',
@@ -279,7 +307,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             🎯 내가 전달하고자 하는 의도 (말하고 싶은 문장)
           </span>
           <p style={{ fontSize: '1.05rem', fontWeight: '800', color: 'white', margin: 0, lineHeight: '1.4' }}>
-            "{currentScenario.koreanIntent}"
+            "{cleanKoreanIntentDisplay(currentScenario.koreanIntent)}"
           </p>
         </div>
 

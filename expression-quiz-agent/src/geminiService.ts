@@ -113,6 +113,83 @@ function cleanJsonString(raw: string): string {
   return cleaned;
 }
 
+function cleanKoreanIntent(intent: string): string {
+  if (!intent) return "";
+  return intent
+    .replace(/상황을 영어로 말해보세요\.?/g, '')
+    .replace(/상황을 영어 1문장으로 표현해보세요\.?/g, '')
+    .replace(/영어로 표현해보세요\.?/g, '')
+    .replace(/영어로 말해보세요\.?/g, '')
+    .replace(/영작해보세요\.?/g, '')
+    .replace(/말해보세요\.?/g, '')
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .trim();
+}
+
+function makeDirectSpokenSentence(
+  condition: string,
+  expression: string,
+  example?: string,
+  category: 'business' | 'daily' = 'business'
+): string {
+  if (example) {
+    const parenMatch = example.match(/[\(（](.*?)[\)）]/);
+    if (parenMatch && parenMatch[1] && parenMatch[1].length >= 3) {
+      let t = parenMatch[1]
+        .replace(/주로 쓰는 표현.*$/, '')
+        .replace(/정형화된 표현.*$/, '')
+        .replace(/때$/, '')
+        .replace(/상황$/, '')
+        .trim();
+      if (!t.endsWith('요') && !t.endsWith('다') && !t.endsWith('어') && !t.endsWith('음') && !t.endsWith('죠')) {
+        t += (category === 'business' ? ' 확인해 볼게요.' : ' 해볼게요.');
+      }
+      return t;
+    }
+  }
+
+  if (!condition) {
+    return category === 'business' 
+      ? `제가 관련 내용을 ${expression} 처리해 둘게요.` 
+      : `우리 ${expression} 쪽으로 해보자.`;
+  }
+
+  let clean = condition
+    .replace(/주로 쓰는 표현.*$/, '')
+    .replace(/정형화된 표현.*$/, '')
+    .replace(/상황을 영어로.*$/, '')
+    .replace(/표현 상황.*$/, '')
+    .replace(/사용할 때.*$/, '')
+    .replace(/사용합니다.*$/, '')
+    .replace(/때$/, '')
+    .replace(/상황$/, '')
+    .trim();
+
+  if (clean.includes('바꿀') || clean.includes('전환할') || clean.includes('설정할')) {
+    return clean.replace(/바꿀.*$/, '바꿔 둘게요.').replace(/전환할.*$/, '전환했어요.').replace(/설정할.*$/, '설정해 둘게요.');
+  }
+  if (clean.includes('지정할') || clean.includes('표시할')) {
+    return clean.replace(/지정할.*$/, '지정해 두었습니다.').replace(/표시할.*$/, '표시해 둘게요.');
+  }
+  if (clean.includes('확인할') || clean.includes('알아볼')) {
+    return clean.replace(/확인할.*$/, '확인해 볼게요.').replace(/알아볼.*$/, '알아볼게요.');
+  }
+  if (clean.includes('불확실할') || clean.includes('존재 유무')) {
+    return `혹시 도와줄 사람이 있기는 한지 알아볼게요.`;
+  }
+  if (clean.includes('특정할') || clean.includes('누구인지')) {
+    return `누가 참석할 수 있는지 명단을 확인해 볼게요.`;
+  }
+
+  if (clean.endsWith('할') || clean.endsWith('될')) {
+    clean = clean.replace(/할$/, '해 볼게요.').replace(/될$/, '되어 있어요.');
+  } else if (!clean.endsWith('요') && !clean.endsWith('다') && !clean.endsWith('어')) {
+    clean = `${clean} 상황이라 제가 직접 진행해 볼게요.`;
+  }
+
+  return clean;
+}
+
 /**
  * Normalizes any lesson object (legacy or newly generated) to guarantee 
  * all 5-stage fields exist with graceful fallbacks.
@@ -133,8 +210,8 @@ export function normalizeLesson(raw: any): Lesson {
     if (rawExample.includes('vs') || rawExample.includes('/')) {
       const parts = rawExample.split(/vs|\//i);
       if (parts.length >= 2) {
-        sA = parts[0].replace(/\([OXox]\)/g, '').trim();
-        sB = parts[1].replace(/\([OXox]\)/g, '').trim();
+        sA = parts[0].replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').trim();
+        sB = parts[1].replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').trim();
         if (parts[0].includes('(X)') || parts[0].includes('(x)')) {
           incorrect = 'A';
         }
@@ -146,6 +223,13 @@ export function normalizeLesson(raw: any): Lesson {
       sentenceB: sB,
       incorrectChoice: incorrect,
       trapExplanation: raw.eli10?.corePrinciple || raw.eli5?.explanation || "한국어 직역 습관으로 인해 발생하는 인지적 착각 패턴입니다."
+    };
+  } else {
+    prediction = {
+      sentenceA: prediction.sentenceA.replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').trim(),
+      sentenceB: prediction.sentenceB.replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').trim(),
+      incorrectChoice: prediction.incorrectChoice === 'A' ? 'A' : 'B',
+      trapExplanation: prediction.trapExplanation || ""
     };
   }
 
@@ -198,7 +282,9 @@ export function normalizeLesson(raw: any): Lesson {
     writingTemplate.situation.includes("실전 대화에서 적용") ||
     writingTemplate.template?.includes("I need to ...") ||
     !writingTemplate.scenarios ||
-    writingTemplate.scenarios.length === 0;
+    writingTemplate.scenarios.length === 0 ||
+    writingTemplate.koreanIntent?.includes("말해보세요") ||
+    writingTemplate.koreanIntent?.includes("표현해보세요");
 
   if (!writingTemplate || isGeneric) {
     const rawExample = eli10.contrastiveExample 
@@ -207,13 +293,13 @@ export function normalizeLesson(raw: any): Lesson {
 
     const baseTemplate = `(${exprA}${exprB ? ` / ${exprB}` : ''}) ____________________.`;
 
-    const businessSit = `[🏢 비즈니스 / 업무 상황] ${condA ? `${condA.replace(/때$/, '')} 상황에서 팀원 또는 거래처에 명확하게 의사를 전달해야 합니다.` : `업무 미팅 중 ${exprA}을(를) 활용하여 상황을 명확하게 전달해야 하는 상황입니다.`}`;
-    const businessIntent = condA ? `${condA.replace(/때$/, '')} 상황을 영어로 말해보세요.` : `${exprA}을(를) 활용하여 업무 상황을 영어로 표현해보세요.`;
+    const businessIntent = makeDirectSpokenSentence(condA, exprA, decisionTrigger.triggerA?.example, 'business');
+    const dailyIntent = makeDirectSpokenSentence(condB || condA, exprB || exprA, decisionTrigger.triggerB?.example, 'daily');
 
+    const businessSit = `[🏢 비즈니스 / 업무 상황] ${condA ? `${condA.replace(/때$/, '')} 상황에서 팀원 또는 거래처에 명확하게 의사를 전달해야 합니다.` : `업무 미팅 중 ${exprA}을(를) 활용하여 상황을 명확하게 전달해야 하는 상황입니다.`}`;
     const dailySit = exprB
       ? `[☕ 일상 / 대화 상황] ${condB ? `${condB.replace(/때$/, '')} 상황에서 친구나 지인에게 자연스럽게 이야기해야 합니다.` : `일상 대화 중 ${exprB}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`}`
       : `[☕ 일상 / 대화 상황] 일상 대화 중 ${exprA}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`;
-    const dailyIntent = condB ? `${condB.replace(/때$/, '')} 상황을 영어로 말해보세요.` : `${exprB || exprA}을(를) 활용하여 일상 대화를 영어로 표현해보세요.`;
 
     const defaultKeywords = [
       exprA.split(' ')[0].replace(/[^a-zA-Z]/g, ''),
@@ -227,7 +313,7 @@ export function normalizeLesson(raw: any): Lesson {
       koreanIntent: businessIntent,
       prompt: `주어진 실전 상황에 맞춰 (${exprA}${exprB ? ` / ${exprB}` : ''})을(를) 활용한 1문장을 완성해보세요.`,
       template: baseTemplate,
-      sampleSentence: rawExample || `I need to check (${exprA}) right away.`,
+      sampleSentence: rawExample || `I will (${exprA}) right away.`,
       tip: condA || `${exprA}의 쓰임새와 조건에 유의하여 완성해보세요.`,
       keyKeywords: defaultKeywords,
       scenarios: [
@@ -236,7 +322,7 @@ export function normalizeLesson(raw: any): Lesson {
           situation: businessSit,
           koreanIntent: businessIntent,
           template: baseTemplate,
-          sampleSentence: rawExample || `I need to check (${exprA}) right away.`,
+          sampleSentence: rawExample || `I will (${exprA}) right away.`,
           keyKeywords: defaultKeywords,
           tip: condA || `${exprA}의 조건에 맞춰 작성하세요.`
         },
@@ -245,11 +331,20 @@ export function normalizeLesson(raw: any): Lesson {
           situation: dailySit,
           koreanIntent: dailyIntent,
           template: `(${exprB || exprA}) ____________________.`,
-          sampleSentence: rawExample || `Let's see if (${exprB || exprA}) works best.`,
+          sampleSentence: rawExample || `Let me (${exprB || exprA}) right away.`,
           keyKeywords: defaultKeywords,
           tip: condB || `${exprB || exprA}의 뉘앙스를 살려 작성하세요.`
         }
       ]
+    };
+  } else if (writingTemplate.scenarios) {
+    writingTemplate = {
+      ...writingTemplate,
+      koreanIntent: cleanKoreanIntent(writingTemplate.koreanIntent || ""),
+      scenarios: writingTemplate.scenarios.map(s => ({
+        ...s,
+        koreanIntent: cleanKoreanIntent(s.koreanIntent || "")
+      }))
     };
   }
 
