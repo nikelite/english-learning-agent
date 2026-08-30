@@ -79,11 +79,21 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     setActiveScenarioIdx(0);
   }, [lesson.id]);
 
-  const scenarios: WritingScenarioOption[] = localWritingTemplate.scenarios && localWritingTemplate.scenarios.length > 0 
-    ? localWritingTemplate.scenarios 
-    : [];
+  const defaultScenario: WritingScenarioOption = {
+    category: "🏢 실전 비즈니스 / 업무 상황",
+    situation: localWritingTemplate.situation || "업무 진행 중 팀원들과 상황을 확인하고 공유해야 하는 시나리오입니다.",
+    koreanIntent: localWritingTemplate.koreanIntent || "상황에 알맞은 1문장을 영어로 완성해보세요.",
+    template: localWritingTemplate.template || `(${normalized.decisionTrigger?.triggerA?.expression || 'Expression'}) ____________________.`,
+    sampleSentence: localWritingTemplate.sampleSentence || normalized.eli10?.contrastiveExample || "",
+    keyKeywords: localWritingTemplate.keyKeywords || [],
+    tip: localWritingTemplate.tip || ""
+  };
 
-  const currentScenario = scenarios[activeScenarioIdx] || scenarios[0];
+  const scenarios: WritingScenarioOption[] = (localWritingTemplate.scenarios && localWritingTemplate.scenarios.length > 0)
+    ? localWritingTemplate.scenarios 
+    : [defaultScenario];
+
+  const currentScenario = scenarios[activeScenarioIdx] || scenarios[0] || defaultScenario;
 
   const handleGenerateScenariosWithAI = async () => {
     if (!apiKey) {

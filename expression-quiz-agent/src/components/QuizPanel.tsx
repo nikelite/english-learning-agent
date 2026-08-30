@@ -228,6 +228,9 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleNext = () => {
+    const savedAns = selectedAns;
+    const currentQ = activeQuestion;
+
     setSavedWrongId(null);
     setSelectedAns(null);
     setIsSubmitted(false);
@@ -238,26 +241,21 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       setShowResult(true);
       const finalScore = score;
       let finalWrongs = [...attemptWrongs];
-      if (selectedAns !== null && selectedAns !== activeQuestion.correctIndex) {
-        if (!finalWrongs.some(w => w.question === activeQuestion.question)) {
+      if (savedAns !== null && currentQ && savedAns !== currentQ.correctIndex) {
+        if (!finalWrongs.some(w => w.question === currentQ.question)) {
           finalWrongs.push({
-            question: activeQuestion.question,
-            choices: activeQuestion.choices,
-            userAnswerIndex: selectedAns,
-            correctIndex: activeQuestion.correctIndex,
-            rationale: activeQuestion.rationale
+            question: currentQ.question,
+            choices: currentQ.choices || [],
+            userAnswerIndex: savedAns,
+            correctIndex: currentQ.correctIndex,
+            rationale: currentQ.rationale || ''
           });
         }
       }
 
-      const finalAnswers: Record<string, number> = {};
-      Object.entries(submittedAnswers).forEach(([key, val]) => {
-        if (val !== null && val !== undefined) {
-          finalAnswers[key] = val;
-        }
-      });
-      if (selectedAns !== null) {
-        finalAnswers[activeQuestion.id] = selectedAns;
+      const finalAnswers: Record<string, number> = { ...submittedAnswers };
+      if (savedAns !== null && currentQ) {
+        finalAnswers[currentQ.id] = savedAns;
       }
 
       // Complete quiz in parent state

@@ -1688,39 +1688,31 @@ ${quiz.rationale}`;
         };
 
         if (userId && activeLesson) {
-          const loggedTitle = isRetry ? `🔄 [재시도] ${activeLesson.title}` : activeLesson.title;
-          
-          let allQuestionsList: any[] = [];
-          if (userAnswers) {
-            allQuestionsList = activeLesson.quizzes.map(q => {
-              const userAnswerIndex = userAnswers[q.id];
-              return {
-                question: q.question,
-                choices: q.choices,
-                userAnswerIndex: userAnswerIndex !== undefined ? userAnswerIndex : -1,
-                correctIndex: q.correctIndex,
-                rationale: q.rationale
-              };
-            }).filter(q => q.userAnswerIndex !== -1);
-          } else {
-            allQuestionsList = list;
+          try {
+            const loggedTitle = isRetry ? `🔄 [재시도] ${activeLesson.title}` : activeLesson.title;
+            
+            let allQuestionsList: any[] = [];
+            const qList = Array.isArray(activeLesson.quizzes) ? activeLesson.quizzes : [];
+            if (userAnswers && qList.length > 0) {
+              allQuestionsList = qList.map(q => {
+                const userAnswerIndex = userAnswers[q.id];
+                return {
+                  question: q.question,
+                  choices: q.choices || [],
+                  userAnswerIndex: userAnswerIndex !== undefined ? userAnswerIndex : -1,
+                  correctIndex: q.correctIndex,
+                  rationale: q.rationale || ''
+                };
+              }).filter(q => q.userAnswerIndex !== -1);
+            } else {
+              allQuestionsList = list;
+            }
+
+            logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
+            sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
+          } catch (logErr) {
+            console.warn("Cloud quiz attempt logging error (non-fatal):", logErr);
           }
-
-          logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
-
-          const getEmailText = (id: string, custom?: string) => {
-            if (custom && custom.trim()) return custom.trim();
-            const trimmed = id.trim().toLowerCase();
-            if (trimmed === 'nikelite') return 'nikelite+quiz@gmail.com';
-            if (trimmed === 'junhu') return 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
-            return 'nikelite@gmail.com';
-          };
-          const resolvedEmail = getEmailText(userId, userEmail);
-
-          setTimeout(() => {
-            alert(`📝 [클라우드 연동 성공]\n\n표현 학습 시험 결과가 클라우드에 백업되었습니다.\n📧 ${resolvedEmail} 으로 학습 결과 리포트 메일이 발송 대기열에 추가되었습니다!`);
-          }, 500);
         }
 
         return newStats;
