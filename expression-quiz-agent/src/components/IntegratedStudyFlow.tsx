@@ -33,6 +33,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
   const [showPredictionAnswer, setShowPredictionAnswer] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(30);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
 
   // Chat Q&A State
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'model'; text: string }>>([]);
@@ -46,6 +47,8 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
     setIsTimerRunning(false);
     setChatHistory([]);
     setQuestionInput('');
+    // Randomize placement of the two options so the correct answer isn't always on the left
+    setIsFlipped(Math.random() < 0.5);
   }, [lesson.id]);
 
   useEffect(() => {
@@ -115,8 +118,20 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
       .trim();
   };
 
-  const isAIncorrect = prediction.incorrectChoice === 'A';
-  const isBIncorrect = prediction.incorrectChoice === 'B';
+  const rawOptions = [
+    {
+      originalId: 'A' as const,
+      sentence: prediction.sentenceA,
+      isIncorrect: prediction.incorrectChoice === 'A'
+    },
+    {
+      originalId: 'B' as const,
+      sentence: prediction.sentenceB,
+      isIncorrect: prediction.incorrectChoice === 'B'
+    }
+  ];
+
+  const predictionOptions = isFlipped ? [rawOptions[1], rawOptions[0]] : rawOptions;
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', paddingBottom: '3rem' }}>
@@ -221,89 +236,55 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
           💡 아래 두 문장을 보고 <strong>30초만</strong> 생각해보세요. 어느 쪽이 <strong>원어민이 절대 쓰지 않는 어색한 문장</strong>이고 왜 그럴까요?
         </p>
 
-        {/* 2 Contrastive Cards for User Prediction */}
+        {/* 2 Contrastive Cards for User Prediction (Randomized placement) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-          {/* Sentence A */}
-          <div
-            onClick={() => !showPredictionAnswer && handleGuess('A')}
-            style={{
-              padding: '1.25rem',
-              borderRadius: '12px',
-              backgroundColor: showPredictionAnswer
-                ? (isAIncorrect ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)')
-                : 'rgba(255, 255, 255, 0.03)',
-              border: `1.5px solid ${showPredictionAnswer
-                ? (isAIncorrect ? 'var(--error)' : 'var(--success)')
-                : (selectedGuess === 'A' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)')}`,
-              cursor: showPredictionAnswer ? 'default' : 'pointer',
-              transition: 'all 0.2s',
-              position: 'relative'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)' }}>문장 A</span>
-              {showPredictionAnswer && (
-                isAIncorrect ? (
-                  <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontWeight: '800' }}>
-                    ❌ 틀린 문장
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#6ee7b7', fontWeight: '800' }}>
-                    ✅ 자연스러운 문장
-                  </span>
-                )
-              )}
-            </div>
-            <p style={{ fontSize: '1.05rem', fontWeight: '700', color: 'white', margin: '0 0 0.5rem 0', lineHeight: '1.4' }}>
-              "{cleanSentenceDisplay(prediction.sentenceA)}"
-            </p>
-            {!showPredictionAnswer && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                👉 클릭해서 이 문장을 선택하기
-              </span>
-            )}
-          </div>
+          {predictionOptions.map((opt, optIdx) => {
+            const label = optIdx === 0 ? "문장 A" : "문장 B";
+            const isSelected = selectedGuess === opt.originalId;
 
-          {/* Sentence B */}
-          <div
-            onClick={() => !showPredictionAnswer && handleGuess('B')}
-            style={{
-              padding: '1.25rem',
-              borderRadius: '12px',
-              backgroundColor: showPredictionAnswer
-                ? (isBIncorrect ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)')
-                : 'rgba(255, 255, 255, 0.03)',
-              border: `1.5px solid ${showPredictionAnswer
-                ? (isBIncorrect ? 'var(--error)' : 'var(--success)')
-                : (selectedGuess === 'B' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)')}`,
-              cursor: showPredictionAnswer ? 'default' : 'pointer',
-              transition: 'all 0.2s',
-              position: 'relative'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)' }}>문장 B</span>
-              {showPredictionAnswer && (
-                isBIncorrect ? (
-                  <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontWeight: '800' }}>
-                    ❌ 틀린 문장
+            return (
+              <div
+                key={opt.originalId}
+                onClick={() => !showPredictionAnswer && handleGuess(opt.originalId)}
+                style={{
+                  padding: '1.25rem',
+                  borderRadius: '12px',
+                  backgroundColor: showPredictionAnswer
+                    ? (opt.isIncorrect ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)')
+                    : 'rgba(255, 255, 255, 0.03)',
+                  border: `1.5px solid ${showPredictionAnswer
+                    ? (opt.isIncorrect ? 'var(--error)' : 'var(--success)')
+                    : (isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)')}`,
+                  cursor: showPredictionAnswer ? 'default' : 'pointer',
+                  transition: 'all 0.2s',
+                  position: 'relative'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)' }}>{label}</span>
+                  {showPredictionAnswer && (
+                    opt.isIncorrect ? (
+                      <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontWeight: '800' }}>
+                        ❌ 틀린 문장
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#6ee7b7', fontWeight: '800' }}>
+                        ✅ 자연스러운 문장
+                      </span>
+                    )
+                  )}
+                </div>
+                <p style={{ fontSize: '1.05rem', fontWeight: '700', color: 'white', margin: '0 0 0.5rem 0', lineHeight: '1.4' }}>
+                  "{cleanSentenceDisplay(opt.sentence)}"
+                </p>
+                {!showPredictionAnswer && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    👉 클릭해서 이 문장을 선택하기
                   </span>
-                ) : (
-                  <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#6ee7b7', fontWeight: '800' }}>
-                    ✅ 자연스러운 문장
-                  </span>
-                )
-              )}
-            </div>
-            <p style={{ fontSize: '1.05rem', fontWeight: '700', color: 'white', margin: '0 0 0.5rem 0', lineHeight: '1.4' }}>
-              "{cleanSentenceDisplay(prediction.sentenceB)}"
-            </p>
-            {!showPredictionAnswer && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                👉 클릭해서 이 문장을 선택하기
-              </span>
-            )}
-          </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Reveal Answer Button if not revealed yet */}
