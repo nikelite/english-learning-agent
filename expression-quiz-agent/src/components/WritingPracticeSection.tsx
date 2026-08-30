@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, Send, CheckCircle2, AlertCircle, Eye, EyeOff, Copy, 
-  RefreshCw, Volume2, Award, Lightbulb, Edit3, Briefcase, Coffee, Target, Plus
+  RefreshCw, Volume2, Award, Lightbulb, Edit3, Briefcase, Coffee, Target, Plus, Wand2
 } from 'lucide-react';
 import { Lesson, WritingTemplateData, WritingScenarioOption, WritingEvaluationResult } from '../types';
-import { evaluateUserSentence } from '../geminiService';
+import { evaluateUserSentence, generateWritingScenarios, normalizeLesson } from '../geminiService';
 
 interface WritingPracticeSectionProps {
   lesson: Lesson;
@@ -21,42 +21,73 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   initialSentence = '',
   initialFeedback = null
 }) => {
-  const writingTemplate: WritingTemplateData = lesson.writingTemplate || {
-    situation: "오늘 배운 핵심 원리를 실전 대화에서 적용해야 하는 상황입니다.",
-    koreanIntent: "배운 표현을 활용해 자연스러운 1문장을 완성해보세요.",
-    prompt: "주어진 실전 상황에 맞춰 1문장으로 작문해보세요.",
-    template: `I need to ... ____________________.`,
-    sampleSentence: lesson.eli10?.contrastiveExample || lesson.eli5?.example || "I need to check who is available for the team meeting.",
-    tip: "실제 업무나 일상에서 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요.",
-    keyKeywords: ["available", "check", "meeting"]
-  };
-
-  const scenarios: WritingScenarioOption[] = writingTemplate.scenarios && writingTemplate.scenarios.length > 0 
-    ? writingTemplate.scenarios 
-    : [
-        {
-          category: "🏢 비즈니스 / 업무 상황",
-          situation: writingTemplate.situation || "업무 진행 중 팀원들과 상황을 확인하고 공유해야 하는 시나리오입니다.",
-          koreanIntent: writingTemplate.koreanIntent || "상황에 알맞은 1문장을 영어로 완성해보세요.",
-          template: writingTemplate.template,
-          sampleSentence: writingTemplate.sampleSentence,
-          keyKeywords: writingTemplate.keyKeywords || [],
-          tip: writingTemplate.tip
-        }
-      ];
+  const normalized = normalizeLesson(lesson);
+  const [localWritingTemplate, setLocalWritingTemplate] = useState<WritingTemplateData>(
+    normalized.writingTemplate || {
+      situation: "실전 비즈니스 및 일상 대화에서 배운 핵심 표현을 활용해야 하는 상황입니다.",
+      koreanIntent: "배운 표현을 활용해 자연스러운 1문장을 완성해보세요.",
+      prompt: "주어진 실전 상황에 맞춰 1문장으로 작문해보세요.",
+      template: `(${normalized.decisionTrigger?.triggerA?.expression || 'Expression'}) ____________________.`,
+      sampleSentence: normalized.eli10?.contrastiveExample || "I will check this matter right away.",
+      tip: "실제 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요.",
+      keyKeywords: ["available", "check", "meeting"],
+      scenarios: []
+    }
+  );
 
   const [activeScenarioIdx, setActiveScenarioIdx] = useState(0);
-  const currentScenario = scenarios[activeScenarioIdx] || scenarios[0];
-
   const [userSentence, setUserSentence] = useState(lesson.userWritingSentence || initialSentence);
   const [feedback, setFeedback] = useState<WritingEvaluationResult | null>(lesson.userWritingFeedback || initialFeedback);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isGeneratingScenarios, setIsGeneratingScenarios] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Sync when lesson changes
   useEffect(() => {
-    // When switching scenario, if user hasn't typed anything custom, don't clear, but suggest template
-  }, [activeScenarioIdx]);
+    const norm = normalizeLesson(lesson);
+    if (norm.writingTemplate) {
+      setLocalWritingTemplate(norm.writingTemplate);
+    }
+    setUserSentence(lesson.userWritingSentence || '');
+    setFeedback(lesson.userWritingFeedback || null);
+    setActiveScenarioIdx(0);
+  }, [lesson.id]);
+
+  const scenarios: WritingScenarioOption[] = localWritingTemplate.scenarios && localWritingTemplate.scenarios.length > 0 
+    ? localWritingTemplate.scenarios 
+    : [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: localWritingTemplate.situation || "업무 진행 중 팀원들과 상황을 확인하고 공유해야 하는 시나리오입니다.",
+          koreanIntent: localWritingTemplate.koreanIntent || "상황에 알맞은 1문장을 영어로 완성해보세요.",
+          template: localWritingTemplate.template,
+          sampleSentence: localWritingTemplate.sampleSentence,
+          keyKeywords: localWritingTemplate.keyKeywords || [],
+          tip: localWritingTemplate.tip
+        }
+      ];
+
+  const currentScenario = scenarios[activeScenarioIdx] || scenarios[0];
+
+  const handleGenerateScenariosWithAI = async () => {
+    if (!apiKey) {
+      alert("Gemini API Key가 필요합니다. 설정(⚙️) 창에서 키를 등록해 주세요.");
+      return;
+    }
+    setIsGeneratingScenarios(true);
+    try {
+      const generated = await generateWritingScenarios(lesson, apiKey);
+      if (generated && generated.scenarios && generated.scenarios.length > 0) {
+        setLocalWritingTemplate(generated);
+        setActiveScenarioIdx(0);
+      }
+    } catch (err: any) {
+      alert("AI 실전 시나리오 생성 실패: " + err.message);
+    } finally {
+      setIsGeneratingScenarios(false);
+    }
+  };
 
   const handleEvaluate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -144,9 +175,42 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           </div>
         </div>
 
-        <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.7rem', borderRadius: '9999px', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', fontWeight: '800' }}>
-          실전 상황 시뮬레이션
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {apiKey && (
+            <button
+              type="button"
+              onClick={handleGenerateScenariosWithAI}
+              disabled={isGeneratingScenarios}
+              className="btn btn-secondary btn-sm"
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.65rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                border: '1px solid rgba(236, 72, 153, 0.4)',
+                color: '#f472b6'
+              }}
+              title="현재 학습 주제에 맞춘 새로운 비즈니스/일상 상황 시나리오를 AI로 생성합니다."
+            >
+              {isGeneratingScenarios ? (
+                <>
+                  <RefreshCw className="animate-spin" size={13} />
+                  <span>시나리오 생성 중...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 size={13} />
+                  <span>AI 상황 새로고침</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.7rem', borderRadius: '9999px', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', fontWeight: '800' }}>
+            실전 상황 시뮬레이션
+          </span>
+        </div>
       </div>
 
       {/* Scenario Selector Tabs if multiple scenarios available */}

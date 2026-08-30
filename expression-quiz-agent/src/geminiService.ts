@@ -186,15 +186,70 @@ export function normalizeLesson(raw: any): Lesson {
     stressGuide: "주요 강세와 연음에 유의하여 발음합니다."
   };
 
-  // 5. Writing Template fallback
+  // 5. Writing Template fallback & smart enrichment
   let writingTemplate: WritingTemplateData = raw.writingTemplate;
-  if (!writingTemplate || !writingTemplate.template) {
-    const expr = decisionTrigger.triggerA.expression || raw.title?.split(' ')[0] || "expression";
+  const exprA = decisionTrigger.triggerA?.expression || raw.title?.split(' ')[0] || "Target Expression";
+  const condA = decisionTrigger.triggerA?.condition || "";
+  const exprB = decisionTrigger.triggerB?.expression || "";
+  const condB = decisionTrigger.triggerB?.condition || "";
+
+  const isGeneric = !writingTemplate?.situation ||
+    writingTemplate.situation.includes("오늘 배운 핵심 원리") ||
+    writingTemplate.situation.includes("실전 대화에서 적용") ||
+    writingTemplate.template?.includes("I need to ...") ||
+    !writingTemplate.scenarios ||
+    writingTemplate.scenarios.length === 0;
+
+  if (!writingTemplate || isGeneric) {
+    const rawExample = eli10.contrastiveExample 
+      ? eli10.contrastiveExample.replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').split(/vs|\//i)[0].trim() 
+      : "";
+
+    const baseTemplate = `(${exprA}${exprB ? ` / ${exprB}` : ''}) ____________________.`;
+
+    const businessSit = `[🏢 비즈니스 / 업무 상황] ${condA ? `${condA.replace(/때$/, '')} 상황에서 팀원 또는 거래처에 명확하게 의사를 전달해야 합니다.` : `업무 미팅 중 ${exprA}을(를) 활용하여 상황을 명확하게 전달해야 하는 상황입니다.`}`;
+    const businessIntent = condA ? `${condA.replace(/때$/, '')} 상황을 영어로 말해보세요.` : `${exprA}을(를) 활용하여 업무 상황을 영어로 표현해보세요.`;
+
+    const dailySit = exprB
+      ? `[☕ 일상 / 대화 상황] ${condB ? `${condB.replace(/때$/, '')} 상황에서 친구나 지인에게 자연스럽게 이야기해야 합니다.` : `일상 대화 중 ${exprB}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`}`
+      : `[☕ 일상 / 대화 상황] 일상 대화 중 ${exprA}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`;
+    const dailyIntent = condB ? `${condB.replace(/때$/, '')} 상황을 영어로 말해보세요.` : `${exprB || exprA}을(를) 활용하여 일상 대화를 영어로 표현해보세요.`;
+
+    const defaultKeywords = [
+      exprA.split(' ')[0].replace(/[^a-zA-Z]/g, ''),
+      exprB ? exprB.split(' ')[0].replace(/[^a-zA-Z]/g, '') : '',
+      'tomorrow',
+      'meeting'
+    ].filter(Boolean);
+
     writingTemplate = {
-      prompt: "오늘 배운 핵심 개념을 실사용 맥락에서 직접 1문장으로 작문해보세요.",
-      template: `I need to ... (${expr}) ____________________.`,
-      sampleSentence: eli10.contrastiveExample ? eli10.contrastiveExample.replace(/\([OXox]\)/g, '').trim() : "I need to check who is coming to the meeting.",
-      tip: "실제 업무나 일상에서 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요."
+      situation: businessSit,
+      koreanIntent: businessIntent,
+      prompt: `주어진 실전 상황에 맞춰 (${exprA}${exprB ? ` / ${exprB}` : ''})을(를) 활용한 1문장을 완성해보세요.`,
+      template: baseTemplate,
+      sampleSentence: rawExample || `I need to check (${exprA}) right away.`,
+      tip: condA || `${exprA}의 쓰임새와 조건에 유의하여 완성해보세요.`,
+      keyKeywords: defaultKeywords,
+      scenarios: [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: businessSit,
+          koreanIntent: businessIntent,
+          template: baseTemplate,
+          sampleSentence: rawExample || `I need to check (${exprA}) right away.`,
+          keyKeywords: defaultKeywords,
+          tip: condA || `${exprA}의 조건에 맞춰 작성하세요.`
+        },
+        {
+          category: "☕ 일상 / 대화 상황",
+          situation: dailySit,
+          koreanIntent: dailyIntent,
+          template: `(${exprB || exprA}) ____________________.`,
+          sampleSentence: rawExample || `Let's see if (${exprB || exprA}) works best.`,
+          keyKeywords: defaultKeywords,
+          tip: condB || `${exprB || exprA}의 뉘앙스를 살려 작성하세요.`
+        }
+      ]
     };
   }
 
@@ -258,10 +313,33 @@ export const PRESET_LESSONS: Lesson[] = [
       stressGuide: "I'll see who에서 SEE와 WHO에 리듬감 있는 강세를 주며, can은 약화되어 [끈]처럼 짧게 지나갑니다."
     },
     writingTemplate: {
-      prompt: "오늘 업무/일상에서 확인할 일 1가지를 직접 작문해보세요.",
-      template: "I need to check (who / if anyone) ____________________.",
-      sampleSentence: "I need to check who is available for the team meeting tomorrow.",
-      tip: "참석자의 '정체'를 확인하는지, 아니면 가능한 사람이 '있기는 한지'에 따라 who / if anyone을 선택하세요!"
+      situation: "내일 오후 긴급 프로젝트 회의를 앞두고, 팀원들 중 배석이 가능한 사람이 '누구인지' 명단을 직접 확인해서 회신해야 하는 상황입니다.",
+      koreanIntent: "내일 회의에 누가 참석 가능한지 제가 확인해 볼게요.",
+      prompt: "주어진 비즈니스 및 일상 상황에 맞춰 'see who' 또는 'see if anyone'을 선택하여 1문장을 완성해보세요.",
+      template: "I'll check (who / if anyone) ____________________.",
+      sampleSentence: "I'll check who is available for tomorrow's team meeting.",
+      tip: "참석 후보자 중 '누구인지' 특정 인물의 정체를 확인하므로 who를 사용합니다.",
+      keyKeywords: ["available for", "tomorrow's meeting", "can attend", "join us"],
+      scenarios: [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: "내일 오후 긴급 프로젝트 회의를 앞두고, 팀원들 중 배석이 가능한 사람이 '누구인지' 명단을 직접 확인해서 회신해야 하는 상황입니다.",
+          koreanIntent: "내일 회의에 누가 참석 가능한지 제가 확인해 볼게요.",
+          template: "I'll check (who / if anyone) ____________________.",
+          sampleSentence: "I'll check who is available for tomorrow's team meeting.",
+          keyKeywords: ["available for", "tomorrow's meeting", "can attend", "join us"],
+          tip: "참석 후보자 중 '누구인지' 특정 인물의 정체를 확인하므로 who를 사용합니다."
+        },
+        {
+          category: "☕ 일상 / 대화 상황",
+          situation: "사무실에 노트북 충전기를 두고 와서, 동료나 팀원 중 여분의 충전기를 가진 사람이 '혹시 있기는 한지' 물어봐야 하는 상황입니다.",
+          koreanIntent: "혹시 여분 충전기 가진 사람이 있는지 알아볼게요.",
+          template: "Let's see (who / if anyone) ____________________.",
+          sampleSentence: "Let's see if anyone has a spare charger.",
+          keyKeywords: ["has a spare charger", "around here", "brought an extra"],
+          tip: "도와줄 사람이 존재하는지 유무 자체가 불확실하므로 if anyone을 사용합니다."
+        }
+      ]
     },
     quizzes: [
       {
@@ -339,10 +417,33 @@ export const PRESET_LESSONS: Lesson[] = [
       stressGuide: "dih-SPYT에서 'SPYT'에 강세가 들어가며, Despite의 t와 our가 연음되어 [디스파이 타워]처럼 들립니다. preparation에서는 RAY에 가장 강한 강세를 줍니다."
     },
     writingTemplate: {
-      prompt: "어려운 상황이나 방해 요소에도 불구하고 달성한 일 1가지를 작문해보세요.",
-      template: "Despite (the difficulty / our busy schedule), ____________________.",
-      sampleSentence: "Despite our busy schedule, we finished the project on time.",
-      tip: "Despite 뒤에는 반드시 명사구나 동명사(-ing)를 넣고, 콤마 뒤에 주어+동사를 작성하세요!"
+      situation: "프로젝트 일정이 매우 촉박하고 예산이 부족했음에도 불구하고, 팀원들과 함께 마감 기한 내에 런칭을 성공적으로 마친 상황을 회의에서 보고하는 상황입니다.",
+      koreanIntent: "촉박한 마감 일정에도 불구하고 우리는 프로젝트를 제시간에 완료했습니다.",
+      prompt: "주어진 상황에 맞춰 Despite(+명사구) 또는 Although(+주어+동사)를 올바르게 선택하여 1문장을 완성해보세요.",
+      template: "(Despite / Although) ____________________, we completed the project on time.",
+      sampleSentence: "Despite the tight deadline, we completed the project on time.",
+      tip: "the tight deadline은 명사구이므로 전치사 Despite를 선택합니다.",
+      keyKeywords: ["the tight deadline", "the budget constraints", "it was challenging", "we worked hard"],
+      scenarios: [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: "프로젝트 일정이 매우 촉박하고 예산이 부족했음에도 불구하고, 팀원들과 함께 마감 기한 내에 런칭을 성공적으로 마친 상황을 회의에서 보고하는 상황입니다.",
+          koreanIntent: "촉박한 마감 일정에도 불구하고 우리는 프로젝트를 제시간에 완료했습니다.",
+          template: "(Despite / Although) ____________________, we completed the project on time.",
+          sampleSentence: "Despite the tight deadline, we completed the project on time.",
+          keyKeywords: ["the tight deadline", "the budget constraints", "we worked hard"],
+          tip: "명사구(the tight deadline) 앞에는 Despite를 씁니다."
+        },
+        {
+          category: "☕ 일상 / 대화 상황",
+          situation: "주말에 비가 쏟아졌지만, 오랜만에 잡힌 친구들과의 여행을 취소하지 않고 신나게 즐기고 온 경험을 이야기하는 상황입니다.",
+          koreanIntent: "비가 많이 내렸지만, 우리는 여행을 정말 재미있게 즐겼어요.",
+          template: "(Despite / Although) ____________________, we had a fantastic trip.",
+          sampleSentence: "Although it rained heavily all weekend, we had a fantastic trip.",
+          keyKeywords: ["it rained heavily", "the bad weather", "all weekend"],
+          tip: "주어+동사 절(it rained heavily) 앞에는 Although를 씁니다."
+        }
+      ]
     },
     quizzes: [
       {
@@ -420,10 +521,33 @@ export const PRESET_LESSONS: Lesson[] = [
       stressGuide: "confused에서 'FYOODZD'에 강한 강세를 주어 발음합니다. by the가 뭉쳐지면서 '바이 더'로 부드럽게 넘어가며, movie의 'MOO'에 주강세를 줍니다."
     },
     writingTemplate: {
-      prompt: "오늘 나를 흥미롭게 하거나 지루하게 만든 대상과 내 감정을 1문장으로 작문해보세요.",
-      template: "The (meeting / lecture / news) was ________, so I was ________.",
-      sampleSentence: "The lecture was fascinating, so I was deeply engaged throughout the session.",
-      tip: "앞 빈칸에는 원인(-ing 형용사), 뒤 빈칸에는 내가 느낀 감정(-ed 형용사)을 넣어보세요!"
+      situation: "2시간 동안 이어진 분기 실적 회의가 너무 지루하고 데이터만 나열되어 있어서, 참가자들이 모두 지루함을 느끼고 집중력을 잃었던 상황을 동료에게 털어놓는 상황입니다.",
+      koreanIntent: "그 회의는 너무 지루해서 나는 발표 내내 정말 지루했어.",
+      prompt: "감정을 유발하는 원인(-ing)과 감정을 느끼는 상태(-ed)를 구분하여 1문장을 완성해보세요.",
+      template: "The quarterly meeting was so (boring / bored) that I felt completely (boring / bored).",
+      sampleSentence: "The quarterly meeting was so boring that I felt completely bored the whole time.",
+      tip: "회의는 지루함을 유발하는 원인이므로 boring, 내가 느낀 감정 상태는 bored를 씁니다.",
+      keyKeywords: ["boring meeting", "felt so bored", "the whole time", "lost focus"],
+      scenarios: [
+        {
+          category: "🏢 비즈니스 / 업무 상황",
+          situation: "2시간 동안 이어진 분기 실적 회의가 너무 지루하고 데이터만 나열되어 있어서, 참가자들이 모두 지루함을 느끼고 집중력을 잃었던 상황을 동료에게 털어놓는 상황입니다.",
+          koreanIntent: "그 회의는 너무 지루해서 나는 발표 내내 정말 지루했어.",
+          template: "The quarterly meeting was so (boring / bored) that I felt completely (boring / bored).",
+          sampleSentence: "The quarterly meeting was so boring that I felt completely bored the whole time.",
+          keyKeywords: ["boring meeting", "felt so bored", "the whole time", "lost focus"],
+          tip: "회의(원인) = boring / 내 감정(체험) = bored"
+        },
+        {
+          category: "☕ 일상 / 대화 상황",
+          situation: "친구가 추천해준 영화가 기대와 달리 줄거리가 너무 지루해서 보는 내내 지루해졌던 감정을 친구에게 감상평으로 이야기하는 상황입니다.",
+          koreanIntent: "그 영화는 너무 지루해서 나는 보는 내내 지루했어.",
+          template: "The movie was really (boring / bored), so I got (boring / bored) quickly.",
+          sampleSentence: "The movie was really boring, so I got bored after just twenty minutes.",
+          keyKeywords: ["boring movie", "got bored", "after 20 minutes", "the plot"],
+          tip: "영화(원인) = boring / 나(체험자) = bored"
+        }
+      ]
     },
     quizzes: [
       {
@@ -496,10 +620,33 @@ Strict Schema Requirements:
     "stressGuide": "Detailed tips in Korean on linking, rhythm, and where to put primary stress."
   },
   "writingTemplate": {
-    "prompt": "Specific 1-second real-life writing challenge in Korean (e.g., '오늘 업무나 일상에서 확인할 일 1가지를 직접 작문해보세요.')",
-    "template": "Fill-in-the-blank English template (e.g., 'I need to check (who / if anyone) ____________________.')",
+    "situation": "Detailed real-world situation description in Korean (2 sentences describing context)",
+    "koreanIntent": "The target Korean sentence the student wants to convey in quotes (e.g. '내일 회의에 누가 참석 가능한지 제가 확인해 볼게요.')",
+    "prompt": "Specific 1-second real-life writing challenge in Korean",
+    "template": "Fill-in-the-blank English template strictly matching the grammar/expression structure with options in parentheses (e.g. '(Despite / Although) ____________________, we completed the task.')",
     "sampleSentence": "A high-quality sample English sentence completing the template with Korean meaning",
-    "tip": "Helpful writing tip in Korean"
+    "tip": "Helpful writing tip in Korean",
+    "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+    "scenarios": [
+      {
+        "category": "🏢 비즈니스 / 업무 상황",
+        "situation": "Detailed workplace situation in Korean",
+        "koreanIntent": "Target Korean sentence to convey",
+        "template": "English template matching the grammar topic",
+        "sampleSentence": "Model English sentence",
+        "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+        "tip": "Tip for business scenario"
+      },
+      {
+        "category": "☕ 일상 / 대화 상황",
+        "situation": "Detailed daily conversation situation in Korean",
+        "koreanIntent": "Target Korean sentence to convey",
+        "template": "English template matching the grammar topic",
+        "sampleSentence": "Model English sentence",
+        "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+        "tip": "Tip for daily scenario"
+      }
+    ]
   },
   "quizzes": [
     {
@@ -1165,6 +1312,81 @@ Do not wrap in markdown \`\`\`json. Return raw JSON string only. Use single quot
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini가 유효한 첨삭 결과를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WritingEvaluationResult;
+}
+
+/**
+ * Generates 2 bespoke, highly vivid real-world writing scenarios (Business vs Daily)
+ * tailored precisely to the lesson's target expressions.
+ */
+export async function generateWritingScenarios(
+  lesson: Lesson,
+  apiKey: string
+): Promise<WritingTemplateData> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an expert native English instructional designer and tutor.
+Analyze this English lesson topic:
+- Title: "${lesson.title}"
+- Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
+- Decision Trigger / Key Rule: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
+- Expression A: "${lesson.decisionTrigger?.triggerA?.expression || ''}" (${lesson.decisionTrigger?.triggerA?.condition || ''})
+- Expression B: "${lesson.decisionTrigger?.triggerB?.expression || ''}" (${lesson.decisionTrigger?.triggerB?.condition || ''})
+- Example sentence: "${lesson.eli10?.contrastiveExample || lesson.eli5?.example || ''}"
+
+Generate 2 DISTINCT, HIGHLY VIVID, REAL-WORLD SITUATIONAL SCENARIOS (1 Business/Workplace scenario, 1 Daily Life/Casual scenario) tailored specifically to test and apply these exact expressions in 1 second.
+CRITICAL: Never use a generic 'I need to...' template unless the expression is literally 'need to'. The template MUST match the actual grammar structure of this lesson (e.g. for Despite vs Although, write '(Despite / Although) ____________________, ____________________.').
+
+Return a JSON object with this exact schema:
+{
+  "situation": "Detailed Workplace scenario in Korean (2 sentences describing context)",
+  "koreanIntent": "The specific Korean sentence the student wants to say in quotes (e.g. '내일 회의에 누가 참석 가능한지 확인해 볼게요.')",
+  "prompt": "Punchy 1-line writing challenge in Korean",
+  "template": "English fill-in-the-blank template matching the grammar topic with options in parentheses",
+  "sampleSentence": "A natural, high-quality native English completion of the template",
+  "tip": "Helpful tip in Korean explaining the choice in this scenario",
+  "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+  "scenarios": [
+    {
+      "category": "🏢 비즈니스 / 업무 상황",
+      "situation": "Detailed workplace situation in Korean",
+      "koreanIntent": "The target Korean sentence to say",
+      "template": "English fill-in-the-blank template matching the grammar topic",
+      "sampleSentence": "Natural native English sentence",
+      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "tip": "Tip in Korean"
+    },
+    {
+      "category": "☕ 일상 / 대화 상황",
+      "situation": "Detailed daily conversation situation in Korean",
+      "koreanIntent": "The target Korean sentence to say",
+      "template": "English fill-in-the-blank template matching the grammar topic",
+      "sampleSentence": "Natural native English sentence",
+      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "tip": "Tip in Korean"
+    }
+  ]
+}
+
+Do not wrap in markdown \`\`\`json. Return raw JSON string only. Use single quotes inside string values if needed.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 실전 시나리오를 생성하지 못했습니다.");
+  return JSON.parse(cleanJsonString(text)) as WritingTemplateData;
 }
 
 export async function generateAdditionalQuizzes(
