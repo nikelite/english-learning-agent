@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { LessonCreator } from './components/LessonCreator';
-import { StudyTabs } from './components/StudyTabs';
+import { IntegratedStudyFlow } from './components/IntegratedStudyFlow';
 import { QuizPanel } from './components/QuizPanel';
 import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
-import { Lesson, WrongAnswer, AppStats, QuizItem } from './types';
-import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons, generateAdditionalQuizzes } from './geminiService';
+import { Lesson, WrongAnswer, AppStats, QuizItem, WritingEvaluationResult } from './types';
+import { PRESET_LESSONS, generateLessonFromText, deserializeLesson, generateVocabularyLessons, generateAdditionalQuizzes, normalizeLesson } from './geminiService';
 import { GraduationCap, Info, BookOpen, Share2, Sparkles, Edit2, X, BarChart2 } from 'lucide-react';
 
 interface MochiDeckStats {
@@ -419,7 +419,6 @@ export default function App() {
 
   // 2. Navigation & UI View Modes
   const [activeTab, setActiveTab] = useState<string>('learn');
-  const [activeStudyTab, setActiveStudyTab] = useState<'eli5' | 'memory' | 'pronounce'>('eli5');
   const [viewMode, setViewMode] = useState<'study' | 'quiz'>('study');
   
   // 3. Active Lesson State (default to null to show Recent Lessons Library dashboard on load)
@@ -882,7 +881,6 @@ export default function App() {
       if (selectedCardsList.length === 1 && lastImportedLesson) {
         setActiveLesson(lastImportedLesson);
         setViewMode('study');
-        setActiveStudyTab('eli5');
       } else {
         // If multiple cards are imported, show the library list so they can see all of them
         setActiveLesson(null);
@@ -1333,6 +1331,17 @@ ${quiz.rationale}`;
     }
   };
 
+  const handleSaveWriting = async (sentence: string, feedback: WritingEvaluationResult) => {
+    if (!activeLesson) return;
+    const updated: Lesson = {
+      ...activeLesson,
+      userWritingSentence: sentence,
+      userWritingFeedback: feedback
+    };
+    setActiveLesson(updated);
+    await saveLessonToHistory(updated);
+  };
+
   const handleDeleteHistory = async (e: React.MouseEvent, lessonId: string) => {
     e.stopPropagation();
     if (window.confirm("이 학습 세트를 보관함에서 삭제하시겠습니까?")) {
@@ -1394,7 +1403,6 @@ ${quiz.rationale}`;
         if (decodedLesson) {
           setIsSharedQuiz(true);
           setViewMode('study');
-          setActiveStudyTab('eli5');
           saveLessonToHistory(decodedLesson).then(saved => setActiveLesson(saved));
         }
       });
@@ -1404,7 +1412,6 @@ ${quiz.rationale}`;
         if (decodedLesson) {
           setIsSharedQuiz(true);
           setViewMode('study');
-          setActiveStudyTab('eli5');
           // If we are logged in, associate this shared lesson with this user!
           const currentUserId = localStorage.getItem('eng_user_id') || null;
           let sharedLessonWithUser = { ...decodedLesson };
@@ -1556,7 +1563,6 @@ ${quiz.rationale}`;
         }
 
         setViewMode('study');
-        setActiveStudyTab('eli5');
         setActiveLesson(savedLessons[0]);
       } else {
         const generated = await generateLessonFromText(text, apiKey, questionCount);
@@ -1564,7 +1570,6 @@ ${quiz.rationale}`;
           generated.title = customTitle.trim();
         }
         setViewMode('study');
-        setActiveStudyTab('eli5');
         const savedLesson = await saveLessonToHistory(generated);
         setActiveLesson(savedLesson);
       }
@@ -1591,7 +1596,6 @@ ${quiz.rationale}`;
     
     setActiveLesson(presetWithProgress);
     setViewMode('study');
-    setActiveStudyTab('eli5');
   };
 
   // Quiz wrong answer tracking
@@ -1980,11 +1984,11 @@ ${quiz.rationale}`;
                   )}
                 </div>
               ) : viewMode === 'study' ? (
-                <StudyTabs
+                <IntegratedStudyFlow
                   lesson={activeLesson}
-                  activeStudyTab={activeStudyTab}
-                  setActiveStudyTab={setActiveStudyTab}
+                  onStartQuiz={() => setViewMode('quiz')}
                   apiKey={apiKey}
+                  onSaveWriting={handleSaveWriting}
                 />
               ) : (
                 <QuizPanel
@@ -1998,7 +2002,6 @@ ${quiz.rationale}`;
                   onLoadNextUnsolvedLesson={nextUnsolvedLesson ? () => {
                     setActiveLesson(nextUnsolvedLesson);
                     setViewMode('study');
-                    setActiveStudyTab('eli5');
                   } : undefined}
                   apiKey={apiKey}
                   mochiApiKey={mochiApiKey}
@@ -2006,6 +2009,7 @@ ${quiz.rationale}`;
                   onAddQuizToMochi={handlePushSingleQuizToMochi}
                   onGenerateAdditionalQuizzes={handleGenerateAdditionalQuizzes}
                   unsolvedLessonsCount={unsolvedCount}
+                  onSaveWriting={handleSaveWriting}
                 />
               )}
             </main>
@@ -2276,7 +2280,6 @@ ${quiz.rationale}`;
                         setActiveLesson(item);
                         setIsSharedQuiz(false); // Reset shared banner when playing own history
                         setViewMode('study');
-                        setActiveStudyTab('eli5');
                       }}
                       className="lesson-item-card"
                       style={{

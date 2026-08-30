@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpCircle, Brain, Volume2, ChevronRight } from 'lucide-react';
 import { Lesson } from '../types';
+import { normalizeLesson } from '../geminiService';
 
 interface StudyTabsProps {
   lesson: Lesson;
@@ -15,7 +16,10 @@ export const StudyTabs: React.FC<StudyTabsProps> = ({
   setActiveStudyTab,
   apiKey
 }) => {
-  const { eli5, memoryTips, pronunciation } = lesson;
+  const normalized = normalizeLesson(lesson);
+  const eli5 = normalized.eli5 || { explanation: normalized.eli10?.corePrinciple || '', analogy: normalized.eli10?.mentalModelAnalogy || '', example: normalized.eli10?.contrastiveExample || '', exampleContext: normalized.eli10?.exampleContext || '' };
+  const memoryTips = normalized.memoryTips || { tipFormula: normalized.decisionTrigger?.keyRuleSummary || '', conceptA: normalized.decisionTrigger?.triggerA.expression || '', conceptADesc: normalized.decisionTrigger?.triggerA.condition || '', conceptB: normalized.decisionTrigger?.triggerB.expression || '', conceptBDesc: normalized.decisionTrigger?.triggerB.condition || '', visualImage: '' };
+  const pronunciation = normalized.pronunciation;
 
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'model'; text: string }>>([]);
   const [questionInput, setQuestionInput] = useState('');

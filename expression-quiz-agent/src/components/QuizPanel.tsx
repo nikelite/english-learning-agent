@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck, Brain } from 'lucide-react';
-import { Lesson, QuizItem } from '../types';
+import { Lesson, QuizItem, WritingEvaluationResult } from '../types';
 import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
+import { WritingPracticeSection } from './WritingPracticeSection';
 
 interface QuizPanelProps {
   lesson: Lesson;
@@ -18,6 +19,7 @@ interface QuizPanelProps {
   onAddQuizToMochi: (quiz: QuizItem) => Promise<void>;
   onGenerateAdditionalQuizzes?: (count: number) => Promise<QuizItem[]>;
   unsolvedLessonsCount?: number;
+  onSaveWriting?: (sentence: string, feedback: WritingEvaluationResult) => void;
 }
 
 export const QuizPanel: React.FC<QuizPanelProps> = ({
@@ -34,7 +36,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   mochiQuizDeckId,
   onAddQuizToMochi,
   onGenerateAdditionalQuizzes,
-  unsolvedLessonsCount
+  unsolvedLessonsCount,
+  onSaveWriting
 }) => {
   const [activeQuizzes, setActiveQuizzes] = useState<QuizItem[]>(() => injectedQuizzes);
   const [sessionWrongs, setSessionWrongs] = useState<QuizItem[]>([]);
@@ -574,6 +577,13 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             );
           })}
         </div>
+
+        {/* 5단계: 1초 내 상황 작문 훈련 연계 */}
+        <WritingPracticeSection
+          lesson={lesson}
+          apiKey={apiKey}
+          onSaveWriting={onSaveWriting}
+        />
       </div>
     );
   }

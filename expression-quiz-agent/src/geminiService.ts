@@ -1,4 +1,15 @@
-import { Lesson, QuizItem, WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data } from './types';
+import { 
+  Lesson, 
+  QuizItem, 
+  PredictionData, 
+  Eli10Data, 
+  DecisionTriggerData, 
+  WritingTemplateData, 
+  WritingEvaluationResult,
+  WrongAnswerCoachingStep1Data, 
+  WrongAnswerCoachingStep2Data, 
+  WrongAnswerCoachingStep3Data 
+} from './types';
 
 // Dynamic Adaptive Rate Control Manager for API Throttling
 export class AdaptiveRateLimiter {
@@ -102,32 +113,236 @@ function cleanJsonString(raw: string): string {
   return cleaned;
 }
 
+/**
+ * Normalizes any lesson object (legacy or newly generated) to guarantee 
+ * all 5-stage fields exist with graceful fallbacks.
+ */
+export function normalizeLesson(raw: any): Lesson {
+  if (!raw) {
+    throw new Error("Invalid lesson object");
+  }
+
+  // 1. Prediction fallback
+  let prediction: PredictionData = raw.prediction;
+  if (!prediction || !prediction.sentenceA) {
+    const rawExample = raw.eli10?.contrastiveExample || raw.eli5?.example || "";
+    let sA = "I'll see who can help.";
+    let sB = "I'll see if who can help.";
+    let incorrect: 'A' | 'B' = 'B';
+
+    if (rawExample.includes('vs') || rawExample.includes('/')) {
+      const parts = rawExample.split(/vs|\//i);
+      if (parts.length >= 2) {
+        sA = parts[0].replace(/\([OXox]\)/g, '').trim();
+        sB = parts[1].replace(/\([OXox]\)/g, '').trim();
+        if (parts[0].includes('(X)') || parts[0].includes('(x)')) {
+          incorrect = 'A';
+        }
+      }
+    }
+
+    prediction = {
+      sentenceA: sA,
+      sentenceB: sB,
+      incorrectChoice: incorrect,
+      trapExplanation: raw.eli10?.corePrinciple || raw.eli5?.explanation || "한국어 직역 습관으로 인해 발생하는 인지적 착각 패턴입니다."
+    };
+  }
+
+  // 2. ELI10 fallback
+  let eli10: Eli10Data = raw.eli10;
+  if (!eli10 || !eli10.corePrinciple) {
+    eli10 = {
+      corePrinciple: raw.eli5?.explanation || "핵심 원리 설명입니다.",
+      mentalModelAnalogy: raw.eli5?.analogy || "직관적인 비유로 원리를 이해해보세요.",
+      contrastiveExample: raw.eli5?.example || prediction.sentenceA,
+      exampleContext: raw.eli5?.exampleContext || ""
+    };
+  }
+
+  // 3. Decision Trigger fallback
+  let decisionTrigger: DecisionTriggerData = raw.decisionTrigger;
+  if (!decisionTrigger || !decisionTrigger.triggerA) {
+    decisionTrigger = {
+      triggerA: {
+        expression: raw.memoryTips?.conceptA || "개념 A",
+        condition: raw.memoryTips?.conceptADesc || "상황 A일 때 사용합니다.",
+        example: ""
+      },
+      triggerB: {
+        expression: raw.memoryTips?.conceptB || "개념 B",
+        condition: raw.memoryTips?.conceptBDesc || "상황 B일 때 사용합니다.",
+        example: ""
+      },
+      keyRuleSummary: raw.memoryTips?.tipFormula || `${raw.memoryTips?.conceptA || 'A'} vs ${raw.memoryTips?.conceptB || 'B'}`
+    };
+  }
+
+  // 4. Pronunciation fallback
+  let pronunciation = raw.pronunciation || {
+    wordOrPhrase: raw.title?.split(' ')[0] || "English Expression",
+    phoneticRespelling: "ING-glish",
+    koreanPhonetic: "잉글리시",
+    stressGuide: "주요 강세와 연음에 유의하여 발음합니다."
+  };
+
+  // 5. Writing Template fallback
+  let writingTemplate: WritingTemplateData = raw.writingTemplate;
+  if (!writingTemplate || !writingTemplate.template) {
+    const expr = decisionTrigger.triggerA.expression || raw.title?.split(' ')[0] || "expression";
+    writingTemplate = {
+      prompt: "오늘 배운 핵심 개념을 실사용 맥락에서 직접 1문장으로 작문해보세요.",
+      template: `I need to ... (${expr}) ____________________.`,
+      sampleSentence: eli10.contrastiveExample ? eli10.contrastiveExample.replace(/\([OXox]\)/g, '').trim() : "I need to check who is coming to the meeting.",
+      tip: "실제 업무나 일상에서 일어날 법한 상황을 머릿속에 떠올리며 작성해보세요."
+    };
+  }
+
+  // Quizzes fallback
+  const quizzes: QuizItem[] = (raw.quizzes || []).map((q: any, idx: number) => ({
+    id: q.id || `q-${idx + 1}`,
+    question: q.question || "",
+    choices: q.choices || [],
+    correctIndex: typeof q.correctIndex === 'number' ? q.correctIndex : 0,
+    rationale: q.rationale || "",
+    isReview: q.isReview
+  }));
+
+  return {
+    ...raw,
+    prediction,
+    eli10,
+    decisionTrigger,
+    pronunciation,
+    writingTemplate,
+    quizzes
+  };
+}
+
 // Preloaded Premium Lessons for immediate offline exploration
 export const PRESET_LESSONS: Lesson[] = [
+  {
+    id: "preset-see-who-if-anyone",
+    title: "see who vs see if anyone (문지기 원리)",
+    sourceText: "I'll see who can help vs I'll see if who can help 문장 분석 및 영어 접속사/의문사 단일성 원리",
+    createdAt: 1716656300000,
+    prediction: {
+      sentenceA: "I'll see who can help.",
+      sentenceB: "I'll see if who can help.",
+      incorrectChoice: "B",
+      trapExplanation: "한국어 '~인지(if)'와 '누가(who)'를 둘 다 살리려다 see if who로 겹쳐 쓰기 쉽지만, 영어는 문장 연결 고리(문지기)를 단 하나만 씁니다."
+    },
+    eli10: {
+      corePrinciple: "한국어 '~인지(if)'와 '누가(who)'를 둘 다 살리려다 see if who로 겹쳐 쓰기 쉽지만, 영어는 문장 연결 고리(접속사/의문사)를 단 하나만 씁니다.",
+      mentalModelAnalogy: "방으로 들어가는 문에는 문지기가 한 명만 서 있어야 합니다. who 혼자 서거나, if가 설 거라면 뒤에 일반 손님인 anyone을 데려와야 합니다.",
+      contrastiveExample: "I'll see who can help (O) vs I'll see if who can help (X)",
+      exampleContext: "who 자체가 이미 '~누가 ...하는지'라는 연결 고리 역할을 완벽하게 수행하므로 if가 끼어들면 문지기 중복 충돌이 일어납니다."
+    },
+    decisionTrigger: {
+      triggerA: {
+        expression: "see who",
+        condition: "대상이 될 후보는 이미 있고, 그중 '누구인지(정체)' 특정할 때",
+        example: "I'll check who is coming to the meeting. (누가 오는지 명단을 확인할 때)"
+      },
+      triggerB: {
+        expression: "see if anyone",
+        condition: "도와줄 사람이 '있기는 한지(존재 유무)'조차 불확실할 때",
+        example: "Let's see if anyone has a spare charger. (혹시 충전기 가진 사람이 있기는 한지)"
+      },
+      keyRuleSummary: "정체 특정 = who / 존재 유무 = if anyone (문지기는 무조건 1명만!)"
+    },
+    pronunciation: {
+      wordOrPhrase: "I'll see who can help",
+      phoneticRespelling: "ayl SEE hoo kn HELP",
+      koreanPhonetic: "아일 씨 후 끈 헬프",
+      stressGuide: "I'll see who에서 SEE와 WHO에 리듬감 있는 강세를 주며, can은 약화되어 [끈]처럼 짧게 지나갑니다."
+    },
+    writingTemplate: {
+      prompt: "오늘 업무/일상에서 확인할 일 1가지를 직접 작문해보세요.",
+      template: "I need to check (who / if anyone) ____________________.",
+      sampleSentence: "I need to check who is available for the team meeting tomorrow.",
+      tip: "참석자의 '정체'를 확인하는지, 아니면 가능한 사람이 '있기는 한지'에 따라 who / if anyone을 선택하세요!"
+    },
+    quizzes: [
+      {
+        id: "q-sw-1",
+        question: "다음 중 어색한(틀린) 문장을 고르세요.",
+        choices: [
+          "Let me check if who is joining the meeting.",
+          "Let me check who is joining the meeting.",
+          "Let me check if anyone is joining the meeting.",
+          "Let me see who answered the phone."
+        ],
+        correctIndex: 0,
+        rationale: "A번이 오답(틀린 문장)입니다. 영어에서는 if와 who 같은 연결 고리를 겹쳐 쓸 수 없습니다(문지기 중복 오류). B번(who만 사용)과 C번(if + anyone 사용)이 올바른 문장입니다."
+      },
+      {
+        id: "q-sw-2",
+        question: "회사에서 내일 프레젠테이션을 도와줄 사람이 '혹시 있기는 한지' 존재 유무를 알아보고자 할 때 가장 자연스러운 표현은?",
+        choices: [
+          "I'll see if who is free tomorrow.",
+          "I'll see if anyone is free tomorrow.",
+          "I'll see who if someone is free tomorrow.",
+          "I'll see that who can help tomorrow."
+        ],
+        correctIndex: 1,
+        rationale: "B번이 정답입니다. 도와줄 사람이 존재하는지 유무 자체가 불확실할 때는 'if + anyone' 패턴을 사용합니다. A, C, D번은 연결고리 중복 오류입니다."
+      },
+      {
+        id: "q-sw-3",
+        question: "다음 빈칸에 가장 알맞은 표현은?\n\n'I want to find out ________ left this jacket in the conference room.'",
+        choices: [
+          "if who",
+          "who",
+          "if that",
+          "who that"
+        ],
+        correctIndex: 1,
+        rationale: "B번 who가 정답입니다. 회의실에 자켓을 두고 간 '특정 인물의 정체'를 알아내는 상황이므로 의문사 who 하나만 단독으로 와야 합니다. A번 if who는 문지기 중복입니다."
+      }
+    ]
+  },
   {
     id: "preset-despite-although",
     title: "Despite vs Although 완벽 구분하기",
     sourceText: "Despite our preparation, we failed the exam. / Although we prepared well, we failed the exam. 두 문장의 문법 요소와 전치사 vs 접속사 차이점 분석",
     createdAt: 1716656400000,
-    eli5: {
-      explanation: "Despite와 Although는 둘 다 '~임에도 불구하고'라는 뜻으로 양보의 의미를 나타내요. 하지만 뒤에 데려오는 친구들의 성격이 완전히 달라요! Despite는 명사(이름표)만 데려올 수 있는 '전치사 힘'을 가지고 있고, Although는 주어+동사가 들어있는 완전한 문장(절)을 데려오는 '접속사 힘'을 가지고 있습니다.",
-      analogy: "기차(Although)와 자동차 트렁크(Despite)의 차이로 이해해보세요! 'Although'는 기관사(주어)와 조수(동사)가 타고 있는 진짜 기차 칸들을 연결해 주는 연결고리예요. 반면 'Despite'는 단순한 트렁크 가방 같아서, 그 안에는 짐더미(명사/동명사)만 툭 던져 넣을 수 있어요. 기차가 아닌 짐더미에 연결고리를 붙이거나, 가방 안에 기관차를 통째로 억지로 구겨 넣으면 고장 나겠죠?",
-      example: "Despite the heavy rain (O) / Although the heavy rain (X)",
+    prediction: {
+      sentenceA: "Despite our preparation, we failed the exam.",
+      sentenceB: "Although our preparation, we failed the exam.",
+      incorrectChoice: "B",
+      trapExplanation: "Although는 '주어+동사'를 갖춘 완전한 문장(절)을 연결하는 접속사입니다. 명사 덩어리 앞에는 전치사인 Despite를 써야 합니다."
+    },
+    eli10: {
+      corePrinciple: "Despite와 Although는 둘 다 '~임에도 불구하고'라는 뜻이지만, Despite는 명사(이름표)만 데려오는 '전치사'이고, Although는 주어+동사 문장을 데려오는 '접속사'입니다.",
+      mentalModelAnalogy: "기차(Although)와 트렁크 가방(Despite)의 차이입니다! Although는 기관사(주어)와 조수(동사)가 탄 기차 칸을 연결하는 연결고리이고, Despite는 짐더미(명사)만 툭 넣는 트렁크 가방입니다.",
+      contrastiveExample: "Despite the heavy rain (O) vs Although the heavy rain (X)",
       exampleContext: "Despite 뒤에는 명사(the heavy rain)만 왔으므로 옳습니다. Although 뒤에 명사만 딸랑 오면 문법적 에러가 납니다!"
     },
-    memoryTips: {
-      tipFormula: "Despite + 명사 덩어리 VS Although + 주어 + 동사",
-      conceptA: "Despite / In spite of",
-      conceptADesc: "뒤에 '명사(Noun) 또는 -ing(동명사)'만 옴! (전치사 패밀리)",
-      conceptB: "Although / Even though / Though",
-      conceptBDesc: "뒤에 반드시 '주어 + 동사'를 갖춘 절이 옴! (접속사 패밀리)",
-      visualImage: "Despite는 명사 가방을 메고 다니고, Although는 뒤에 주어-동사 기차를 운전한다!"
+    decisionTrigger: {
+      triggerA: {
+        expression: "Despite / In spite of",
+        condition: "뒤에 주어+동사가 없고 '명사' 또는 '-ing(동명사)' 덩어리만 올 때",
+        example: "Despite the noise, she fell asleep. (소음에도 불구하고)"
+      },
+      triggerB: {
+        expression: "Although / Even though",
+        condition: "뒤에 '주어 + 동사'를 갖춘 완전한 절이 이어질 때",
+        example: "Although it was noisy, she fell asleep. (시끄러웠음에도 불구하고)"
+      },
+      keyRuleSummary: "Despite + 명사 덩어리 VS Although + 주어 + 동사"
     },
     pronunciation: {
       wordOrPhrase: "Despite our preparation",
       phoneticRespelling: "dih-SPYT ow-er prep-uh-RAY-shun",
       koreanPhonetic: "디스파이 타워 프레퍼레-이션",
       stressGuide: "dih-SPYT에서 'SPYT'에 강세가 들어가며, Despite의 t와 our가 연음되어 [디스파이 타워]처럼 들립니다. preparation에서는 RAY에 가장 강한 강세를 줍니다."
+    },
+    writingTemplate: {
+      prompt: "어려운 상황이나 방해 요소에도 불구하고 달성한 일 1가지를 작문해보세요.",
+      template: "Despite (the difficulty / our busy schedule), ____________________.",
+      sampleSentence: "Despite our busy schedule, we finished the project on time.",
+      tip: "Despite 뒤에는 반드시 명사구나 동명사(-ing)를 넣고, 콤마 뒤에 주어+동사를 작성하세요!"
     },
     quizzes: [
       {
@@ -165,30 +380,6 @@ export const PRESET_LESSONS: Lesson[] = [
         ],
         correctIndex: 2,
         rationale: "합쳐진 문장 빈칸 뒤에 'she(주어) was(동사) very tired'가 오고 있습니다. 주어와 동사를 이끄는 것은 양보의 접속사 'although'(C번)입니다. A번 despite와 B번 in spite of는 전치사라서 안 되며, D번 'despite of'는 존재하지 않는 엉터리 표현입니다."
-      },
-      {
-        id: "q-da-4",
-        question: "빈칸에 들어갈 짝으로 가장 적절한 것은?\n\n1) ________ we ran fast, we missed the bus.\n2) ________ our fast running, we missed the bus.",
-        choices: [
-          "Although - Despite",
-          "Despite - Although",
-          "Even though - In spite",
-          "Despite - In spite of"
-        ],
-        correctIndex: 0,
-        rationale: "A번이 정답입니다. 1) 문장은 'we(주어) ran(동사) fast'이므로 접속사 'Although'가 적절하고, 2) 문장은 'our fast running'(우리의 빠른 달리기)이라는 동명사/명사구이므로 전치사 'Despite'가 적합합니다. B번은 순서가 반대이고, C번 'In spite'는 단독으로 쓸 수 없으며, D번은 둘 다 전치사라 절을 이끌 수 없습니다."
-      },
-      {
-        id: "q-da-5",
-        question: "다음 빈칸에 문법적으로 들어갈 수 없는 단어는?\n\nI went to work ________ feeling extremely unwell.",
-        choices: [
-          "despite",
-          "in spite of",
-          "although",
-          "notwithstanding"
-        ],
-        correctIndex: 2,
-        rationale: "빈칸 뒤의 'feeling extremely unwell'은 동명사(-ing) 덩어리입니다. 따라서 명사/동명사를 목적어로 취하는 전치사 A번 Despite, B번 In spite of, D번 Notwithstanding(격식체 전치사)은 모두 사용 가능합니다. 반면 접속사인 C번 Although는 뒤에 주어+동사(Although I felt~) 형태로 와야 하므로 들어갈 수 없습니다."
       }
     ]
   },
@@ -197,25 +388,42 @@ export const PRESET_LESSONS: Lesson[] = [
     title: "감정 형용사 -ing vs -ed 종결하기",
     sourceText: "I am boring vs I am bored. The movie was confusing vs The movie was confused. 사람 주어 사물 주어에 따른 분사 형용사의 올바른 매칭법",
     createdAt: 1716656460000,
-    eli5: {
-      explanation: "사람의 감정을 나타내는 형용사는 기본적으로 동사(남에게 ~한 감정을 주다)에서 출발했어요. 그래서 현재분사(-ing)는 그 감정을 '일으키는 원인'을 설명하고, 과거분사(-ed)는 그 감정을 '느끼게 된 상태'를 뜻합니다! 주어가 사람인지 사물인지 공식처럼 기계적으로 외우면 실수가 생겨요. 핵심은 '원인인가? 아니면 피해자(체험자)인가?'입니다.",
-      analogy: "감정 화살표 비유를 들어볼게요! '-ing'는 내 가슴속에서 남에게 쏘는 '감정의 활(화살)'입니다. 반대로 '-ed'는 날아오는 감정 화살에 푹 찔려 아파하는 '화살 박힌 심장'이에요. 그래서 'I am boring'이라고 하면 '나는 남을 심심하게 만드는 인간 화살발사기다'라는 뜻이 되어버려 내 매력이 뚝 떨어져요! 지루함을 당해 하품을 하는 중이라면 화살에 찔린 상태인 'I am bored'라고 해야 자연스럽습니다.",
-      example: "The class is boring, so the students are bored.",
-      exampleContext: "수업(Class)은 지루함을 뿜어내는 '원인(-ing)'이고, 학생들(Students)은 그 지루함을 받아서 느끼는 '체험자(-ed)'입니다."
+    prediction: {
+      sentenceA: "I was so boring during the presentation.",
+      sentenceB: "I was so bored during the presentation.",
+      incorrectChoice: "A",
+      trapExplanation: "'-ing'는 감정을 유발하는 '원인'을 나타냅니다. 내가 지루함을 '느낀' 것이라면 수동적 상태인 '-ed(bored)'를 써야 합니다. 'I am boring'은 '내가 지루한 인간이다'라는 뜻이 됩니다!"
     },
-    memoryTips: {
-      tipFormula: "원인 제공자 = -ing (Active) VS 감정 체험자 = -ed (Passive)",
-      conceptA: "Exciting / Boring / Confusing",
-      conceptADesc: "어떤 대상이 주변에 그 감정을 '풍기고 뿜어내고 있는' 느낌!",
-      conceptB: "Excited / Bored / Confused",
-      conceptBDesc: "외부 원인으로 인해 마음속에 그 감정이 '탑재되고 채워진' 느낌!",
-      visualImage: "-ing는 뿜어져 나오는 향기 뿜뿜, -ed는 그 향기를 맡고 취한 얼굴!"
+    eli10: {
+      corePrinciple: "현재분사(-ing)는 그 감정을 '일으키는 원인'을 설명하고, 과거분사(-ed)는 그 감정을 '느끼게 된 상태'를 뜻합니다. 주어가 사람인지 사물인지가 아니라 '원인인가, 체험자인가?'가 핵심입니다.",
+      mentalModelAnalogy: "'-ing'는 남에게 쏘는 감정의 화살(활)이고, '-ed'는 날아온 화살에 찔려 아파하는 심장입니다. 내가 하품을 하는 중이라면 화살에 찔린 상태인 '-ed'입니다.",
+      contrastiveExample: "The class is boring (O) vs The students are bored (O)",
+      exampleContext: "수업(Class)은 지루함을 뿜어내는 '원인(-ing)'이고, 학생들(Students)은 지루함을 느끼는 '체험자(-ed)'입니다."
+    },
+    decisionTrigger: {
+      triggerA: {
+        expression: "Exciting / Boring / Confusing (-ing)",
+        condition: "어떤 대상이 주변에 그 감정을 '풍기고 뿜어내고 있는 원인'일 때",
+        example: "The new movie was thrilling. (그 영화가 스릴을 뿜어냄)"
+      },
+      triggerB: {
+        expression: "Excited / Bored / Confused (-ed)",
+        condition: "외부 원인으로 인해 마음속에 그 감정을 '느끼고 탑재된 상태'일 때",
+        example: "I felt confused by the instructions. (설명 때문에 내가 혼란을 느낌)"
+      },
+      keyRuleSummary: "원인 제공자 = -ing (Active) VS 감정 체험자 = -ed (Passive)"
     },
     pronunciation: {
       wordOrPhrase: "I was confused by the movie",
       phoneticRespelling: "ay wuz kun-FYOODZD by the MOO-vee",
       koreanPhonetic: "아이 워즈 컨퓨즈드 바이 더 무비",
       stressGuide: "confused에서 'FYOODZD'에 강한 강세를 주어 발음합니다. by the가 뭉쳐지면서 '바이 더'로 부드럽게 넘어가며, movie의 'MOO'에 주강세를 줍니다."
+    },
+    writingTemplate: {
+      prompt: "오늘 나를 흥미롭게 하거나 지루하게 만든 대상과 내 감정을 1문장으로 작문해보세요.",
+      template: "The (meeting / lecture / news) was ________, so I was ________.",
+      sampleSentence: "The lecture was fascinating, so I was deeply engaged throughout the session.",
+      tip: "앞 빈칸에는 원인(-ing 형용사), 뒤 빈칸에는 내가 느낀 감정(-ed 형용사)을 넣어보세요!"
     },
     quizzes: [
       {
@@ -228,7 +436,7 @@ export const PRESET_LESSONS: Lesson[] = [
           "frightened - frightened"
         ],
         correctIndex: 1,
-        rationale: "B번이 정답입니다. 영화(It)는 무서움을 뿜어내는 '원인'이므로 현재분사인 'frightening'이 알맞고, 나(I)는 그 영화 때문에 무서움을 당해 느낀 '피해자(체험자)'이므로 과거분사 'frightened'가 들어맞습니다. A번은 순서가 반대이고, C번과 D번은 두 빈칸에 같은 분사를 넣어 의미가 맞지 않습니다."
+        rationale: "B번이 정답입니다. 영화(It)는 무서움을 뿜어내는 '원인'이므로 현재분사인 'frightening'이 알맞고, 나(I)는 그 영화 때문에 무서움을 당해 느낀 '피해자(체험자)'이므로 과거분사 'frightened'가 들어맞습니다."
       },
       {
         id: "q-bb-2",
@@ -240,50 +448,14 @@ export const PRESET_LESSONS: Lesson[] = [
           "We felt confusing during the class."
         ],
         correctIndex: 2,
-        rationale: "선생님의 설명(Explanation)이 혼란을 유발하는 원인이므로 C번 'confusing'이 맞습니다. A번은 설명 자체가 감정을 느끼고 혼란스러워한다는 황당한 소리가 되며, B, D번은 혼란을 느낀 주체(We)이므로 'confused'를 써야 맞습니다."
-      },
-      {
-        id: "q-bb-3",
-        question: "다음 빈칸에 알맞은 단어는?\n\nJeremy has won a lottery! He is extremely ________ right now.",
-        choices: [
-          "exciting",
-          "excited",
-          "excite",
-          "excitedly"
-        ],
-        correctIndex: 1,
-        rationale: "복권에 당첨된 제레미(Jeremy)가 엄청난 신남을 느끼는 '상태'이므로 과거분사 형용사인 B번 'excited'가 들어와야 합니다. A번 exciting은 제레미가 남들을 엄청 흥분시키는 존재라는 뜻이 되며, C번 excite는 동사 원형이라 be동사 뒤에 올 수 없고, D번 excitedly는 부사라 보어 자리에 부적합합니다."
-      },
-      {
-        id: "q-bb-4",
-        question: "다음 문장 중 어법상 틀린 부분을 찾아 바르게 고친 것은?\n\n'Visiting new cities is always bored because I love staying home.'",
-        choices: [
-          "Visiting -> Visit",
-          "bored -> boring",
-          "staying -> stayed",
-          "love -> loving"
-        ],
-        correctIndex: 1,
-        rationale: "B번이 정답입니다. 새로운 도시를 방문하는 것(Visiting new cities)은 집돌이인 나에게 따분함을 주는 '원인'입니다. 사물 성격의 동명사 구가 주어이므로 bored(지루함을 느끼는)를 boring(지루함을 유발하는)으로 고쳐야 올바릅니다. A번 Visiting→Visit은 동명사 주어 변경과 무관하고, C번과 D번은 문법적으로 문제가 없는 부분을 고치려는 오류입니다."
-      },
-      {
-        id: "q-bb-5",
-        question: "다음 두 문장의 빈칸에 차례대로 들어갈 가장 알맞은 것은?\n\n- The dynamic show was deeply ________ to watch.\n- The children were so ________ by the magic tricks.",
-        choices: [
-          "amused - amusing",
-          "amusing - amusing",
-          "amusing - amused",
-          "amused - amused"
-        ],
-        correctIndex: 2,
-        rationale: "C번이 정답입니다. 첫 번째 빈칸은 쇼(show)가 즐거움을 주는 원인이므로 현재분사 'amusing', 두 번째 빈칸은 마술에 의해 아이들(children)이 즐거움을 느꼈으므로 과거분사 'amused'가 올바른 조합입니다. A번은 순서가 반대이고, B번과 D번은 두 빈칸에 같은 분사를 넣어 부적절합니다."
+        rationale: "선생님의 설명(Explanation)이 혼란을 유발하는 원인이므로 C번 'confusing'이 맞습니다. A번은 설명 자체가 감정을 느끼고 혼란스러워한다는 어색한 표현이 됩니다."
       }
     ]
   }
 ];
 
-// System Prompt for Gemini to guarantee perfect parsing and compliance
-const SYSTEM_PROMPT = `You are a native English linguistic expert and educational tutor. Your task is to analyze the provided English quiz, explanation, or text, and generate a deep study material matching the exact JSON structure provided below.
+// System Prompt for Gemini to guarantee perfect 5-stage parsing and compliance
+const SYSTEM_PROMPT = `You are a world-class cognitive linguistics expert and English educational tutor. Your task is to analyze the provided English quiz, expression, explanation, or text, and generate a 5-Stage Cognitive Progressive Learning Material matching the exact JSON structure provided below.
 
 Your response MUST be a single, valid JSON object and nothing else. Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.
 
@@ -291,45 +463,62 @@ You must fill out all fields in KOREAN (except the English keywords/examples whe
 
 Strict Schema Requirements:
 {
-  "title": "A short, engaging title in Korean summarizing the core topic (e.g., 'Despite vs Although 완벽 구분하기')",
-  "eli5": {
-    "explanation": "Explain Like I'm Five in Korean. Why this grammar/expression was correct and why the wrong choice is awkward. Use a simple, non-jargon explanation.",
-    "analogy": "A clever, highly intuitive analogy or visual metaphor in Korean to help the student visualize the rules.",
-    "example": "A clear, natural contrastive example sentence in English (e.g., 'Despite the rain (O) vs Although the rain (X)')",
-    "exampleContext": "Brief Korean explanation about the example sentence context and why it works."
+  "title": "A short, engaging title in Korean summarizing the core topic (e.g., 'see who vs see if anyone (문지기 원리)')",
+  "prediction": {
+    "sentenceA": "Sentence A in English (e.g. 'I\\'ll see who can help.')",
+    "sentenceB": "Sentence B in English (e.g. 'I\\'ll see if who can help.')",
+    "incorrectChoice": "A" or "B" (indicating which one is incorrect/awkward for native speakers),
+    "trapExplanation": "Explain in Korean why Korean speakers make this cognitive illusion/trap (e.g. trying to translate both '~인지' and '누가') and why native speakers never say the incorrect sentence."
   },
-  "memoryTips": {
-    "tipFormula": "A short, memorable 'formula' or rule equation (e.g., 'Despite + Noun vs Although + S + V')",
-    "conceptA": "Name of Concept A (e.g., 'Despite / In spite of')",
-    "conceptADesc": "Brief, punchy description of Concept A in Korean",
-    "conceptB": "Name of Concept B (e.g., 'Although / Even though')",
-    "conceptBDesc": "Brief, punchy description of Concept B in Korean",
-    "visualImage": "A mental image or vivid memory trick in Korean to lock this rule in the user's brain forever."
+  "eli10": {
+    "corePrinciple": "Explain Like I'm 10 in Korean. The fundamental underlying rule without difficult grammar jargon.",
+    "mentalModelAnalogy": "A vivid, unforgettable mental model or analogy in Korean (e.g., '방 문에는 문지기가 1명만 서 있어야 한다').",
+    "contrastiveExample": "English contrastive example sentence (e.g., 'I\\'ll see who can help (O) vs I\\'ll see if who can help (X)')",
+    "exampleContext": "Brief Korean explanation about why this example works."
+  },
+  "decisionTrigger": {
+    "triggerA": {
+      "expression": "Expression A (e.g., 'see who')",
+      "condition": "Specific decision trigger condition in Korean (e.g., '대상이 될 후보는 이미 있고, 그중 누구인지(정체)를 특정할 때')",
+      "example": "Natural example sentence in English with Korean context"
+    },
+    "triggerB": {
+      "expression": "Expression B (e.g., 'see if anyone')",
+      "condition": "Specific decision trigger condition in Korean (e.g., '도와줄 사람이 있기는 한지(존재 유무)조차 불확실할 때')",
+      "example": "Natural example sentence in English with Korean context"
+    },
+    "keyRuleSummary": "One-line punchy rule formula (e.g., '정체 특정 = who / 존재 유무 = if anyone (문지기는 1명만!)')"
   },
   "pronunciation": {
     "wordOrPhrase": "The key word or phrase from the lesson that needs pronunciation training",
-    "phoneticRespelling": "Phonetic respelling with syllable capitals for stress (e.g., 'dih-SPYT ow-er prep-uh-RAY-shun')",
-    "koreanPhonetic": "Natural Korean phonetic pronunciation guide showing linked sounds (e.g., '디스파이 타워 프레퍼레-이션')",
+    "phoneticRespelling": "Phonetic respelling with syllable capitals for stress (e.g., 'ayl SEE hoo kn HELP')",
+    "koreanPhonetic": "Natural Korean phonetic pronunciation guide showing linked sounds (e.g., '아일 씨 후 끈 헬프')",
     "stressGuide": "Detailed tips in Korean on linking, rhythm, and where to put primary stress."
+  },
+  "writingTemplate": {
+    "prompt": "Specific 1-second real-life writing challenge in Korean (e.g., '오늘 업무나 일상에서 확인할 일 1가지를 직접 작문해보세요.')",
+    "template": "Fill-in-the-blank English template (e.g., 'I need to check (who / if anyone) ____________________.')",
+    "sampleSentence": "A high-quality sample English sentence completing the template with Korean meaning",
+    "tip": "Helpful writing tip in Korean"
   },
   "quizzes": [
     {
       "id": "A unique string ID, e.g., 'q1', 'q2', etc.",
-      "question": "The question in Korean (can include English sentence with a blank like 'Fill in the blank: She went to bed ________ being tired.')",
+      "question": "The question in Korean testing interference check (can include English sentence with blanks or asking to find natural sentences)",
       "choices": [
-        "Four plausible multiple-choice options. Make them highly deceptive based on the wrong answers mentioned in the prompt."
+        "Four plausible multiple-choice options. Make them deceptive based on the wrong cognitive patterns."
       ],
       "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
-      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect or grammatically invalid in this context. CRITICAL: Use letter labels A번, B번, C번, D번 (NOT numbers like 1번, 2번, 3번, 4번) to reference choices. choices[0]=A번, choices[1]=B번, choices[2]=C번, choices[3]=D번."
+      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect. CRITICAL: Use letter labels A번, B번, C번, D번 to reference choices."
     }
   ]
 }
 
 Important Instructions:
 1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array.
-2. In the quizzes, test different angles of the topic: preposition matching, active vs passive voice, tense, subject-verb agreement, etc.
-3. Keep the tone friendly, encouraging, and highly professional yet simple.
-4. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations, analogies, examples, and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
+2. In the quizzes, test different angles of the topic.
+3. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
+4. CRITICAL: Never use raw unescaped double quotes (\") inside any JSON string values. For any inner quotations, use single quotes (') instead.
 5. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
 export async function generateLessonFromText(
@@ -373,27 +562,50 @@ export async function generateLessonFromText(
         type: "object",
         properties: {
           title: { type: "string" },
-          eli5: {
+          prediction: {
             type: "object",
             properties: {
-              explanation: { type: "string" },
-              analogy: { type: "string" },
-              example: { type: "string" },
+              sentenceA: { type: "string" },
+              sentenceB: { type: "string" },
+              incorrectChoice: { type: "string", enum: ["A", "B"] },
+              trapExplanation: { type: "string" }
+            },
+            required: ["sentenceA", "sentenceB", "incorrectChoice", "trapExplanation"]
+          },
+          eli10: {
+            type: "object",
+            properties: {
+              corePrinciple: { type: "string" },
+              mentalModelAnalogy: { type: "string" },
+              contrastiveExample: { type: "string" },
               exampleContext: { type: "string" }
             },
-            required: ["explanation", "analogy", "example", "exampleContext"]
+            required: ["corePrinciple", "mentalModelAnalogy", "contrastiveExample", "exampleContext"]
           },
-          memoryTips: {
+          decisionTrigger: {
             type: "object",
             properties: {
-              tipFormula: { type: "string" },
-              conceptA: { type: "string" },
-              conceptADesc: { type: "string" },
-              conceptB: { type: "string" },
-              conceptBDesc: { type: "string" },
-              visualImage: { type: "string" }
+              triggerA: {
+                type: "object",
+                properties: {
+                  expression: { type: "string" },
+                  condition: { type: "string" },
+                  example: { type: "string" }
+                },
+                required: ["expression", "condition", "example"]
+              },
+              triggerB: {
+                type: "object",
+                properties: {
+                  expression: { type: "string" },
+                  condition: { type: "string" },
+                  example: { type: "string" }
+                },
+                required: ["expression", "condition", "example"]
+              },
+              keyRuleSummary: { type: "string" }
             },
-            required: ["tipFormula", "conceptA", "conceptADesc", "conceptB", "conceptBDesc", "visualImage"]
+            required: ["triggerA", "triggerB", "keyRuleSummary"]
           },
           pronunciation: {
             type: "object",
@@ -404,6 +616,16 @@ export async function generateLessonFromText(
               stressGuide: { type: "string" }
             },
             required: ["wordOrPhrase", "phoneticRespelling", "koreanPhonetic", "stressGuide"]
+          },
+          writingTemplate: {
+            type: "object",
+            properties: {
+              prompt: { type: "string" },
+              template: { type: "string" },
+              sampleSentence: { type: "string" },
+              tip: { type: "string" }
+            },
+            required: ["prompt", "template", "sampleSentence", "tip"]
           },
           quizzes: {
             type: "array",
@@ -422,7 +644,7 @@ export async function generateLessonFromText(
             }
           }
         },
-        required: ["title", "eli5", "memoryTips", "pronunciation", "quizzes"]
+        required: ["title", "prediction", "eli10", "decisionTrigger", "pronunciation", "writingTemplate", "quizzes"]
       },
       temperature: 0.2
     }
@@ -449,86 +671,59 @@ export async function generateLessonFromText(
     const cleanedText = cleanJsonString(responseText);
     const parsedJson = JSON.parse(cleanedText);
 
-    // Map properties and guarantee compliance
-    const lesson: Lesson = {
+    // Build randomized options with remapped rationales
+    const rawQuizzes = Array.isArray(parsedJson.quizzes) ? parsedJson.quizzes : [];
+    const normalized = normalizeLesson({
       id: `lesson-${Date.now()}`,
-      title: parsedJson.title || "새로운 영어 학습 세트",
+      title: parsedJson.title || "영어 표현 심층 학습",
       sourceText: cleanText,
       createdAt: Date.now(),
-      eli5: {
-        explanation: parsedJson.eli5?.explanation || "설명이 누락되었습니다.",
-        analogy: parsedJson.eli5?.analogy || "비유가 누락되었습니다.",
-        example: parsedJson.eli5?.example || "예문이 누락되었습니다.",
-        exampleContext: parsedJson.eli5?.exampleContext || "해설이 누락되었습니다."
-      },
-      memoryTips: {
-        tipFormula: parsedJson.memoryTips?.tipFormula || "",
-        conceptA: parsedJson.memoryTips?.conceptA || "",
-        conceptADesc: parsedJson.memoryTips?.conceptADesc || "",
-        conceptB: parsedJson.memoryTips?.conceptB || "",
-        conceptBDesc: parsedJson.memoryTips?.conceptBDesc || "",
-        visualImage: parsedJson.memoryTips?.visualImage || ""
-      },
-      pronunciation: {
-        wordOrPhrase: parsedJson.pronunciation?.wordOrPhrase || "",
-        phoneticRespelling: parsedJson.pronunciation?.phoneticRespelling || "",
-        koreanPhonetic: parsedJson.pronunciation?.koreanPhonetic || "",
-        stressGuide: parsedJson.pronunciation?.stressGuide || ""
-      },
-      quizzes: (parsedJson.quizzes || []).map((q: any, index: number) => {
-        const rawChoices = q.choices || ["A", "B", "C", "D"];
-        const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
-        const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+      prediction: parsedJson.prediction,
+      eli10: parsedJson.eli10,
+      decisionTrigger: parsedJson.decisionTrigger,
+      pronunciation: parsedJson.pronunciation,
+      writingTemplate: parsedJson.writingTemplate,
+      quizzes: rawQuizzes.map((quiz: any, index: number) => {
+        const originalChoices: string[] = Array.isArray(quiz.choices) ? quiz.choices : [];
+        const originalCorrectIndex: number = typeof quiz.correctIndex === 'number' ? quiz.correctIndex : 0;
+        const correctChoiceValue = originalChoices[originalCorrectIndex];
 
-        // Shuffle choices using standard Fisher-Yates
-        const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
-        for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+        // Shuffle choices while maintaining correct index
+        const mappedChoices = originalChoices.map((choice, i) => ({
+          choice,
+          isCorrect: i === originalCorrectIndex,
+          originalLetter: String.fromCharCode(65 + i)
+        }));
+
+        for (let i = mappedChoices.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
-          [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+          [mappedChoices[i], mappedChoices[j]] = [mappedChoices[j], mappedChoices[i]];
         }
 
-        const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
-        const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+        const shuffledChoices = mappedChoices.map(m => m.choice);
+        const shuffledCorrectIndex = mappedChoices.findIndex(m => m.isCorrect);
 
-        // Remap A/B/C/D labels in rationale to match shuffled order
-        const LABELS = ['A', 'B', 'C', 'D'];
-        const oldToNewIdx: Record<number, number> = {};
-        choicesWithIndex.forEach((item: any, newIdx: number) => {
-          oldToNewIdx[item.cIdx] = newIdx;
-        });
-        let remappedRationale = q.rationale || "상세 해설이 없습니다.";
-        // Phase 1: Replace old labels → temp placeholders (avoid collision)
-        const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
-        LABELS.forEach((label, oldIdx) => {
-          if (oldToNewIdx[oldIdx] !== undefined) {
-            const temp = TEMP[oldToNewIdx[oldIdx]];
-            remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+        let remappedRationale = quiz.rationale || "";
+        mappedChoices.forEach((item, newIndex) => {
+          const newLetter = String.fromCharCode(65 + newIndex);
+          if (item.originalLetter !== newLetter) {
+            const regex = new RegExp(`(?<![A-Z])${item.originalLetter}번`, 'g');
+            remappedRationale = remappedRationale.replace(regex, `__TEMP_${newLetter}__`);
           }
         });
-        // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
-        for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
-          if (oldToNewIdx[oldIdx] !== undefined) {
-            const numStr = `${oldIdx + 1}번`;
-            const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
-            remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
-          }
-        }
-        // Phase 2: Replace temp placeholders → final labels
-        TEMP.forEach((temp, idx) => {
-          remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
-        });
+        remappedRationale = remappedRationale.replace(/__TEMP_([A-D])__/g, '$1번');
 
         return {
-          id: `expr-q-${Date.now()}-${index}`,
-          question: q.question || "문제가 생성되지 않았습니다.",
-          choices: shuffledChoices,
+          id: quiz.id || `q-${index + 1}`,
+          question: quiz.question || `Question ${index + 1}`,
+          choices: shuffledChoices.length > 0 ? shuffledChoices : [correctChoiceValue || "Option A"],
           correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
           rationale: remappedRationale
         };
       })
-    };
+    });
 
-    return lesson;
+    return normalized;
   } catch (error: any) {
     console.error("Gemini Generation Error:", error);
     throw new Error(error.message || "학습자료를 생성하는 도중 알 수 없는 에러가 발생했습니다.");
@@ -611,7 +806,8 @@ export async function deserializeLesson(base64Str: string): Promise<Lesson | nul
     }
     
     const jsonStr = new TextDecoder().decode(concat);
-    return JSON.parse(jsonStr) as Lesson;
+    const parsed = JSON.parse(jsonStr);
+    return normalizeLesson(parsed);
   } catch (error) {
     console.error("Failed to deserialize expression lesson:", error);
     return null;
@@ -619,9 +815,9 @@ export async function deserializeLesson(base64Str: string): Promise<Lesson | nul
 }
 
 // Vocabulary Mode System Prompt for Gemini
-const VOCABULARY_SYSTEM_PROMPT = `You are a native English linguistic expert and educational tutor. Your task is to analyze the provided English vocabulary root word, word list, or text, identify all distinct vocabulary words, meanings, or nuances, and generate a list of deep study materials.
+const VOCABULARY_SYSTEM_PROMPT = `You are a native English linguistic expert and educational tutor. Your task is to analyze the provided English vocabulary root word, word list, or text, identify all distinct vocabulary words, meanings, or nuances, and generate a list of 5-Stage Cognitive Progressive Learning Materials.
 
-For each distinct word, derivative, or meaning/nuance (e.g., if the user lists 'affect' with different part-of-speeches or meanings, or lists 'affection', 'affectionate' as related derivatives, create a separate lesson entry for each one), generate a corresponding lesson study material.
+For each distinct word, derivative, or nuance, generate a corresponding lesson study material.
 
 Your response MUST be a single, valid JSON object with a "lessons" array containing the lesson objects. Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.
 
@@ -632,19 +828,30 @@ Strict Schema Requirements:
   "lessons": [
     {
       "title": "The vocabulary word and its part of speech/meaning in Korean (e.g., 'affect (v. 영향을 미치다)')",
-      "eli5": {
-        "explanation": "Explain the word's native nuance and dictionary definition in Korean. Focus on the core feeling of the word, native-speaker sensations, nuances, and things usually missed in standard vocabulary books. Write in a friendly, engaging tone suitable for a 10-year-old child (ELI10) in Korean.",
-        "analogy": "A clever, highly intuitive analogy or visual metaphor in Korean to help the student visualize the word's core nuance.",
-        "example": "A clear, natural example sentence in English showing the word in its typical context (e.g., 'Smoking affects your health. (O)')",
-        "exampleContext": "Brief Korean explanation about the example sentence context, usage, and why it is natural."
+      "prediction": {
+        "sentenceA": "Sentence A in English (e.g. 'Smoking affects your health.')",
+        "sentenceB": "Sentence B in English (e.g. 'Smoking effects your health.')",
+        "incorrectChoice": "A" or "B",
+        "trapExplanation": "Explain in Korean why Korean learners confuse affect vs effect and why the incorrect choice is wrong."
       },
-      "memoryTips": {
-        "tipFormula": "A short, memorable 'formula' or visual equation (e.g., 'Affect = Action -> Effect = Result')",
-        "conceptA": "The word's main concept/뉘앙스",
-        "conceptADesc": "Brief, punchy description of the main concept in Korean",
-        "conceptB": "A confusing synonym, antonym, or close nuance (e.g. influence, or effect)",
-        "conceptBDesc": "Brief, punchy explanation of the difference in Korean",
-        "visualImage": "A mental image or vivid memory trick in Korean to lock this word in the user's brain forever."
+      "eli10": {
+        "corePrinciple": "Explain the core feeling of the word and native sensations in Korean in a friendly tone for a 10-year-old child (ELI10).",
+        "mentalModelAnalogy": "A clever, highly intuitive analogy or visual metaphor in Korean to visualize the core nuance.",
+        "contrastiveExample": "A clear, natural example sentence in English showing the word in its typical context",
+        "exampleContext": "Brief Korean explanation about why this example is natural."
+      },
+      "decisionTrigger": {
+        "triggerA": {
+          "expression": "This vocabulary word",
+          "condition": "When to use this specific word in Korean",
+          "example": "Natural example sentence"
+        },
+        "triggerB": {
+          "expression": "A confusing synonym or derivative (e.g., effect)",
+          "condition": "When to use the other word in Korean",
+          "example": "Natural example sentence"
+        },
+        "keyRuleSummary": "One-line punchy rule formula"
       },
       "pronunciation": {
         "wordOrPhrase": "The key vocabulary word",
@@ -652,14 +859,20 @@ Strict Schema Requirements:
         "koreanPhonetic": "Natural Korean phonetic pronunciation guide (e.g., '어펙트')",
         "stressGuide": "Detailed tips in Korean on linking, rhythm, and where to put primary stress."
       },
+      "writingTemplate": {
+        "prompt": "Specific 1-second real-life writing challenge in Korean",
+        "template": "Fill-in-the-blank English template",
+        "sampleSentence": "A sample English sentence completing the template with Korean meaning",
+        "tip": "Helpful writing tip in Korean"
+      },
       "quizzes": [
         {
-          "question": "A multiple-choice question in Korean, testing the correct usage of this word in context (e.g. selecting the correct word/preposition for an English blank sentence).",
+          "question": "A multiple-choice question in Korean testing usage in context.",
           "choices": [
-            "Four plausible options in English (or Korean as appropriate). Make them highly deceptive based on confusing nuances."
+            "Four plausible options in English (or Korean as appropriate)."
           ],
           "correctIndex": "0-indexed integer (0, 1, 2, or 3) representing the correct choice",
-          "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH of the other options is incorrect. Reference choices using A번, B번, C번, D번."
+          "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why EACH other option is incorrect. Reference choices using A번, B번, C번, D번."
         }
       ]
     }
@@ -669,7 +882,7 @@ Strict Schema Requirements:
 Important Instructions:
 1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array for each lesson.
 2. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
-3. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations, analogies, examples, and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
+3. CRITICAL: Never use raw unescaped double quotes (\") inside any JSON string values. Use single quotes (') instead.
 4. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
 export async function generateVocabularyLessons(
@@ -718,27 +931,50 @@ export async function generateVocabularyLessons(
               type: "object",
               properties: {
                 title: { type: "string" },
-                eli5: {
+                prediction: {
                   type: "object",
                   properties: {
-                    explanation: { type: "string" },
-                    analogy: { type: "string" },
-                    example: { type: "string" },
+                    sentenceA: { type: "string" },
+                    sentenceB: { type: "string" },
+                    incorrectChoice: { type: "string", enum: ["A", "B"] },
+                    trapExplanation: { type: "string" }
+                  },
+                  required: ["sentenceA", "sentenceB", "incorrectChoice", "trapExplanation"]
+                },
+                eli10: {
+                  type: "object",
+                  properties: {
+                    corePrinciple: { type: "string" },
+                    mentalModelAnalogy: { type: "string" },
+                    contrastiveExample: { type: "string" },
                     exampleContext: { type: "string" }
                   },
-                  required: ["explanation", "analogy", "example", "exampleContext"]
+                  required: ["corePrinciple", "mentalModelAnalogy", "contrastiveExample", "exampleContext"]
                 },
-                memoryTips: {
+                decisionTrigger: {
                   type: "object",
                   properties: {
-                    tipFormula: { type: "string" },
-                    conceptA: { type: "string" },
-                    conceptADesc: { type: "string" },
-                    conceptB: { type: "string" },
-                    conceptBDesc: { type: "string" },
-                    visualImage: { type: "string" }
+                    triggerA: {
+                      type: "object",
+                      properties: {
+                        expression: { type: "string" },
+                        condition: { type: "string" },
+                        example: { type: "string" }
+                      },
+                      required: ["expression", "condition", "example"]
+                    },
+                    triggerB: {
+                      type: "object",
+                      properties: {
+                        expression: { type: "string" },
+                        condition: { type: "string" },
+                        example: { type: "string" }
+                      },
+                      required: ["expression", "condition", "example"]
+                    },
+                    keyRuleSummary: { type: "string" }
                   },
-                  required: ["tipFormula", "conceptA", "conceptADesc", "conceptB", "conceptBDesc", "visualImage"]
+                  required: ["triggerA", "triggerB", "keyRuleSummary"]
                 },
                 pronunciation: {
                   type: "object",
@@ -749,6 +985,16 @@ export async function generateVocabularyLessons(
                     stressGuide: { type: "string" }
                   },
                   required: ["wordOrPhrase", "phoneticRespelling", "koreanPhonetic", "stressGuide"]
+                },
+                writingTemplate: {
+                  type: "object",
+                  properties: {
+                    prompt: { type: "string" },
+                    template: { type: "string" },
+                    sampleSentence: { type: "string" },
+                    tip: { type: "string" }
+                  },
+                  required: ["prompt", "template", "sampleSentence", "tip"]
                 },
                 quizzes: {
                   type: "array",
@@ -767,7 +1013,7 @@ export async function generateVocabularyLessons(
                   }
                 }
               },
-              required: ["title", "eli5", "memoryTips", "pronunciation", "quizzes"]
+              required: ["title", "prediction", "eli10", "decisionTrigger", "pronunciation", "writingTemplate", "quizzes"]
             }
           }
         },
@@ -797,262 +1043,229 @@ export async function generateVocabularyLessons(
 
     const cleanedText = cleanJsonString(responseText);
     const parsedJson = JSON.parse(cleanedText);
-    const rawLessons = parsedJson.lessons || [];
 
-    return rawLessons.map((item: any, idx: number) => {
-      const lesson: Lesson = {
-        id: `lesson-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-        title: item.title || "새로운 영어 어휘 학습 세트",
+    const lessonsArray = Array.isArray(parsedJson.lessons) ? parsedJson.lessons : [];
+    if (lessonsArray.length === 0) {
+      throw new Error("단어/표현 분석 결과를 생성하지 못했습니다. 입력 내용을 확인해 주세요.");
+    }
+
+    return lessonsArray.map((rawLesson: any, lessonIdx: number) => {
+      const rawQuizzes = Array.isArray(rawLesson.quizzes) ? rawLesson.quizzes : [];
+      return normalizeLesson({
+        id: `lesson-vocab-${Date.now()}-${lessonIdx}`,
+        title: rawLesson.title || `Vocabulary Unit ${lessonIdx + 1}`,
         sourceText: cleanText,
-        createdAt: Date.now() - idx * 1000,
+        createdAt: Date.now() + lessonIdx,
         isVocabulary: true,
-        eli5: {
-          explanation: item.eli5?.explanation || "설명이 누락되었습니다.",
-          analogy: item.eli5?.analogy || "비유가 누락되었습니다.",
-          example: item.eli5?.example || "예문이 누락되었습니다.",
-          exampleContext: item.eli5?.exampleContext || "해설이 누락되었습니다."
-        },
-        memoryTips: {
-          tipFormula: item.memoryTips?.tipFormula || "",
-          conceptA: item.memoryTips?.conceptA || "",
-          conceptADesc: item.memoryTips?.conceptADesc || "",
-          conceptB: item.memoryTips?.conceptB || "",
-          conceptBDesc: item.memoryTips?.conceptBDesc || "",
-          visualImage: item.memoryTips?.visualImage || ""
-        },
-        pronunciation: {
-          wordOrPhrase: item.pronunciation?.wordOrPhrase || "",
-          phoneticRespelling: item.pronunciation?.phoneticRespelling || "",
-          koreanPhonetic: item.pronunciation?.koreanPhonetic || "",
-          stressGuide: item.pronunciation?.stressGuide || ""
-        },
-        quizzes: (item.quizzes || []).map((q: any, qIdx: number) => {
-          const rawChoices = q.choices || ["A", "B", "C", "D"];
-          const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
-          const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+        prediction: rawLesson.prediction,
+        eli10: rawLesson.eli10,
+        decisionTrigger: rawLesson.decisionTrigger,
+        pronunciation: rawLesson.pronunciation,
+        writingTemplate: rawLesson.writingTemplate,
+        quizzes: rawQuizzes.map((quiz: any, qIdx: number) => {
+          const originalChoices: string[] = Array.isArray(quiz.choices) ? quiz.choices : [];
+          const originalCorrectIndex: number = typeof quiz.correctIndex === 'number' ? quiz.correctIndex : 0;
+          const correctChoiceValue = originalChoices[originalCorrectIndex];
 
-          // Shuffle choices using standard Fisher-Yates
-          const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
-          for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+          const mappedChoices = originalChoices.map((choice, i) => ({
+            choice,
+            isCorrect: i === originalCorrectIndex,
+            originalLetter: String.fromCharCode(65 + i)
+          }));
+
+          for (let i = mappedChoices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+            [mappedChoices[i], mappedChoices[j]] = [mappedChoices[j], mappedChoices[i]];
           }
 
-          const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
-          const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+          const shuffledChoices = mappedChoices.map(m => m.choice);
+          const shuffledCorrectIndex = mappedChoices.findIndex(m => m.isCorrect);
 
-          // Remap A/B/C/D labels in rationale to match shuffled order
-          const LABELS = ['A', 'B', 'C', 'D'];
-          const oldToNewIdx: Record<number, number> = {};
-          choicesWithIndex.forEach((c: any, newIdx: number) => {
-            oldToNewIdx[c.cIdx] = newIdx;
-          });
-          let remappedRationale = q.rationale || "상세 해설이 없습니다.";
-          // Phase 1: Replace old labels → temp placeholders (avoid collision)
-          const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
-          LABELS.forEach((label, oldIdx) => {
-            if (oldToNewIdx[oldIdx] !== undefined) {
-              const temp = TEMP[oldToNewIdx[oldIdx]];
-              remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+          let remappedRationale = quiz.rationale || "";
+          mappedChoices.forEach((item, newIndex) => {
+            const newLetter = String.fromCharCode(65 + newIndex);
+            if (item.originalLetter !== newLetter) {
+              const regex = new RegExp(`(?<![A-Z])${item.originalLetter}번`, 'g');
+              remappedRationale = remappedRationale.replace(regex, `__TEMP_${newLetter}__`);
             }
           });
-          // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
-          for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
-            if (oldToNewIdx[oldIdx] !== undefined) {
-              const numStr = `${oldIdx + 1}번`;
-              const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
-              remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
-            }
-          }
-          // Phase 2: Replace temp placeholders → final labels
-          TEMP.forEach((temp, labelIdx) => {
-            remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[labelIdx]);
-          });
+          remappedRationale = remappedRationale.replace(/__TEMP_([A-D])__/g, '$1번');
 
           return {
-            id: `expr-q-${Date.now()}-${idx}-${qIdx}`,
-            question: q.question || "문제가 생성되지 않았습니다.",
-            choices: shuffledChoices,
+            id: quiz.id || `q-${lessonIdx + 1}-${qIdx + 1}`,
+            question: quiz.question || `Question ${qIdx + 1}`,
+            choices: shuffledChoices.length > 0 ? shuffledChoices : [correctChoiceValue || "Option A"],
             correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
             rationale: remappedRationale
           };
         })
-      };
-      return lesson;
+      });
     });
   } catch (error: any) {
     console.error("Gemini Vocabulary Generation Error:", error);
-    throw new Error(error.message || "어휘 학습자료를 생성하는 도중 알 수 없는 에러가 발생했습니다.");
+    throw new Error(error.message || "어휘 학습자료 생성 도중 알 수 없는 에러가 발생했습니다.");
   }
+}
+
+/**
+ * 5단계 작문 실시간 AI 첨삭 및 코칭 함수
+ */
+export async function evaluateUserSentence(
+  lesson: Lesson,
+  userSentence: string,
+  apiKey: string
+): Promise<WritingEvaluationResult> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+  if (!userSentence.trim()) throw new Error("작문 문장을 입력해 주세요.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an encouraging, expert native English writing coach and tutor.
+The student is practicing this English topic:
+- Topic Title: "${lesson.title}"
+- Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
+- Decision Trigger / Key Rule: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
+- Writing Template Given: "${lesson.writingTemplate?.template || ''}"
+- Student's Written Sentence: "${userSentence.trim()}"
+
+Evaluate the student's sentence based on:
+1. Did they apply the target grammar/expression correctly?
+2. Naturalness in native English business/daily contexts.
+3. Minor grammar, preposition, or spelling errors.
+
+Return a JSON object matching this schema:
+{
+  "isNatural": true or false,
+  "score": integer between 1 and 100,
+  "feedback": "Warm, encouraging 1-2 sentences in Korean highlighting what they did well.",
+  "correctedSentence": "The grammatically perfected version of their sentence in English.",
+  "nativeAlternative": "An even more natural/idiomatic alternative expression a native speaker would say in this context in English.",
+  "explanation": "Clear, punchy 1-2 sentence Korean explanation of why this correction/alternative is better."
+}
+
+Do not wrap in markdown \`\`\`json. Return raw JSON string only. Use single quotes inside string values if needed.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 첨삭 결과를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as WritingEvaluationResult;
 }
 
 export async function generateAdditionalQuizzes(
   lesson: Lesson,
-  wrongDetails: Array<{ question: string; userAnswer: string; correctAnswer: string; rationale: string }>,
-  questionCount: number,
-  apiKey: string
+  wrongDetailsOrCount: any = 3,
+  countOrApiKey: any = '',
+  optionalApiKey?: string
 ): Promise<QuizItem[]> {
+  let count = 3;
+  let apiKey = '';
+  let wrongDetails: any[] = [];
+
+  if (typeof wrongDetailsOrCount === 'number') {
+    count = wrongDetailsOrCount;
+    apiKey = countOrApiKey;
+  } else if (Array.isArray(wrongDetailsOrCount)) {
+    wrongDetails = wrongDetailsOrCount;
+    count = typeof countOrApiKey === 'number' ? countOrApiKey : 3;
+    apiKey = optionalApiKey || '';
+  } else {
+    apiKey = optionalApiKey || countOrApiKey || '';
+  }
+
   if (!apiKey) {
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const cleanTitle = lesson.title.replace(/"/g, "'");
-  const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
-  const cleanExplanation = lesson.eli5.explanation.replace(/"/g, "'");
+  const prompt = `You are an expert English quiz creator.
+The student is studying this topic:
+Topic Title: "${lesson.title}"
+Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
+Decision Trigger: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
+Original source text: "${lesson.sourceText}"
 
-  let wrongContext = "";
-  if (wrongDetails.length > 0) {
-    wrongContext = `
-The student previously got the following quizzes WRONG. You MUST analyze these mistakes and generate new, different questions that specifically target the concepts, nuances, or grammar/vocabulary errors demonstrated in these mistakes. Test them in different sentences/contexts to verify if they have fully corrected their understanding:
-${wrongDetails.map((w, idx) => `
-[Mistake #${idx + 1}]
-- Question: ${w.question.replace(/"/g, "'")}
-- Student's Wrong Selection: ${w.userAnswer.replace(/"/g, "'")}
-- Correct Answer: ${w.correctAnswer.replace(/"/g, "'")}
-- Rationale: ${w.rationale.replace(/"/g, "'")}
-`).join('\n')}
-`;
-  } else {
-    wrongContext = `
-The student has no recorded mistakes or has got everything correct. Generate general additional quizzes to further verify and reinforce their understanding of this lesson's concepts.
-`;
-  }
+Generate EXACTLY ${count} NEW and UNIQUE multiple-choice quizzes that test different nuances and real-world usage scenarios of this topic.
 
-  const prompt = `You are a native English linguistic expert and educational tutor. Your task is to generate additional quizzes to reinforce the student's understanding of the following English lesson:
-
-Lesson Title: ${cleanTitle}
-Lesson Main Content / Source Text:
-"""
-${cleanSourceText}
-"""
-Nuance Explanation (ELI10):
-"""
-${cleanExplanation}
-"""
-${wrongContext}
-
-Strict Instructions:
-1. Generate EXACTLY ${questionCount} multiple-choice quizzes under a "quizzes" array in the returned JSON object.
-2. If wrong answers were provided above, make sure the generated quizzes target those exact mistake areas but with DIFFERENT sentences, different answer choices, or different phrasing. Do not reuse the exact same sentences or questions from the mistakes.
-3. If it is a vocabulary lesson, ensure all quizzes test the usage, definitions, or nuances of this specific vocabulary word: '${cleanTitle}'.
-4. Keep the tone friendly, encouraging, and highly professional yet simple.
-5. CRITICAL: Never use raw unescaped double quotes (") inside any JSON string values. For any inner quotations or wrapping words in the explanations and rationales, you MUST use single quotes (') instead. E.g., write 'affect' or '영향을 주다' instead of "affect" or "영향을 주다". This is absolutely critical to prevent JSON parsing failures.
-6. The response MUST be a single, valid JSON object.
-Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`;
-
-  const requestBody = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: prompt
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: "object",
-        properties: {
-          quizzes: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                question: { type: "string" },
-                choices: {
-                  type: "array",
-                  items: { type: "string" }
-                },
-                correctIndex: { type: "integer" },
-                rationale: { type: "string" }
-              },
-              required: ["question", "choices", "correctIndex", "rationale"]
-            }
-          }
-        },
-        required: ["quizzes"]
-      },
-      temperature: 0.3
+Return a JSON object with this exact structure:
+{
+  "quizzes": [
+    {
+      "id": "A unique string ID, e.g. 'extra-q1'",
+      "question": "Question in Korean with English sentences or blanks",
+      "choices": ["Option A", "Option B", "Option C", "Option D"],
+      "correctIndex": 0,
+      "rationale": "Extremely detailed explanation in Korean explaining why the correct choice is correct and why each other choice is wrong. Reference choices using A번, B번, C번, D번."
     }
-  };
+  ]
+}
+
+Do not wrap in markdown \`\`\`json. Return raw JSON string only.`;
 
   const response = await fetchWithRetry(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(requestBody)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData?.error?.message || `HTTP 에러 ${response.status}`;
-    throw new Error(`Gemini API 통신 실패: ${errorMessage}`);
-  }
-
   const data = await response.json();
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 퀴즈를 반환하지 않았습니다.");
 
-  if (!responseText) {
-    throw new Error("Gemini가 유효한 결과를 반환하지 않았습니다.");
-  }
+  const parsed = JSON.parse(cleanJsonString(text));
+  const rawQuizzes = Array.isArray(parsed.quizzes) ? parsed.quizzes : [];
 
-  const cleanedText = cleanJsonString(responseText);
-  const parsedJson = JSON.parse(cleanedText);
-  const rawQuizzes = parsedJson.quizzes || [];
+  return rawQuizzes.map((quiz: any, index: number) => {
+    const originalChoices: string[] = Array.isArray(quiz.choices) ? quiz.choices : [];
+    const originalCorrectIndex: number = typeof quiz.correctIndex === 'number' ? quiz.correctIndex : 0;
+    const correctChoiceValue = originalChoices[originalCorrectIndex];
 
-  return rawQuizzes.map((q: any, index: number) => {
-    const rawChoices = q.choices || ["A", "B", "C", "D"];
-    const rawCorrectIndex = typeof q.correctIndex === 'number' ? q.correctIndex : 0;
-    const correctChoiceText = rawChoices[rawCorrectIndex] || rawChoices[0];
+    const mappedChoices = originalChoices.map((choice, i) => ({
+      choice,
+      isCorrect: i === originalCorrectIndex,
+      originalLetter: String.fromCharCode(65 + i)
+    }));
 
-    // Shuffle choices using standard Fisher-Yates
-    const choicesWithIndex = rawChoices.map((choice: string, cIdx: number) => ({ choice, cIdx }));
-    for (let i = choicesWithIndex.length - 1; i > 0; i--) {
+    for (let i = mappedChoices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [choicesWithIndex[i], choicesWithIndex[j]] = [choicesWithIndex[j], choicesWithIndex[i]];
+      [mappedChoices[i], mappedChoices[j]] = [mappedChoices[j], mappedChoices[i]];
     }
 
-    const shuffledChoices = choicesWithIndex.map((c: any) => c.choice);
-    const shuffledCorrectIndex = shuffledChoices.indexOf(correctChoiceText);
+    const shuffledChoices = mappedChoices.map(m => m.choice);
+    const shuffledCorrectIndex = mappedChoices.findIndex(m => m.isCorrect);
 
-    // Remap A/B/C/D labels in rationale to match shuffled order
-    const LABELS = ['A', 'B', 'C', 'D'];
-    const oldToNewIdx: Record<number, number> = {};
-    choicesWithIndex.forEach((item: any, newIdx: number) => {
-      oldToNewIdx[item.cIdx] = newIdx;
-    });
-    let remappedRationale = q.rationale || "상세 해설이 없습니다.";
-    // Phase 1: Replace old labels → temp placeholders (avoid collision)
-    const TEMP = ['##LABEL_A##', '##LABEL_B##', '##LABEL_C##', '##LABEL_D##'];
-    LABELS.forEach((label, oldIdx) => {
-      if (oldToNewIdx[oldIdx] !== undefined) {
-        const temp = TEMP[oldToNewIdx[oldIdx]];
-        remappedRationale = remappedRationale.replace(new RegExp(`(?<![a-zA-Z])${label}번`, 'g'), `${temp}번`);
+    let remappedRationale = quiz.rationale || "";
+    mappedChoices.forEach((item, newIndex) => {
+      const newLetter = String.fromCharCode(65 + newIndex);
+      if (item.originalLetter !== newLetter) {
+        const regex = new RegExp(`(?<![A-Z])${item.originalLetter}번`, 'g');
+        remappedRationale = remappedRationale.replace(regex, `__TEMP_${newLetter}__`);
       }
     });
-    // Also remap number-based references (1번→A, 2번→B, 3번→C, 4번→D)
-    for (let oldIdx = 0; oldIdx < 4; oldIdx++) {
-      if (oldToNewIdx[oldIdx] !== undefined) {
-        const numStr = `${oldIdx + 1}번`;
-        const temp = `${TEMP[oldToNewIdx[oldIdx]]}번`;
-        remappedRationale = remappedRationale.replace(new RegExp(`(?<![0-9])${numStr}`, 'g'), temp);
-      }
-    }
-    // Phase 2: Replace temp placeholders → final labels
-    TEMP.forEach((temp, idx) => {
-      remappedRationale = remappedRationale.replace(new RegExp(temp, 'g'), LABELS[idx]);
-    });
+    remappedRationale = remappedRationale.replace(/__TEMP_([A-D])__/g, '$1번');
 
     return {
-      id: `expr-q-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 6)}`,
-      question: q.question || "문제가 생성되지 않았습니다.",
-      choices: shuffledChoices,
+      id: quiz.id || `extra-q-${Date.now()}-${index + 1}`,
+      question: quiz.question || `Question ${index + 1}`,
+      choices: shuffledChoices.length > 0 ? shuffledChoices : [correctChoiceValue || "Option A"],
       correctIndex: shuffledCorrectIndex === -1 ? 0 : shuffledCorrectIndex,
       rationale: remappedRationale
     };
@@ -1064,8 +1277,8 @@ Do not wrap in markdown \`\`\`json ... \`\`\`, just return the raw JSON string.`
  */
 export async function askGeminiFollowUpQuestion(
   lesson: Lesson,
-  question: string,
-  chatHistory: Array<{ role: 'user' | 'model'; text: string }>,
+  userQuestion: string,
+  chatHistory: Array<{ role: 'user' | 'model'; text: string }> = [],
   apiKey: string
 ): Promise<string> {
   if (!apiKey) {
@@ -1074,46 +1287,44 @@ export async function askGeminiFollowUpQuestion(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const cleanTitle = lesson.title.replace(/"/g, "'");
-  const cleanSourceText = lesson.sourceText.replace(/"/g, "'");
-  const cleanExplanation = lesson.eli5.explanation.replace(/"/g, "'");
+  const historyPrompt = chatHistory.map(h => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${h.text}`).join('\n');
 
-  const formattedContents = [
-    {
-      role: "user",
-      parts: [
-        {
-          text: `You are an encouraging native English tutor. The student is currently studying this lesson:
-Title: ${cleanTitle}
-Content: ${cleanSourceText}
-ELI10 Explanation: ${cleanExplanation}
+  const prompt = `You are a friendly, encouraging native English tutor specializing in Explain-Like-I'm-10 (ELI10) methodology.
+The student is currently learning this topic:
+Topic Title: "${lesson.title}"
+Core Principle: "${lesson.eli10?.corePrinciple || lesson.eli5?.explanation || ''}"
+Mental Model Analogy: "${lesson.eli10?.mentalModelAnalogy || lesson.eli5?.analogy || ''}"
+Decision Trigger: "${lesson.decisionTrigger?.keyRuleSummary || lesson.memoryTips?.tipFormula || ''}"
+Source text: "${lesson.sourceText}"
 
-Answer the student's follow-up questions clearly, simply, and in Korean. Do not use complex jargon. Keep the tone friendly, helpful, and engaging (suitable for a 10-year-old child).`
-        }
-      ]
-    },
-    ...chatHistory.map(h => ({
-      role: h.role,
-      parts: [{ text: h.text }]
-    })),
-    {
-      role: "user",
-      parts: [{ text: question }]
-    }
-  ];
+Previous Q&A Conversation with the student:
+${historyPrompt ? historyPrompt : '(No previous conversation)'}
+
+The student has asked this follow-up question:
+"${userQuestion}"
+
+Provide a warm, clear, and direct explanation in Korean.
+Guidelines:
+1. Explain in simple, intuitive terms suitable for a 10-year-old child (ELI10).
+2. Avoid complicated grammatical jargon.
+3. Provide clear English contrastive examples where relevant.
+4. Keep the response concise, punchy, and structured with bullet points if helpful.`;
 
   const requestBody = {
-    contents: formattedContents,
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }]
+      }
+    ],
     generationConfig: {
-      temperature: 0.5
+      temperature: 0.4
     }
   };
 
-  const response = await fetch(endpoint, {
+  const response = await fetchWithRetry(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(requestBody)
   });
 
@@ -1124,16 +1335,16 @@ Answer the student's follow-up questions clearly, simply, and in Korean. Do not 
   }
 
   const data = await response.json();
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!responseText) {
+  const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!answer) {
     throw new Error("Gemini가 답변을 반환하지 않았습니다.");
   }
 
-  return responseText;
+  return answer.trim();
 }
 
 /**
- * 1단계: 정답을 바로 주지 않는 '소크라테스식 힌트' 요청
+ * 3단계 오답 코칭 Step 1: 정답을 가리고 인지적 착각 원인과 소크라테스식 힌트 질문 생성
  */
 export async function generateWrongAnswerCoachingStep1(
   question: string,
@@ -1147,56 +1358,48 @@ export async function generateWrongAnswerCoachingStep1(
 
   const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
   const prompt = `You are a Socratic English tutor. The student solved an English quiz and chose a WRONG answer.
-CRITICAL RULE: DO NOT reveal or hint what the correct answer is directly.
+Do NOT reveal the correct answer. The goal is to stimulate cognitive retrieval and self-correction.
 
-Task:
-1. 인지적 착각 원인 (cognitiveIllusion): Analyze WHY the student likely chose this wrong answer (e.g. common mental traps, direct translation errors, superficial pattern matching, confusing similar words/grammar rules). Explain kindly in Korean in 1-2 concise sentences.
-2. 소크라테스식 단서 질문 (clueQuestion): Provide exactly ONE crucial contextual/grammatical clue formulated as a thought-provoking question to help them deduce the correct answer on their own without giving it away. (in Korean).
-
-[문제]:
+Quiz Question:
 ${question}
 
-[보기]:
+Choices:
 ${choicesStr}
 
-[내가 고른 오답]:
-${userWrongAnswer}
+Student's Selected Wrong Answer:
+"${userWrongAnswer}"
 
-Return a single valid JSON object strictly matching this structure:
+Provide:
+1. cognitiveIllusion: Why did the student likely choose this wrong answer? Analyze the cognitive trap or Korean translation habit in 1-2 Korean sentences.
+2. clueQuestion: ONE decisive Socratic clue question (contextual or grammatical hint) in Korean that leads the student to infer the correct answer without naming it directly.
+
+Output JSON only matching this schema:
 {
-  "cognitiveIllusion": "왜 이 오답을 골랐을지 인지적 착각 원인 설명",
-  "clueQuestion": "정답을 스스로 유추할 수 있도록 돕는 질문 형태의 결정적 단서 1개"
+  "cognitiveIllusion": "왜 이 오답을 골랐을지 인지적 착각 원인 분석",
+  "clueQuestion": "정답을 유추할 수 있는 결정적 단서 질문"
 }
-Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+Do not wrap in markdown \`\`\`json.`;
 
-  const requestBody = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.4,
-      responseMimeType: "application/json"
-    }
-  };
-
-  const res = await fetch(endpoint, {
+  const response = await fetchWithRetry(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
   });
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("AI 응답이 비어 있습니다.");
-
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 1단계 코칭 힌트를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep1Data;
 }
 
 /**
- * 2단계: 뉘앙스 비교 및 멘탈 모델 교정
+ * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개
  */
 export async function generateWrongAnswerCoachingStep2(
   question: string,
@@ -1207,73 +1410,65 @@ export async function generateWrongAnswerCoachingStep2(
 ): Promise<WrongAnswerCoachingStep2Data> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
-
   const prompt = `You are an expert native English linguist and coach.
 The student has now seen the correct answer. Your goal is deep nuance comparison and mental model correction.
 
-Task:
-1. 뉘앙스 차이 대조 (nuanceContrast): Contrast the nuance difference between [Wrong Answer: '${userWrongAnswer}'] and [Correct Answer: '${correctAnswer}'] in business/everyday practical contexts in EXACTLY 2 clear Korean sentences (explain why the wrong one feels unnatural/off and where the correct one naturally belongs).
-2. 원어민 짝꿍 표현 (collocations): Provide exactly 2 essential native collocations for the correct expression/word, each with Korean meaning and a practical example sentence.
-
-[문제]:
+Question:
 ${question}
 
-[오답]:
-${userWrongAnswer}
+Student's Wrong Choice:
+"${userWrongAnswer}"
 
-[정답]:
-${correctAnswer}
+Actual Correct Answer:
+"${correctAnswer}"
 
-[정답 해설]:
+Explanation/Rationale:
 ${rationale}
 
-Return a single valid JSON object strictly matching this structure:
+Provide:
+1. nuanceContrast: Contrast the nuance difference between [Wrong Choice] and [Correct Answer] in business/daily real-world contexts in EXACTLY 2 clear Korean sentences.
+2. collocations: Provide EXACTLY 2 native English collocations (natural partner phrases) featuring the correct word/expression, with Korean meaning and a practical example sentence.
+
+Output JSON matching this schema:
 {
-  "nuanceContrast": "비즈니스/일상 실사용 맥락에서 오답과 정답의 뉘앙스 차이를 명확히 대조하는 2문장 설명",
+  "nuanceContrast": "오답과 정답의 뉘앙스 차이 실사용 맥락 2문장 대조",
   "collocations": [
     {
-      "phrase": "짝꿍 표현 (예: heavy rain)",
-      "meaning": "한국어 의미",
-      "example": "원어민 실사용 영어 예문 (한국어 번역 포함)"
+      "phrase": "Native collocation 1",
+      "meaning": "한글 의미",
+      "example": "Practical example sentence in English"
     },
     {
-      "phrase": "짝꿍 표현 2",
-      "meaning": "한국어 의미",
-      "example": "원어민 실사용 영어 예문 (한국어 번역 포함)"
+      "phrase": "Native collocation 2",
+      "meaning": "한글 의미",
+      "example": "Practical example sentence in English"
     }
   ]
 }
-Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+Do not wrap in markdown \`\`\`json.`;
 
-  const requestBody = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.4,
-      responseMimeType: "application/json"
-    }
-  };
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const res = await fetch(endpoint, {
+  const response = await fetchWithRetry(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
   });
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("AI 응답이 비어 있습니다.");
-
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 2단계 뉘앙스 대조를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep2Data;
 }
 
 /**
- * 3단계: 즉시 적용을 위한 변형 문제 생성 (Far Transfer - 3지선다 2문항)
+ * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 실전 변형 문제 2개 (Far Transfer)
  */
 export async function generateWrongAnswerCoachingStep3(
   question: string,
@@ -1287,60 +1482,47 @@ export async function generateWrongAnswerCoachingStep3(
 
   const prompt = `You are an expert English quiz creator.
 The student made a mistake on a specific grammar/vocabulary/expression concept:
-Original Question: "${question}"
+Original Question Context: "${question}"
 Wrong Choice: "${userWrongAnswer}"
 Correct Choice: "${correctAnswer}"
 
-Task:
-Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions testing the SAME underlying core concept/distinction, but in COMPLETELY DIFFERENT real-world contexts (Far Transfer).
-- Each question MUST have exactly 3 choices.
-- Include a clear, supportive Korean rationale for each question.
+Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions in DIFFERENT real-world contexts (Far Transfer) that test the same underlying concept/rule.
 
-Return a single valid JSON object strictly matching this structure:
+Output JSON matching this schema:
 {
   "transferQuizzes": [
     {
-      "id": "transfer-1",
-      "question": "새로운 맥락의 영어 문장 (빈칸 ___ 포함)",
-      "choices": ["보기 1", "보기 2", "보기 3"],
+      "id": "t1",
+      "question": "Question sentence in English with a blank (e.g. She decided to go ________ the bad weather.)",
+      "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 0,
-      "rationale": "정답 및 핵심 포인트 한국어 해설"
+      "rationale": "Clear Korean explanation of why this answer is correct and why other choices are wrong."
     },
     {
-      "id": "transfer-2",
-      "question": "새로운 맥락의 영어 문장 2 (빈칸 ___ 포함)",
-      "choices": ["보기 1", "보기 2", "보기 3"],
+      "id": "t2",
+      "question": "Question sentence in English with a blank",
+      "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 1,
-      "rationale": "정답 및 핵심 포인트 한국어 해설"
+      "rationale": "Clear Korean explanation."
     }
   ]
 }
-Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+Do not wrap in markdown \`\`\`json.`;
 
-  const requestBody = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.4,
-      responseMimeType: "application/json"
-    }
-  };
-
-  const res = await fetch(endpoint, {
+  const response = await fetchWithRetry(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+        responseMimeType: "application/json"
+      }
+    })
   });
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("AI 응답이 비어 있습니다.");
-
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 3단계 변형 문제를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep3Data;
 }
-
-
