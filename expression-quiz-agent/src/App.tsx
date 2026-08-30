@@ -411,6 +411,23 @@ function extractMochiReviews(card: any): NormalizedReview[] {
   return result;
 }
 
+/**
+ * Safely persists lessons to localStorage with automatic fallback to recent lessons when quota is exceeded
+ */
+export function safeSaveLessonsToLocalStorage(lessons: Lesson[]) {
+  try {
+    localStorage.setItem('eng_expr_lessons_history', JSON.stringify(lessons));
+  } catch (err: any) {
+    console.warn("localStorage quota exceeded, saving recent 50 lessons to local cache:", err);
+    try {
+      const recent = lessons.slice(0, 50);
+      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(recent));
+    } catch (e) {
+      console.warn("Failed to write to localStorage even with 50 lessons:", e);
+    }
+  }
+}
+
 export default function App() {
   // 1. API Key State
   const [apiKey, setApiKey] = useState<string>(() => {
@@ -1140,7 +1157,7 @@ ${quiz.rationale}`;
     syncUserLessons(userId, localList).then((syncedList) => {
       if (isMounted) {
         setLessonsHistory(syncedList);
-        localStorage.setItem('eng_expr_lessons_history', JSON.stringify(syncedList));
+        safeSaveLessonsToLocalStorage(syncedList);
         setSyncStatus('synced');
       }
     }).catch((err: any) => {
@@ -1248,7 +1265,7 @@ ${quiz.rationale}`;
     setLessonsHistory(prev => {
       const filtered = prev.filter(item => item.id !== lesson.id && item.id !== updatedLesson.id && item.title !== updatedLesson.title);
       const updated = [updatedLesson, ...filtered];
-      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+      safeSaveLessonsToLocalStorage(updated);
       return updated;
     });
 
@@ -1279,7 +1296,7 @@ ${quiz.rationale}`;
             setLessonsHistory(prev => {
               const filtered = prev.filter(item => item.id !== lesson.id && item.id !== docId && item.title !== cloudLesson.title);
               const updated = [cloudLesson, ...filtered];
-              localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+              safeSaveLessonsToLocalStorage(updated);
               return updated;
             });
           }
@@ -1315,7 +1332,7 @@ ${quiz.rationale}`;
         }
         return item;
       });
-      localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+      safeSaveLessonsToLocalStorage(updated);
       return updated;
     });
 
@@ -1348,7 +1365,7 @@ ${quiz.rationale}`;
       // Remove locally immediately
       setLessonsHistory(prev => {
         const updated = prev.filter(item => item.id !== lessonId);
-        localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+        safeSaveLessonsToLocalStorage(updated);
         return updated;
       });
       
@@ -1372,7 +1389,7 @@ ${quiz.rationale}`;
       const idsToDelete = Array.from(selectedDraftIds);
       setLessonsHistory(prev => {
         const updated = prev.filter(item => !selectedDraftIds.has(item.id));
-        localStorage.setItem('eng_expr_lessons_history', JSON.stringify(updated));
+        safeSaveLessonsToLocalStorage(updated);
         return updated;
       });
       setSelectedDraftIds(new Set());

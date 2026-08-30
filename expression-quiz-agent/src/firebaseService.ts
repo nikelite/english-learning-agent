@@ -280,20 +280,28 @@ export async function syncUserLessons(userId: string, localLessons: Lesson[]): P
   try {
     const variations = getCasingVariations(userId);
     // 1. Query lessons owned by user
-    const qOwner = query(collection(db, 'expression_lessons'), where('ownerId', 'in', variations));
-    const querySnapOwner = await getDocs(qOwner);
     const ownerLessons: Lesson[] = [];
-    querySnapOwner.forEach((docSnap) => {
-      ownerLessons.push(docSnap.data() as Lesson);
-    });
+    try {
+      const qOwner = query(collection(db, 'expression_lessons'), where('ownerId', 'in', variations));
+      const querySnapOwner = await getDocs(qOwner);
+      querySnapOwner.forEach((docSnap) => {
+        ownerLessons.push(docSnap.data() as Lesson);
+      });
+    } catch (err) {
+      console.warn("Failed to query owner lessons:", err);
+    }
     
     // 2. Query lessons shared with user
-    const qShared = query(collection(db, 'expression_lessons'), where('sharedWith', 'array-contains-any', variations));
-    const querySnapShared = await getDocs(qShared);
     const sharedLessons: Lesson[] = [];
-    querySnapShared.forEach((docSnap) => {
-      sharedLessons.push(docSnap.data() as Lesson);
-    });
+    try {
+      const qShared = query(collection(db, 'expression_lessons'), where('sharedWith', 'array-contains-any', variations));
+      const querySnapShared = await getDocs(qShared);
+      querySnapShared.forEach((docSnap) => {
+        sharedLessons.push(docSnap.data() as Lesson);
+      });
+    } catch (err) {
+      console.warn("Failed to query shared lessons:", err);
+    }
     
     // 3. Query shared lessons progress for this student
     const progressMap = await loadSharedLessonsProgress(userId);
