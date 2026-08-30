@@ -901,12 +901,37 @@ export async function generateLessonFromText(
           writingTemplate: {
             type: "object",
             properties: {
+              situation: { type: "string" },
+              koreanIntent: { type: "string" },
               prompt: { type: "string" },
               template: { type: "string" },
               sampleSentence: { type: "string" },
-              tip: { type: "string" }
+              tip: { type: "string" },
+              keyKeywords: {
+                type: "array",
+                items: { type: "string" }
+              },
+              scenarios: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { type: "string" },
+                    situation: { type: "string" },
+                    koreanIntent: { type: "string" },
+                    template: { type: "string" },
+                    sampleSentence: { type: "string" },
+                    keyKeywords: {
+                      type: "array",
+                      items: { type: "string" }
+                    },
+                    tip: { type: "string" }
+                  },
+                  required: ["category", "situation", "koreanIntent", "template", "sampleSentence", "keyKeywords", "tip"]
+                }
+              }
             },
-            required: ["prompt", "template", "sampleSentence", "tip"]
+            required: ["situation", "koreanIntent", "prompt", "template", "sampleSentence", "tip", "keyKeywords", "scenarios"]
           },
           quizzes: {
             type: "array",
@@ -1141,10 +1166,33 @@ Strict Schema Requirements:
         "stressGuide": "Detailed tips in Korean on linking, rhythm, and where to put primary stress."
       },
       "writingTemplate": {
+        "situation": "Detailed real-world situation description in Korean",
+        "koreanIntent": "Direct 1st-person spoken Korean target sentence (e.g. '이 정책이 우리 팀에 어떤 영향을 미칠지 확인해 볼게요.')",
         "prompt": "Specific 1-second real-life writing challenge in Korean",
-        "template": "Fill-in-the-blank English template",
-        "sampleSentence": "A sample English sentence completing the template with Korean meaning",
-        "tip": "Helpful writing tip in Korean"
+        "template": "Fill-in-the-blank English template matching the vocabulary topic",
+        "sampleSentence": "A high-quality sample English sentence completing the template with Korean meaning",
+        "tip": "Helpful writing tip in Korean",
+        "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+        "scenarios": [
+          {
+            "category": "🏢 비즈니스 / 업무 상황",
+            "situation": "Detailed workplace situation in Korean",
+            "koreanIntent": "Direct 1st-person spoken Korean target sentence",
+            "template": "English template matching the vocabulary topic",
+            "sampleSentence": "Model English sentence",
+            "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+            "tip": "Tip for business scenario"
+          },
+          {
+            "category": "☕ 일상 / 대화 상황",
+            "situation": "Detailed daily conversation situation in Korean",
+            "koreanIntent": "Direct 1st-person spoken Korean target sentence",
+            "template": "English template matching the vocabulary topic",
+            "sampleSentence": "Model English sentence",
+            "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+            "tip": "Tip for daily scenario"
+          }
+        ]
       },
       "quizzes": [
         {
@@ -1162,9 +1210,11 @@ Strict Schema Requirements:
 
 Important Instructions:
 1. Make sure to generate exactly the requested number of distinct multiple-choice quizzes under the 'quizzes' array for each lesson.
-2. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
-3. CRITICAL: Never use raw unescaped double quotes (\") inside any JSON string values. Use single quotes (') instead.
-4. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
+2. In 'prediction', sentenceA and sentenceB MUST NOT include any (O) or (X) markers or spoilers.
+3. In 'writingTemplate', koreanIntent MUST be a direct 1st-person spoken Korean sentence (e.g. '...확인해 볼게요.'). Never write meta instructions like '~영작해보세요'.
+4. Keep the tone friendly, encouraging, and highly professional yet simple (ELI10).
+5. CRITICAL: Never use raw unescaped double quotes (\") inside any JSON string values. Use single quotes (') instead.
+6. Ensure the JSON is completely valid, all quotation marks are escaped properly, and no trailing commas exist.`;
 
 export async function generateVocabularyLessons(
   text: string,
@@ -1270,12 +1320,37 @@ export async function generateVocabularyLessons(
                 writingTemplate: {
                   type: "object",
                   properties: {
+                    situation: { type: "string" },
+                    koreanIntent: { type: "string" },
                     prompt: { type: "string" },
                     template: { type: "string" },
                     sampleSentence: { type: "string" },
-                    tip: { type: "string" }
+                    tip: { type: "string" },
+                    keyKeywords: {
+                      type: "array",
+                      items: { type: "string" }
+                    },
+                    scenarios: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          category: { type: "string" },
+                          situation: { type: "string" },
+                          koreanIntent: { type: "string" },
+                          template: { type: "string" },
+                          sampleSentence: { type: "string" },
+                          keyKeywords: {
+                            type: "array",
+                            items: { type: "string" }
+                          },
+                          tip: { type: "string" }
+                        },
+                        required: ["category", "situation", "koreanIntent", "template", "sampleSentence", "keyKeywords", "tip"]
+                      }
+                    }
                   },
-                  required: ["prompt", "template", "sampleSentence", "tip"]
+                  required: ["situation", "koreanIntent", "prompt", "template", "sampleSentence", "tip", "keyKeywords", "scenarios"]
                 },
                 quizzes: {
                   type: "array",
