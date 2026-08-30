@@ -142,56 +142,71 @@ function makeDirectSpokenSentence(
         .replace(/때$/, '')
         .replace(/상황$/, '')
         .trim();
-      if (!t.endsWith('요') && !t.endsWith('다') && !t.endsWith('어') && !t.endsWith('음') && !t.endsWith('죠')) {
-        t += (category === 'business' ? ' 확인해 볼게요.' : ' 해볼게요.');
+      if (!t.includes('표현') && !t.includes('설명') && !t.includes('의미') && !t.includes('나타내는')) {
+        if (!t.endsWith('요') && !t.endsWith('다') && !t.endsWith('어') && !t.endsWith('음') && !t.endsWith('죠')) {
+          t += (category === 'business' ? ' 확인해 볼게요.' : ' 해볼게요.');
+        }
+        return t;
       }
-      return t;
     }
   }
 
-  // If condition is describing a trap/error, don't use it as intent!
-  const isTrapDescription = condition && (
+  const cleanExpr = expression.replace(/[\(\[\/].*$/, '').trim().toLowerCase();
+
+  // Pattern-based authentic direct spoken sentences
+  if (cleanExpr.includes('morning') || cleanExpr.includes('night') || cleanExpr.includes('day') || cleanExpr.includes('tomorrow')) {
+    return category === 'business'
+      ? "다음 날 오전에 회의 일정 및 결과를 회신드릴게요."
+      : "내일 아침 일찍 다시 연락해볼게.";
+  }
+  if (cleanExpr.includes('configured') || cleanExpr.includes('handled') || cleanExpr.includes('become')) {
+    return category === 'business'
+      ? "해당 설정은 이미 시스템에 정상적으로 구성되어 있습니다."
+      : "그 작업은 이미 다 처리되었어.";
+  }
+  if (cleanExpr.includes('private')) {
+    return category === 'business'
+      ? "제가 그 회의 일정을 비공개로 설정해 둘게요."
+      : "제 SNS 계정을 비공개로 전환했어요.";
+  }
+  if (cleanExpr.includes('despite') || cleanExpr.includes('although')) {
+    return category === 'business'
+      ? "촉박한 마감 일정에도 불구하고 우리는 프로젝트를 완료했습니다."
+      : "비가 많이 내렸지만 우리는 여행을 잘 다녀왔어.";
+  }
+  if (cleanExpr.includes('boring') || cleanExpr.includes('bored') || cleanExpr.includes('confused') || cleanExpr.includes('confusing')) {
+    return category === 'business'
+      ? "그 회의는 너무 지루해서 나는 발표 내내 지루했어."
+      : "그 영화는 너무 지루해서 보는 내내 지루했어.";
+  }
+  if (cleanExpr.includes('who') || cleanExpr.includes('anyone')) {
+    return category === 'business'
+      ? "내일 회의에 누가 참석 가능한지 확인해 볼게요."
+      : "혹시 충전기 가진 사람이 있는지 알아볼게요.";
+  }
+
+  // Check if condition is a clean action without meta words
+  const isMeta = !condition || 
     condition.includes('한국어') || 
     condition.includes('직역') || 
     condition.includes('어색한') || 
     condition.includes('불분명') || 
     condition.includes('오류') ||
-    condition.includes('착각')
-  );
+    condition.includes('착각') ||
+    condition.includes('표현') ||
+    condition.includes('나타내는') ||
+    condition.includes('설명') ||
+    condition.includes('의미');
 
-  if (!condition || isTrapDescription) {
-    const cleanExpr = expression.replace(/[\(\[\/].*$/, '').trim();
-    if (cleanExpr.toLowerCase().includes('configured') || cleanExpr.toLowerCase().includes('handled')) {
-      return category === 'business'
-        ? "해당 설정은 이미 시스템에 정상적으로 구성되어 있습니다."
-        : "그 작업은 이미 다 처리되었어.";
-    }
-    if (cleanExpr.toLowerCase().includes('private')) {
-      return category === 'business'
-        ? "제가 그 회의 일정을 비공개로 설정해 둘게요."
-        : "내 계정을 비공개로 전환했어.";
-    }
-    if (cleanExpr.toLowerCase().includes('despite')) {
-      return category === 'business'
-        ? "촉박한 마감 일정에도 불구하고 우리는 프로젝트를 완료했습니다."
-        : "비가 많이 내렸지만 우리는 여행을 잘 마쳤어.";
-    }
-    if (cleanExpr.toLowerCase().includes('who')) {
-      return category === 'business'
-        ? "내일 회의에 누가 참석 가능한지 확인해 볼게요."
-        : "혹시 충전기 가진 사람 있는지 알아볼게요.";
-    }
-
-    return category === 'business' 
-      ? `제가 관련 내용을 ${cleanExpr} 처리해 둘게요.` 
-      : `우리 ${cleanExpr} 쪽으로 확인해 보자.`;
+  if (isMeta) {
+    return category === 'business'
+      ? `제가 관련 내용을 확인한 뒤 회신드릴게요.`
+      : `제가 그 부분에 대해 확인해 볼게요.`;
   }
 
   let clean = condition
-    .replace(/주로 쓰는 표현.*$/, '')
-    .replace(/정형화된 표현.*$/, '')
-    .replace(/상황을 영어로.*$/, '')
-    .replace(/표현 상황.*$/, '')
+    .replace(/주로 쓰는.*$/, '')
+    .replace(/정형화된.*$/, '')
     .replace(/사용할 때.*$/, '')
     .replace(/사용합니다.*$/, '')
     .replace(/때$/, '')
@@ -207,20 +222,8 @@ function makeDirectSpokenSentence(
   if (clean.includes('확인할') || clean.includes('알아볼')) {
     return clean.replace(/확인할.*$/, '확인해 볼게요.').replace(/알아볼.*$/, '알아볼게요.');
   }
-  if (clean.includes('불확실할') || clean.includes('존재 유무')) {
-    return `혹시 도와줄 사람이 있기는 한지 알아볼게요.`;
-  }
-  if (clean.includes('특정할') || clean.includes('누구인지')) {
-    return `누가 참석할 수 있는지 명단을 확인해 볼게요.`;
-  }
 
-  if (clean.endsWith('할') || clean.endsWith('될')) {
-    clean = clean.replace(/할$/, '해 볼게요.').replace(/될$/, '되어 있어요.');
-  } else if (!clean.endsWith('요') && !clean.endsWith('다') && !clean.endsWith('어')) {
-    clean = `${clean} 처리해 둘게요.`;
-  }
-
-  return clean;
+  return category === 'business' ? `${clean} 관련 내용을 확인해 볼게요.` : `${clean} 부분에 대해 확인해볼게.`;
 }
 
 /**

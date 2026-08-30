@@ -186,18 +186,20 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       .replace(/^["'\s]+|["'\s]+$/g, '')
       .trim();
 
-    if (clean.includes('바꿀') || clean.includes('전환할') || clean.includes('설정할')) {
-      return clean.replace(/바꿀.*$/, '바꿔 둘게요.').replace(/전환할.*$/, '전환했어요.').replace(/설정할.*$/, '설정해 둘게요.');
+    const expr = (localWritingTemplate.template || '').toLowerCase();
+    if (clean.includes('다음 날') || clean.includes('오전') || clean.includes('하루') || expr.includes('morning')) {
+      return "다음 날 오전에 회의 일정 및 결과를 회신드릴게요.";
     }
-    if (clean.includes('지정할') || clean.includes('표시할')) {
-      return clean.replace(/지정할.*$/, '지정해 두었습니다.').replace(/표시할.*$/, '표시해 둘게요.');
+    if (clean.includes('비공개') || expr.includes('private')) {
+      return "제가 그 회의 일정을 비공개로 설정해 둘게요.";
     }
-    if (clean.includes('확인할') || clean.includes('알아볼')) {
-      return clean.replace(/확인할.*$/, '확인해 볼게요.').replace(/알아볼.*$/, '알아볼게요.');
+    if (clean.includes('구성') || clean.includes('설정') || expr.includes('configured') || expr.includes('handled')) {
+      return "해당 설정은 이미 시스템에 정상적으로 구성되어 있습니다.";
     }
-    if (!clean.endsWith('요') && !clean.endsWith('다') && !clean.endsWith('어') && !clean.endsWith('음') && !clean.endsWith('죠') && !clean.endsWith('.')) {
-      clean += '해 볼게요.';
+    if (clean.includes('표현') || clean.includes('나타내는') || clean.includes('설명') || clean.includes('처리해 둘게요')) {
+      return "제가 관련 내용을 확인한 뒤 바로 회신드릴게요.";
     }
+
     return clean;
   };
 
