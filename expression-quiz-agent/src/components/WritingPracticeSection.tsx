@@ -40,6 +40,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   const [feedback, setFeedback] = useState<WritingEvaluationResult | null>(lesson.userWritingFeedback || initialFeedback);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isGeneratingScenarios, setIsGeneratingScenarios] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -370,61 +371,100 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           </p>
         </div>
 
-        {/* Template Box */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.75rem 1rem',
-          borderRadius: '8px',
-          backgroundColor: 'rgba(139, 92, 246, 0.08)',
-          border: '1px dashed rgba(139, 92, 246, 0.4)',
-          gap: '0.75rem',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '240px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#c084fc', textTransform: 'uppercase' }}>Template:</span>
-            <code style={{ fontSize: '0.9rem', color: 'white', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
-              {currentScenario.template}
-            </code>
-          </div>
+        {/* Collapsible Hint Trigger Button */}
+        <div>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
-            onClick={handleCopyTemplate}
+            onClick={() => setShowHint(!showHint)}
+            style={{
+              background: showHint ? 'rgba(192, 132, 252, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${showHint ? 'rgba(192, 132, 252, 0.4)' : 'rgba(255, 255, 255, 0.12)'}`,
+              borderRadius: '8px',
+              color: showHint ? '#d8b4fe' : '#94a3b8',
+              fontSize: '0.8rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.4rem 0.85rem',
+              transition: 'all 0.2s'
+            }}
           >
-            📋 템플릿 가져오기
+            <Lightbulb size={14} style={{ color: showHint ? '#c084fc' : 'var(--secondary)' }} />
+            <span>{showHint ? '💡 힌트 접기' : '💡 힌트 보기 (문장 구조 & 추천 표현)'}</span>
+            {showHint ? <EyeOff size={13} style={{ opacity: 0.7 }} /> : <Eye size={13} style={{ opacity: 0.7 }} />}
           </button>
         </div>
 
-        {/* Suggested Keyword Chips */}
-        {currentScenario.keyKeywords && currentScenario.keyKeywords.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>💡 추천 표현 힌트:</span>
-            {currentScenario.keyKeywords.map((kw, kwIdx) => (
+        {/* Collapsible Hint Container (Hidden by default, shown on click) */}
+        {showHint && (
+          <div className="animate-fade-in" style={{
+            padding: '1rem',
+            borderRadius: '10px',
+            backgroundColor: 'rgba(139, 92, 246, 0.06)',
+            border: '1px solid rgba(139, 92, 246, 0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem'
+          }}>
+            {/* Template Structure */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.65rem 0.9rem',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              border: '1px dashed rgba(139, 92, 246, 0.35)',
+              gap: '0.75rem',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '220px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#c084fc' }}>구조 힌트:</span>
+                <code style={{ fontSize: '0.875rem', color: '#f1f5f9', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
+                  {currentScenario.template}
+                </code>
+              </div>
               <button
-                key={kwIdx}
                 type="button"
-                onClick={() => handleAppendKeyword(kw)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: '6px',
-                  color: '#e2e8f0',
-                  padding: '0.2rem 0.5rem',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.25rem'
-                }}
-                title="클릭하여 입력창에 추가"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                onClick={handleCopyTemplate}
               >
-                <span>{kw}</span>
-                <Plus size={11} style={{ opacity: 0.6 }} />
+                📋 템플릿 복사
               </button>
-            ))}
+            </div>
+
+            {/* Suggested Keyword Chips */}
+            {currentScenario.keyKeywords && currentScenario.keyKeywords.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: '700' }}>추천 표현:</span>
+                {currentScenario.keyKeywords.map((kw, kwIdx) => (
+                  <button
+                    key={kwIdx}
+                    type="button"
+                    onClick={() => handleAppendKeyword(kw)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      borderRadius: '6px',
+                      color: '#e2e8f0',
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                    title="클릭하여 입력창에 추가"
+                  >
+                    <span>{kw}</span>
+                    <Plus size={11} style={{ opacity: 0.6 }} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
