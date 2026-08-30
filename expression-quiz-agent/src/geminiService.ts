@@ -118,6 +118,7 @@ function cleanKoreanIntent(intent: string): string {
   return intent
     .replace(/상황을 영어로 말해보세요\.?/g, '')
     .replace(/상황을 영어 1문장으로 표현해보세요\.?/g, '')
+    .replace(/상황을 영어로 표현해보세요\.?/g, '')
     .replace(/영어로 표현해보세요\.?/g, '')
     .replace(/영어로 말해보세요\.?/g, '')
     .replace(/영작해보세요\.?/g, '')
@@ -148,10 +149,42 @@ function makeDirectSpokenSentence(
     }
   }
 
-  if (!condition) {
+  // If condition is describing a trap/error, don't use it as intent!
+  const isTrapDescription = condition && (
+    condition.includes('한국어') || 
+    condition.includes('직역') || 
+    condition.includes('어색한') || 
+    condition.includes('불분명') || 
+    condition.includes('오류') ||
+    condition.includes('착각')
+  );
+
+  if (!condition || isTrapDescription) {
+    const cleanExpr = expression.replace(/[\(\[\/].*$/, '').trim();
+    if (cleanExpr.toLowerCase().includes('configured') || cleanExpr.toLowerCase().includes('handled')) {
+      return category === 'business'
+        ? "해당 설정은 이미 시스템에 정상적으로 구성되어 있습니다."
+        : "그 작업은 이미 다 처리되었어.";
+    }
+    if (cleanExpr.toLowerCase().includes('private')) {
+      return category === 'business'
+        ? "제가 그 회의 일정을 비공개로 설정해 둘게요."
+        : "내 계정을 비공개로 전환했어.";
+    }
+    if (cleanExpr.toLowerCase().includes('despite')) {
+      return category === 'business'
+        ? "촉박한 마감 일정에도 불구하고 우리는 프로젝트를 완료했습니다."
+        : "비가 많이 내렸지만 우리는 여행을 잘 마쳤어.";
+    }
+    if (cleanExpr.toLowerCase().includes('who')) {
+      return category === 'business'
+        ? "내일 회의에 누가 참석 가능한지 확인해 볼게요."
+        : "혹시 충전기 가진 사람 있는지 알아볼게요.";
+    }
+
     return category === 'business' 
-      ? `제가 관련 내용을 ${expression} 처리해 둘게요.` 
-      : `우리 ${expression} 쪽으로 해보자.`;
+      ? `제가 관련 내용을 ${cleanExpr} 처리해 둘게요.` 
+      : `우리 ${cleanExpr} 쪽으로 확인해 보자.`;
   }
 
   let clean = condition
@@ -184,7 +217,7 @@ function makeDirectSpokenSentence(
   if (clean.endsWith('할') || clean.endsWith('될')) {
     clean = clean.replace(/할$/, '해 볼게요.').replace(/될$/, '되어 있어요.');
   } else if (!clean.endsWith('요') && !clean.endsWith('다') && !clean.endsWith('어')) {
-    clean = `${clean} 상황이라 제가 직접 진행해 볼게요.`;
+    clean = `${clean} 처리해 둘게요.`;
   }
 
   return clean;
@@ -291,12 +324,15 @@ export function normalizeLesson(raw: any): Lesson {
       ? eli10.contrastiveExample.replace(/[\(（\[][\s]*[OXox대조정답오답틀림맞음][\s]*[\)）\]]/gi, '').split(/vs|\//i)[0].trim() 
       : "";
 
+    const isCondATrap = condA && (condA.includes('한국어') || condA.includes('직역') || condA.includes('어색한') || condA.includes('불분명') || condA.includes('오류'));
+    const effectiveBusinessCond = (!isCondATrap && condA) ? condA : (condB || "관련 작업 또는 설정 내용을 명확히 전달해야 할 때");
+
     const baseTemplate = `(${exprA}${exprB ? ` / ${exprB}` : ''}) ____________________.`;
 
-    const businessIntent = makeDirectSpokenSentence(condA, exprA, decisionTrigger.triggerA?.example, 'business');
+    const businessIntent = makeDirectSpokenSentence(effectiveBusinessCond, exprB || exprA, decisionTrigger.triggerB?.example || decisionTrigger.triggerA?.example, 'business');
     const dailyIntent = makeDirectSpokenSentence(condB || condA, exprB || exprA, decisionTrigger.triggerB?.example, 'daily');
 
-    const businessSit = `[🏢 비즈니스 / 업무 상황] ${condA ? `${condA.replace(/때$/, '')} 상황에서 팀원 또는 거래처에 명확하게 의사를 전달해야 합니다.` : `업무 미팅 중 ${exprA}을(를) 활용하여 상황을 명확하게 전달해야 하는 상황입니다.`}`;
+    const businessSit = `[🏢 비즈니스 / 업무 상황] ${effectiveBusinessCond ? `${effectiveBusinessCond.replace(/때$/, '')} 상황에서 팀원 또는 거래처에 명확하게 의사를 전달해야 합니다.` : `업무 미팅 중 상황을 명확하게 전달해야 하는 상황입니다.`}`;
     const dailySit = exprB
       ? `[☕ 일상 / 대화 상황] ${condB ? `${condB.replace(/때$/, '')} 상황에서 친구나 지인에게 자연스럽게 이야기해야 합니다.` : `일상 대화 중 ${exprB}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`}`
       : `[☕ 일상 / 대화 상황] 일상 대화 중 ${exprA}을(를) 활용하여 자연스럽게 이야기하는 상황입니다.`;

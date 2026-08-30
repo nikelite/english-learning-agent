@@ -52,7 +52,38 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     setUserSentence(lesson.userWritingSentence || '');
     setFeedback(lesson.userWritingFeedback || null);
     setActiveScenarioIdx(0);
-  }, [lesson.id]);
+
+    const sit = norm.writingTemplate?.situation || '';
+    const intent = norm.writingTemplate?.koreanIntent || '';
+    const isProblematic = 
+      !norm.writingTemplate?.scenarios ||
+      norm.writingTemplate.scenarios.length === 0 ||
+      sit.includes("어색한 표현") ||
+      sit.includes("불분명") ||
+      sit.includes("한국어 '~가 되다'") ||
+      sit.includes("오늘 배운 핵심 원리") ||
+      intent.includes("어색한 표현") ||
+      intent.includes("불분명") ||
+      intent.includes("직역") ||
+      intent.includes("진행해 볼게요");
+
+    if (isProblematic && apiKey && !isGeneratingScenarios) {
+      (async () => {
+        try {
+          setIsGeneratingScenarios(true);
+          const generated = await generateWritingScenarios(lesson, apiKey);
+          if (generated && generated.scenarios && generated.scenarios.length > 0) {
+            setLocalWritingTemplate(generated);
+            setActiveScenarioIdx(0);
+          }
+        } catch (e) {
+          console.warn("Auto scenario generation error:", e);
+        } finally {
+          setIsGeneratingScenarios(false);
+        }
+      })();
+    }
+  }, [lesson.id, apiKey]);
 
   const scenarios: WritingScenarioOption[] = localWritingTemplate.scenarios && localWritingTemplate.scenarios.length > 0 
     ? localWritingTemplate.scenarios 
