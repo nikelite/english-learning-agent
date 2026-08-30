@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck } from 'lucide-react';
+import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck, Brain } from 'lucide-react';
 import { Lesson, QuizItem } from '../types';
+import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
 
 interface QuizPanelProps {
   lesson: Lesson;
@@ -11,6 +12,7 @@ interface QuizPanelProps {
   injectedQuizzes: QuizItem[];
   onGraduateReview: (wrongId: string) => void;
   onLoadNextUnsolvedLesson?: () => void;
+  apiKey: string;
   mochiApiKey: string;
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: QuizItem) => Promise<void>;
@@ -27,6 +29,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   injectedQuizzes,
   onGraduateReview,
   onLoadNextUnsolvedLesson,
+  apiKey,
   mochiApiKey,
   mochiQuizDeckId,
   onAddQuizToMochi,
@@ -38,6 +41,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   const [attemptWrongs, setAttemptWrongs] = useState<any[]>([]);
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, number>>(() => lesson.userAnswers || {});
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [coachingQuizItem, setCoachingQuizItem] = useState<{ quiz: QuizItem; userAns: number } | null>(null);
   const [selectedAns, setSelectedAns] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
@@ -482,15 +486,37 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                     </span>
                     <span>Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
-                    onClick={() => handlePushToMochi(quiz)}
-                    disabled={addingToMochiIds.has(quiz.id)}
-                  >
-                    {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    {!isCorrect && userAnswer !== undefined && userAnswer !== null && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{
+                          padding: '0.15rem 0.5rem',
+                          fontSize: '0.65rem',
+                          flexShrink: 0,
+                          background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}
+                        onClick={() => setCoachingQuizItem({ quiz, userAns: userAnswer })}
+                      >
+                        <Brain size={12} />
+                        AI 3단계 코칭
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
+                      onClick={() => handlePushToMochi(quiz)}
+                      disabled={addingToMochiIds.has(quiz.id)}
+                    >
+                      {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
+                    </button>
+                  </div>
                 </h5>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -695,12 +721,31 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="explanation-heading error" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <div className="explanation-heading error" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <AlertCircle size={20} />
                   <span>아쉽게 틀렸습니다!</span>
                 </div>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {selectedAns !== null && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        fontSize: '0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                        fontWeight: '700'
+                      }}
+                      onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns })}
+                    >
+                      <Brain size={14} />
+                      AI 3단계 오답 코칭
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -725,6 +770,23 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* 3-Stage AI Wrong Answer Coaching Modal */}
+      {coachingQuizItem && (
+        <WrongAnswerCoachModal
+          isOpen={!!coachingQuizItem}
+          onClose={() => setCoachingQuizItem(null)}
+          quizItem={coachingQuizItem.quiz}
+          userAnswerIndex={coachingQuizItem.userAns}
+          lessonTitle={lesson.title}
+          apiKey={apiKey}
+          onAddQuizToMochi={onAddQuizToMochi}
+          onGraduate={() => {
+            onGraduateReview(coachingQuizItem.quiz.id);
+            setCoachingQuizItem(null);
+          }}
+        />
+      )}
     </div>
   );
 };

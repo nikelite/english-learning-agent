@@ -1,4 +1,4 @@
-import { Lesson, QuizItem } from './types';
+import { Lesson, QuizItem, WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data } from './types';
 
 // Dynamic Adaptive Rate Control Manager for API Throttling
 export class AdaptiveRateLimiter {
@@ -1131,4 +1131,216 @@ Answer the student's follow-up questions clearly, simply, and in Korean. Do not 
 
   return responseText;
 }
+
+/**
+ * 1단계: 정답을 바로 주지 않는 '소크라테스식 힌트' 요청
+ */
+export async function generateWrongAnswerCoachingStep1(
+  question: string,
+  choices: string[],
+  userWrongAnswer: string,
+  apiKey: string
+): Promise<WrongAnswerCoachingStep1Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
+  const prompt = `You are a Socratic English tutor. The student solved an English quiz and chose a WRONG answer.
+CRITICAL RULE: DO NOT reveal or hint what the correct answer is directly.
+
+Task:
+1. 인지적 착각 원인 (cognitiveIllusion): Analyze WHY the student likely chose this wrong answer (e.g. common mental traps, direct translation errors, superficial pattern matching, confusing similar words/grammar rules). Explain kindly in Korean in 1-2 concise sentences.
+2. 소크라테스식 단서 질문 (clueQuestion): Provide exactly ONE crucial contextual/grammatical clue formulated as a thought-provoking question to help them deduce the correct answer on their own without giving it away. (in Korean).
+
+[문제]:
+${question}
+
+[보기]:
+${choicesStr}
+
+[내가 고른 오답]:
+${userWrongAnswer}
+
+Return a single valid JSON object strictly matching this structure:
+{
+  "cognitiveIllusion": "왜 이 오답을 골랐을지 인지적 착각 원인 설명",
+  "clueQuestion": "정답을 스스로 유추할 수 있도록 돕는 질문 형태의 결정적 단서 1개"
+}
+Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+
+  const requestBody = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.4,
+      responseMimeType: "application/json"
+    }
+  };
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("AI 응답이 비어 있습니다.");
+
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep1Data;
+}
+
+/**
+ * 2단계: 뉘앙스 비교 및 멘탈 모델 교정
+ */
+export async function generateWrongAnswerCoachingStep2(
+  question: string,
+  userWrongAnswer: string,
+  correctAnswer: string,
+  rationale: string,
+  apiKey: string
+): Promise<WrongAnswerCoachingStep2Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an expert native English linguist and coach.
+The student has now seen the correct answer. Your goal is deep nuance comparison and mental model correction.
+
+Task:
+1. 뉘앙스 차이 대조 (nuanceContrast): Contrast the nuance difference between [Wrong Answer: '${userWrongAnswer}'] and [Correct Answer: '${correctAnswer}'] in business/everyday practical contexts in EXACTLY 2 clear Korean sentences (explain why the wrong one feels unnatural/off and where the correct one naturally belongs).
+2. 원어민 짝꿍 표현 (collocations): Provide exactly 2 essential native collocations for the correct expression/word, each with Korean meaning and a practical example sentence.
+
+[문제]:
+${question}
+
+[오답]:
+${userWrongAnswer}
+
+[정답]:
+${correctAnswer}
+
+[정답 해설]:
+${rationale}
+
+Return a single valid JSON object strictly matching this structure:
+{
+  "nuanceContrast": "비즈니스/일상 실사용 맥락에서 오답과 정답의 뉘앙스 차이를 명확히 대조하는 2문장 설명",
+  "collocations": [
+    {
+      "phrase": "짝꿍 표현 (예: heavy rain)",
+      "meaning": "한국어 의미",
+      "example": "원어민 실사용 영어 예문 (한국어 번역 포함)"
+    },
+    {
+      "phrase": "짝꿍 표현 2",
+      "meaning": "한국어 의미",
+      "example": "원어민 실사용 영어 예문 (한국어 번역 포함)"
+    }
+  ]
+}
+Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+
+  const requestBody = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.4,
+      responseMimeType: "application/json"
+    }
+  };
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("AI 응답이 비어 있습니다.");
+
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep2Data;
+}
+
+/**
+ * 3단계: 즉시 적용을 위한 변형 문제 생성 (Far Transfer - 3지선다 2문항)
+ */
+export async function generateWrongAnswerCoachingStep3(
+  question: string,
+  userWrongAnswer: string,
+  correctAnswer: string,
+  apiKey: string
+): Promise<WrongAnswerCoachingStep3Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an expert English quiz creator.
+The student made a mistake on a specific grammar/vocabulary/expression concept:
+Original Question: "${question}"
+Wrong Choice: "${userWrongAnswer}"
+Correct Choice: "${correctAnswer}"
+
+Task:
+Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions testing the SAME underlying core concept/distinction, but in COMPLETELY DIFFERENT real-world contexts (Far Transfer).
+- Each question MUST have exactly 3 choices.
+- Include a clear, supportive Korean rationale for each question.
+
+Return a single valid JSON object strictly matching this structure:
+{
+  "transferQuizzes": [
+    {
+      "id": "transfer-1",
+      "question": "새로운 맥락의 영어 문장 (빈칸 ___ 포함)",
+      "choices": ["보기 1", "보기 2", "보기 3"],
+      "correctIndex": 0,
+      "rationale": "정답 및 핵심 포인트 한국어 해설"
+    },
+    {
+      "id": "transfer-2",
+      "question": "새로운 맥락의 영어 문장 2 (빈칸 ___ 포함)",
+      "choices": ["보기 1", "보기 2", "보기 3"],
+      "correctIndex": 1,
+      "rationale": "정답 및 핵심 포인트 한국어 해설"
+    }
+  ]
+}
+Do not wrap in markdown \`\`\`json ... \`\`\`, just return valid JSON.`;
+
+  const requestBody = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.4,
+      responseMimeType: "application/json"
+    }
+  };
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("AI 응답이 비어 있습니다.");
+
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep3Data;
+}
+
 

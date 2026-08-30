@@ -3178,7 +3178,7 @@ ${quiz.rationale}`;
             <div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
                 <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: '700' }}>
-                  ⚡ Gemini 3.6 Flash
+                  ⚡ Gemini 3.7 Flash
                 </span>
                 <span style={{ fontSize: '0.725rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: '700' }}>
                   ⏱️ {loadingSeconds}초 경과 중
@@ -3188,7 +3188,7 @@ ${quiz.rationale}`;
                 AI 심층 분석 &amp; 퀴즈 출제 중
               </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
-                {loadingSeconds < 6 && '🚀 Gemini 3.6 Flash 엔진에 지문 전달 중...'}
+                {loadingSeconds < 6 && '🚀 Gemini 3.7 Flash 엔진에 지문 전달 중...'}
                 {loadingSeconds >= 6 && loadingSeconds < 15 && '🔍 단락별 문법 구조(SVOC) 및 직독직해 파싱 중...'}
                 {loadingSeconds >= 15 && loadingSeconds < 28 && '✍️ 맞춤형 TOEFL/TOEIC 퀴즈 및 한글 해설 심층 생성 중...'}
                 {loadingSeconds >= 28 && '✨ 마무리 응답 검증 및 화면에 렌더링하는 중...'}

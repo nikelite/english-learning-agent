@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Award, Check, X, RefreshCw, Trash2, CheckCircle2, Archive, CheckSquare, Square } from 'lucide-react';
+import { Award, Check, X, RefreshCw, Trash2, CheckCircle2, Archive, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
 import { WrongAnswer } from '../types';
+import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
 
 interface ReviewRoomProps {
   wrongAnswers: WrongAnswer[];
@@ -8,6 +9,7 @@ interface ReviewRoomProps {
   onDeleteWrongAnswer: (id: string) => void;
   onUnarchiveWrongAnswer: (id: string) => void;
   onClearAll: () => void;
+  apiKey: string;
   mochiApiKey: string;
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: any) => Promise<void>;
@@ -19,6 +21,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
   onDeleteWrongAnswer,
   onUnarchiveWrongAnswer,
   onClearAll,
+  apiKey,
   mochiApiKey,
   mochiQuizDeckId,
   onAddQuizToMochi
@@ -31,6 +34,7 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
   const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
   const [isBulkAdding, setIsBulkAdding] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<string | null>(null);
+  const [coachingTarget, setCoachingTarget] = useState<WrongAnswer | null>(null);
 
   const handleChoiceClick = (wrongId: string, choiceIdx: number, correctIdx: number) => {
     if (isAnsweredCorrectly[wrongId]) return;
@@ -359,6 +363,25 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                       {addingToMochiIds.has(wrongId) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
                     </button>
 
+                    {/* 3-Stage AI Wrong Answer Coaching Button */}
+                    <button
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.75rem',
+                        padding: '0.4rem 0.75rem',
+                        borderRadius: '6px',
+                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                      onClick={() => setCoachingTarget(wa)}
+                    >
+                      <Brain size={13} />
+                      AI 3단계 오답 코칭
+                    </button>
+
                     {wa.isArchived && (
                       <button
                         className="btn btn-secondary"
@@ -417,6 +440,23 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* 3-Stage AI Wrong Answer Coaching Modal */}
+      {coachingTarget && (
+        <WrongAnswerCoachModal
+          isOpen={!!coachingTarget}
+          onClose={() => setCoachingTarget(null)}
+          quizItem={coachingTarget.quizItem}
+          userAnswerIndex={coachingTarget.userAnswerIndex}
+          lessonTitle={coachingTarget.lessonTitle}
+          apiKey={apiKey}
+          onAddQuizToMochi={onAddQuizToMochi}
+          onGraduate={() => {
+            onRemoveWrongAnswer(coachingTarget.id);
+            setCoachingTarget(null);
+          }}
+        />
       )}
     </div>
   );

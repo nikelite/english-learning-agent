@@ -2000,6 +2000,7 @@ ${quiz.rationale}`;
                     setViewMode('study');
                     setActiveStudyTab('eli5');
                   } : undefined}
+                  apiKey={apiKey}
                   mochiApiKey={mochiApiKey}
                   mochiQuizDeckId={mochiQuizDeckId}
                   onAddQuizToMochi={handlePushSingleQuizToMochi}
@@ -2490,6 +2491,7 @@ ${quiz.rationale}`;
             onDeleteWrongAnswer={handleDeleteWrongAnswer}
             onUnarchiveWrongAnswer={handleUnarchiveWrongAnswer}
             onClearAll={handleClearAllWrong}
+            apiKey={apiKey}
             mochiApiKey={mochiApiKey}
             mochiQuizDeckId={mochiQuizDeckId}
             onAddQuizToMochi={handlePushSingleQuizToMochi}
