@@ -341,20 +341,31 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             "{lesson.title}"
           </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>정답 개수</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>객관식 정답</span>
               <span style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--primary)' }}>
                 {score} / {activeQuizzes.length}
               </span>
             </div>
             <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>최종 정답률</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>객관식 정답률</span>
               <span style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--secondary)' }}>
                 {successRate}%
               </span>
             </div>
+            {lesson.userWritingFeedback?.score !== undefined && (
+              <>
+                <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
+                <div>
+                  <span style={{ fontSize: '0.8rem', color: '#f472b6', display: 'block', fontWeight: '700' }}>실전 상황 작문</span>
+                  <span style={{ fontSize: '2rem', fontWeight: '800', color: '#ec4899' }}>
+                    {lesson.userWritingFeedback.score}점
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           <p style={{ fontSize: '1rem', color: 'white', fontWeight: '500' }}>
@@ -606,6 +617,98 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
               </div>
             );
           })}
+
+          {/* Final Question: Situational Writing Result Analysis Card */}
+          {(lesson.userWritingSentence || lesson.userWritingFeedback) && (
+            <div style={{
+              backgroundColor: 'rgba(236, 72, 153, 0.03)',
+              border: '1.5px solid rgba(236, 72, 153, 0.35)',
+              borderRadius: '12px',
+              padding: '1.25rem',
+              marginBottom: '1rem',
+              boxShadow: '0 4px 15px rgba(236, 72, 153, 0.1)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ color: (lesson.userWritingFeedback?.score ?? 0) >= 90 ? 'var(--success)' : '#f472b6', fontWeight: '900' }}>
+                    {(lesson.userWritingFeedback?.score ?? 0) >= 90 ? '✓' : '✍️'}
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'white' }}>
+                    Q{activeQuizzes.length + 1}. 마지막 문제: 1초 실전 상황 작문
+                  </span>
+                </div>
+                {lesson.userWritingFeedback?.score !== undefined && (
+                  <span style={{
+                    fontSize: '0.75rem',
+                    fontWeight: '800',
+                    backgroundColor: (lesson.userWritingFeedback.score >= 90) ? 'rgba(16, 185, 129, 0.2)' : 'rgba(236, 72, 153, 0.2)',
+                    color: (lesson.userWritingFeedback.score >= 90) ? '#6ee7b7' : '#f472b6',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '9999px',
+                    border: `1px solid ${(lesson.userWritingFeedback.score >= 90) ? 'rgba(16, 185, 129, 0.4)' : 'rgba(236, 72, 153, 0.4)'}`
+                  }}>
+                    상황 완성도 {lesson.userWritingFeedback.score}점
+                  </span>
+                )}
+              </div>
+
+              {/* Scenario Context */}
+              {(lesson.writingTemplate?.scenarios?.[0]?.situation || lesson.writingTemplate?.situation) && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(0, 0, 0, 0.2)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#f472b6', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '0.2rem' }}>
+                    🏢 실전 상황
+                  </span>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.5' }}>
+                    {lesson.writingTemplate?.scenarios?.[0]?.situation || lesson.writingTemplate?.situation}
+                  </p>
+                </div>
+              )}
+
+              {/* User Written Sentence */}
+              {lesson.userWritingSentence && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(0, 0, 0, 0.3)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                    내가 작성한 영문:
+                  </span>
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#38bdf8' }}>
+                    "{lesson.userWritingSentence}"
+                  </p>
+                </div>
+              )}
+
+              {/* AI Corrected Sentence */}
+              {lesson.userWritingFeedback?.correctedSentence && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                    ✨ AI 상황 맞춤 교정 완성 문장:
+                  </span>
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#10b981' }}>
+                    "{lesson.userWritingFeedback.correctedSentence}"
+                  </p>
+                </div>
+              )}
+
+              {/* Native Alternative Expression */}
+              {lesson.userWritingFeedback?.nativeAlternative && lesson.userWritingFeedback.nativeAlternative !== lesson.userWritingFeedback.correctedSentence && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(6, 182, 212, 0.06)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#22d3ee', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                    🌟 원어민 실사용 추천 대체 표현:
+                  </span>
+                  <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'white' }}>
+                    "{lesson.userWritingFeedback.nativeAlternative}"
+                  </p>
+                </div>
+              )}
+
+              {/* AI Feedback explanation */}
+              {lesson.userWritingFeedback?.feedback && (
+                <div className="eli5-analogy-box" style={{ padding: '0.75rem 0.9rem', fontSize: '0.8rem', lineHeight: '1.5', color: '#cbd5e1', margin: 0, borderRadius: '8px', borderStyle: 'dashed' }}>
+                  <strong style={{ color: '#f472b6', display: 'block', marginBottom: '0.25rem' }}>💬 AI 첨삭 피드백:</strong>
+                  {lesson.userWritingFeedback.feedback}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
