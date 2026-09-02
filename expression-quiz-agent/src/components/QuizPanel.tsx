@@ -73,13 +73,19 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       const initialScore = lesson.quizzes.filter(q => lesson.userAnswers?.[q.id] === q.correctIndex).length;
       setScore(initialScore);
       
-      const allSolved = injectedQuizzes.length > 0 && injectedQuizzes.every(q => lesson.userAnswers?.[q.id] !== undefined);
+      const allMultipleChoiceSolved = injectedQuizzes.length > 0 && injectedQuizzes.every(q => lesson.userAnswers?.[q.id] !== undefined);
+      const isWritingCompleted = Boolean(lesson.userWritingSentence || lesson.userWritingFeedback);
+      
+      const allSolved = allMultipleChoiceSolved && isWritingCompleted;
       setShowResult(allSolved);
       setSubmittedAnswers(lesson.userAnswers);
       
-      if (!allSolved) {
+      if (!allMultipleChoiceSolved) {
         const startIdx = injectedQuizzes.findIndex(q => lesson.userAnswers?.[q.id] === undefined);
         setCurrentIdx(startIdx !== -1 ? startIdx : 0);
+      } else if (!isWritingCompleted) {
+        // Multiple choice solved, advance directly to the last situational writing question
+        setCurrentIdx(injectedQuizzes.length);
       } else {
         setCurrentIdx(0);
       }
@@ -91,8 +97,10 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     }
     
     setSavedWrongId(null);
-  }, [lesson.id, lesson.userAnswers, injectedQuizzes]);
+  }, [lesson.id, lesson.userAnswers, injectedQuizzes, lesson.userWritingSentence, lesson.userWritingFeedback]);
 
+  const totalQuizSteps = activeQuizzes.length + 1;
+  const isLastWritingStep = currentIdx === activeQuizzes.length;
   const activeQuestion = activeQuizzes[currentIdx];
 
   // Global Keyboard Shortcuts Engine for Quiz Solving
@@ -148,19 +156,16 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   }, [isSubmitted, selectedAns, currentIdx, activeQuizzes, showResult, attemptWrongs.length, activeQuestion]);
 
   const handlePushToMochi = async (quiz: QuizItem) => {
-    if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
-      alert("우측 상단 서비스 설정(⚙️)에서 Mochi API Key와 오답/퀴즈 전송용 Mochi 덱을 먼저 설정해 주세요.");
+    if (!mochiApiKey) {
+      alert("Mochi API Key가 설정되지 않았습니다. 설정(⚙️) 창에서 키를 등록해 주세요.");
       return;
     }
-    setAddingToMochiIds(prev => {
-      const next = new Set(prev);
-      next.add(quiz.id);
-      return next;
-    });
+    setAddingToMochiIds(prev => new Set(prev).add(quiz.id));
     try {
       await onAddQuizToMochi(quiz);
     } catch (err: any) {
-      alert(err.message || "Mochi 카드 전송에 실패했습니다.");
+      alert("Mochi 카드 추가 실패: " + err.message);
+    } finally {
       setAddingToMochiIds(prev => {
         const next = new Set(prev);
         next.delete(quiz.id);
@@ -168,8 +173,6 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       });
     }
   };
-
-  const progressPercent = activeQuizzes.length > 0 ? (currentIdx / activeQuizzes.length) * 100 : 0;
 
   const handleSelect = (idx: number) => {
     if (isSubmitted) return;
@@ -237,33 +240,31 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
 
     if (currentIdx < activeQuizzes.length - 1) {
       setCurrentIdx(prev => prev + 1);
-    } else {
-      setShowResult(true);
-      const finalScore = score;
-      let finalWrongs = [...attemptWrongs];
-      if (savedAns !== null && currentQ && savedAns !== currentQ.correctIndex) {
-        if (!finalWrongs.some(w => w.question === currentQ.question)) {
-          finalWrongs.push({
-            question: currentQ.question,
-            choices: currentQ.choices || [],
-            userAnswerIndex: savedAns,
-            correctIndex: currentQ.correctIndex,
-            rationale: currentQ.rationale || ''
-          });
-        }
-      }
-
+    } else if (currentIdx === activeQuizzes.length - 1) {
+      // Save last multiple choice answer before moving to the writing step
       const finalAnswers: Record<string, number> = { ...submittedAnswers };
       if (savedAns !== null && currentQ) {
         finalAnswers[currentQ.id] = savedAns;
       }
+      onProgressUpdate(finalAnswers);
+      // Advance to the final Situational Writing Question
+      setCurrentIdx(activeQuizzes.length);
+    } else {
+      handleFinishQuiz();
+    }
+  };
 
-      // Complete quiz in parent state
-      if (activeQuizzes.length === injectedQuizzes.length) {
-        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
-      } else {
-        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
-      }
+  const handleFinishQuiz = () => {
+    setShowResult(true);
+    const finalScore = score;
+    const finalWrongs = [...attemptWrongs];
+    const finalAnswers: Record<string, number> = { ...submittedAnswers };
+
+    // Complete quiz in parent state
+    if (activeQuizzes.length === injectedQuizzes.length) {
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+    } else {
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
     }
   };
 
@@ -612,198 +613,206 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
     );
   }
 
+  const progressPercent = Math.min(100, Math.round(((currentIdx + 1) / totalQuizSteps) * 100));
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Progress & Stat */}
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
           <span>실전 테스트 진행 상태</span>
-          <span style={{ fontWeight: '700', color: 'var(--primary)' }}>
-            {currentIdx + 1} / {activeQuizzes.length} 문제
+          <span style={{ fontWeight: '700', color: isLastWritingStep ? '#f472b6' : 'var(--primary)' }}>
+            {currentIdx + 1} / {totalQuizSteps} 문제 {isLastWritingStep ? '(마지막 문제: 1초 실전 상황 작문)' : '(객관식 점검)'}
           </span>
         </div>
         <div className="quiz-progress-bar">
-          <div className="quiz-progress-fill" style={{ width: `${progressPercent}%` }}></div>
+          <div className="quiz-progress-fill" style={{ width: `${progressPercent}%`, background: isLastWritingStep ? 'linear-gradient(90deg, var(--primary) 0%, #ec4899 100%)' : undefined }}></div>
         </div>
       </div>
 
-      {/* Quiz Card */}
-      <div style={{ flex: 1 }}>
-        <div className="quiz-question-box" style={{ whiteSpace: 'pre-line' }}>
-          {activeQuestion.question}
+      {isLastWritingStep ? (
+        /* Final Question: Situational Writing Practice */
+        <div style={{ flex: 1 }}>
+          <WritingPracticeSection
+            lesson={lesson}
+            apiKey={apiKey}
+            onSaveWriting={onSaveWriting}
+            isQuizMode={true}
+            onCompleteQuiz={handleFinishQuiz}
+          />
         </div>
-
-        <div className="quiz-choices">
-          {activeQuestion.choices.map((choice, idx) => {
-            let choiceClass = "choice-btn";
-            let iconElement: any = null;
-
-            if (selectedAns === idx) {
-              choiceClass += " selected";
-            }
-
-            if (isSubmitted) {
-              if (idx === activeQuestion.correctIndex) {
-                choiceClass += " correct";
-                iconElement = <Check size={18} style={{ color: 'var(--success)' }} />;
-              } else if (selectedAns === idx) {
-                choiceClass += " incorrect";
-                iconElement = <X size={18} style={{ color: 'var(--error)' }} />;
-              }
-            }
-
-            return (
-              <button
-                key={idx}
-                className={choiceClass}
-                onClick={() => handleSelect(idx)}
-                disabled={isSubmitted}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ 
-                    fontSize: '0.72rem', 
-                    background: 'rgba(139, 92, 246, 0.2)', 
-                    color: '#c084fc', 
-                    padding: '0.1rem 0.35rem', 
-                    borderRadius: '4px',
-                    fontWeight: '700',
-                    border: '1px solid rgba(139, 92, 246, 0.3)'
-                  }}>
-                    [{idx + 1}]
-                  </span>
-                  <strong style={{ marginRight: '0.2rem', opacity: 0.6 }}>{String.fromCharCode(65 + idx)}.</strong>
-                  {choice}
-                </span>
-                {iconElement}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Action Button */}
-        {!isSubmitted ? (
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-            disabled={selectedAns === null}
-            onClick={handleSubmit}
-          >
-            <span>정답 제출 및 해설 확인</span>
-            <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
-          </button>
-        ) : (
-          <button
-            className="btn btn-accent"
-            style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)' }}
-            onClick={handleNext}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-              {currentIdx < activeQuizzes.length - 1 ? (
-                <>
-                  다음 문제 풀기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
-                  <ArrowRight size={16} />
-                </>
-              ) : (
-                <>
-                  최종 결과 보러가기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
-                  <Sparkles size={16} />
-                </>
-              )}
-            </span>
-          </button>
-        )}
-
-        {/* Keyboard Shortcuts Indicator Bar */}
-        <div style={{
-          fontSize: '0.75rem',
-          color: 'var(--text-muted)',
-          background: 'rgba(0,0,0,0.25)',
-          padding: '0.45rem 0.75rem',
-          borderRadius: '8px',
-          border: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginTop: '0.75rem',
-          flexWrap: 'wrap',
-          gap: '0.4rem'
-        }}>
-          <span style={{ fontWeight: '600' }}>⌨️ 키보드 단축키</span>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <span><strong style={{ color: '#c084fc' }}>1~4 / A~D</strong>: 보기 선택</span>
-            <span><strong style={{ color: '#10b981' }}>Enter / Space</strong>: 제출 &amp; 다음</span>
-          </div>
-        </div>
-
-        {/* Answer Rationale Display */}
-        {isSubmitted && (
-          <div className="quiz-explanation-box">
-            {selectedAns === activeQuestion.correctIndex ? (
-              <div className="explanation-heading success" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <BookmarkCheck size={20} />
-                  <span>정답입니다! 🎉</span>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                  onClick={() => handlePushToMochi(activeQuestion)}
-                  disabled={addingToMochiIds.has(activeQuestion.id)}
-                >
-                  {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
-                </button>
+      ) : (
+        /* Multiple Choice Question Card */
+        <div style={{ flex: 1 }}>
+          {activeQuestion && (
+            <>
+              <div className="quiz-question-box" style={{ whiteSpace: 'pre-line' }}>
+                {activeQuestion.question}
               </div>
-            ) : (
-              <div className="explanation-heading error" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <AlertCircle size={20} />
-                  <span>아쉽게 틀렸습니다!</span>
-                </div>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {selectedAns !== null && (
+
+              <div className="quiz-choices">
+                {activeQuestion.choices.map((choice, idx) => {
+                  let choiceClass = "choice-btn";
+                  let iconElement: any = null;
+
+                  if (selectedAns === idx) {
+                    choiceClass += " selected";
+                  }
+
+                  if (isSubmitted) {
+                    if (idx === activeQuestion.correctIndex) {
+                      choiceClass += " correct";
+                      iconElement = <Check size={18} style={{ color: 'var(--success)' }} />;
+                    } else if (selectedAns === idx) {
+                      choiceClass += " incorrect";
+                      iconElement = <X size={18} style={{ color: 'var(--error)' }} />;
+                    }
+                  }
+
+                  return (
                     <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        fontSize: '0.75rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        fontWeight: '700'
-                      }}
-                      onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns })}
+                      key={idx}
+                      className={choiceClass}
+                      onClick={() => handleSelect(idx)}
+                      disabled={isSubmitted}
                     >
-                      <Brain size={14} />
-                      AI 3단계 오답 코칭
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ 
+                          fontSize: '0.72rem', 
+                          background: 'rgba(139, 92, 246, 0.2)', 
+                          color: '#c084fc', 
+                          padding: '0.1rem 0.35rem', 
+                          borderRadius: '4px',
+                          fontWeight: '700',
+                          border: '1px solid rgba(139, 92, 246, 0.3)'
+                        }}>
+                          [{idx + 1}]
+                        </span>
+                        <strong style={{ marginRight: '0.2rem', opacity: 0.6 }}>{String.fromCharCode(65 + idx)}.</strong>
+                        {choice}
+                      </span>
+                      {iconElement}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                    onClick={() => handlePushToMochi(activeQuestion)}
-                    disabled={addingToMochiIds.has(activeQuestion.id)}
-                  >
-                    {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가 완료" : "⚡ Mochi 카드 추가"}
-                  </button>
-                  {savedWrongId === activeQuestion.id && (
-                    <span style={{ fontSize: '0.75rem', background: 'rgba(244, 63, 94, 0.15)', color: 'var(--accent)', padding: '0.2rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
-                      오답 노트 자동 보관됨 ✍️
-                    </span>
-                  )}
+                  );
+                })}
+              </div>
+
+              {/* Action Button */}
+              {!isSubmitted ? (
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                  disabled={selectedAns === null}
+                  onClick={handleSubmit}
+                >
+                  <span>정답 제출 및 해설 확인</span>
+                  <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
+                </button>
+              ) : (
+                <button
+                  className="btn btn-accent"
+                  style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)' }}
+                  onClick={handleNext}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                    {currentIdx < activeQuizzes.length - 1 ? (
+                      <>
+                        다음 문제 풀기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
+                        <ArrowRight size={16} />
+                      </>
+                    ) : (
+                      <>
+                        마지막 문제: 실전 상황 작문 풀기 <span style={{ fontSize: '0.75rem', opacity: 0.85, background: 'rgba(0,0,0,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>[Enter ↵]</span>
+                        <Sparkles size={16} />
+                      </>
+                    )}
+                  </span>
+                </button>
+              )}
+
+              {/* Keyboard Shortcuts Indicator Bar */}
+              <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                background: 'rgba(0,0,0,0.25)',
+                padding: '0.45rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: '0.75rem',
+                flexWrap: 'wrap',
+                gap: '0.4rem'
+              }}>
+                <span style={{ fontWeight: '600' }}>⌨️ 키보드 단축키</span>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <span><strong style={{ color: '#c084fc' }}>1~4 / A~D</strong>: 보기 선택</span>
+                  <span><strong style={{ color: '#10b981' }}>Enter / Space</strong>: 제출 &amp; 다음</span>
                 </div>
               </div>
-            )}
 
-            <div style={{ fontSize: '0.925rem', lineHeight: '1.6', color: 'var(--text-primary)', whiteSpace: 'pre-line' }}>
-              {activeQuestion.rationale}
-            </div>
-          </div>
-        )}
-      </div>
+              {/* Answer Rationale Display */}
+              {isSubmitted && (
+                <div className="quiz-explanation-box">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: selectedAns === activeQuestion.correctIndex ? 'var(--success)' : 'var(--accent)', fontWeight: '700' }}>
+                      {selectedAns === activeQuestion.correctIndex ? (
+                        <>
+                          <Check size={18} />
+                          <span>정답입니다! 훌륭해요!</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle size={18} />
+                          <span>오답입니다. 아래 해설과 3단계 코칭을 확인해 보세요.</span>
+                        </>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {selectedAns !== activeQuestion.correctIndex && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                            boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+                            fontWeight: '700',
+                            fontSize: '0.75rem',
+                            padding: '0.3rem 0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.35rem'
+                          }}
+                          onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns! })}
+                        >
+                          <Brain size={14} />
+                          <span>AI 3단계 코칭 받기</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                        onClick={() => handlePushToMochi(activeQuestion)}
+                        disabled={addingToMochiIds.has(activeQuestion.id)}
+                      >
+                        {addingToMochiIds.has(activeQuestion.id) ? "추가 완료" : "⚡ Mochi 오답노트 추가"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                    {activeQuestion.rationale}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* 3-Stage AI Wrong Answer Coaching Modal */}
       {coachingQuizItem && (

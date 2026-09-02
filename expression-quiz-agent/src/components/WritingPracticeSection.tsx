@@ -12,6 +12,8 @@ interface WritingPracticeSectionProps {
   onSaveWriting?: (sentence: string, feedback: WritingEvaluationResult) => void;
   initialSentence?: string;
   initialFeedback?: WritingEvaluationResult;
+  isQuizMode?: boolean;
+  onCompleteQuiz?: () => void;
 }
 
 export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
@@ -19,7 +21,9 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   apiKey,
   onSaveWriting,
   initialSentence = '',
-  initialFeedback = null
+  initialFeedback = null,
+  isQuizMode = false,
+  onCompleteQuiz
 }) => {
   const normalized = normalizeLesson(lesson);
   const [localWritingTemplate, setLocalWritingTemplate] = useState<WritingTemplateData>(
@@ -225,9 +229,9 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
 
   return (
     <div className="card-section animate-fade-in" style={{
-      marginTop: '1.5rem',
+      marginTop: isQuizMode ? '0' : '1.5rem',
       backgroundColor: 'rgba(15, 23, 42, 0.75)',
-      border: '1px solid rgba(236, 72, 153, 0.35)',
+      border: isQuizMode ? '1.5px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(236, 72, 153, 0.35)',
       borderRadius: '16px',
       padding: '1.5rem',
       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.35)'
@@ -250,8 +254,10 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           </div>
           <div>
             <h4 style={{ fontSize: '1.1rem', fontWeight: '800', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span>5단계: 1초 내 상황 작문</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-secondary)' }}>(Self-Reference Generation)</span>
+              <span>{isQuizMode ? '🎯 마지막 문제: 1초 실전 상황 작문' : '5단계: 1초 내 상황 작문'}</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: isQuizMode ? '#f472b6' : 'var(--text-secondary)' }}>
+                {isQuizMode ? '(Situational Writing Challenge)' : '(Self-Reference Generation)'}
+              </span>
             </h4>
           </div>
         </div>
@@ -791,6 +797,37 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
                   <span>✏️ 피드백 반영해서 문장 고쳐 쓰기 (재도전)</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* In Quiz Mode: Proceed to Final Quiz Results Button */}
+          {isQuizMode && onCompleteQuiz && (
+            <div style={{
+              marginTop: '1.5rem',
+              paddingTop: '1.25rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={onCompleteQuiz}
+                style={{
+                  padding: '0.85rem 2rem',
+                  fontSize: '1rem',
+                  fontWeight: '800',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
+                  boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>✨ 퀴즈 &amp; 작문 최종 결과 확인하기</span>
+                <Sparkles size={18} />
+              </button>
             </div>
           )}
         </>

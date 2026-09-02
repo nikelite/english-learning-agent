@@ -153,7 +153,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
             5단계 인지 학습 플로우
           </span>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            1.추측 ➔ 2.핵심원리 ➔ 3.선택기준 ➔ 4.점검퀴즈 ➔ 5.실전작문
+            1.추측 ➔ 2.핵심원리 ➔ 3.선택기준 ➔ 4.실전테스트 (객관식 퀴즈 + 상황작문)
           </span>
         </div>
 
@@ -169,7 +169,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
             background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)'
           }}
         >
-          <span>4단계 퀴즈 바로가기 ({quizzes.length}문항)</span>
+          <span>4단계 퀴즈 &amp; 실전작문 ({quizzes.length + 1}문항)</span>
           <ArrowRight size={14} />
         </button>
       </div>
@@ -610,10 +610,10 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
           </div>
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 0.25rem 0', color: 'white' }}>
-              4단계: 오개념 점검 퀴즈 ({quizzes.length}문항)
+              4단계: 오개념 점검 퀴즈 &amp; 실전 상황 작문 ({quizzes.length + 1}문항)
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-              방금 배운 원리를 실전 테스트로 검증하고, 오답 시 <strong>AI 3단계 소크라테스 코칭</strong>을 지원합니다.
+              방금 배운 원리를 실전 객관식 퀴즈({quizzes.length}문항)와 마지막 실전 상황 작문(1문항)으로 완벽하게 테스트합니다.
             </p>
           </div>
         </div>
@@ -632,7 +632,7 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
             boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
           }}
         >
-          <span>🚀 점검 퀴즈 풀기</span>
+          <span>🚀 점검 퀴즈 &amp; 실전 작문 시작하기</span>
           <ArrowRight size={18} />
         </button>
       </section>
