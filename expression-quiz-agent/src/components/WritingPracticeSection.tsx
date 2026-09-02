@@ -289,9 +289,9 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
           </div>
           <div>
             <h4 style={{ fontSize: '1.1rem', fontWeight: '800', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span>{isQuizMode ? '🎯 마지막 문제: 1초 실전 상황 작문' : '5단계: 1초 내 상황 작문'}</span>
+              <span>{isQuizMode ? '🎯 마지막 문제: 1초 실전 상황 작문' : '1초 실전 상황 작문'}</span>
               <span style={{ fontSize: '0.75rem', fontWeight: '600', color: isQuizMode ? '#f472b6' : 'var(--text-secondary)' }}>
-                {isQuizMode ? '(Situational Writing Challenge)' : '(Self-Reference Generation)'}
+                {isQuizMode ? '(Situational Writing Challenge)' : '(Situational Writing)'}
               </span>
             </h4>
           </div>

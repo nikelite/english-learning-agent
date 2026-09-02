@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { Lesson, WritingEvaluationResult } from '../types';
 import { normalizeLesson } from '../geminiService';
-import { WritingPracticeSection } from './WritingPracticeSection';
 
 interface IntegratedStudyFlowProps {
   lesson: Lesson;
@@ -150,10 +149,10 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.5rem', borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.2)', color: '#c084fc' }}>
-            5단계 인지 학습 플로우
+            4단계 인지 학습 플로우
           </span>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            1.추측 ➔ 2.핵심원리 ➔ 3.선택기준 ➔ 4.실전테스트 (객관식 퀴즈 + 상황작문)
+            1.추측 ➔ 2.핵심원리 ➔ 3.선택기준 ➔ 4.실전테스트 (객관식 + 상황작문)
           </span>
         </div>
 
@@ -636,13 +635,6 @@ export const IntegratedStudyFlow: React.FC<IntegratedStudyFlowProps> = ({
           <ArrowRight size={18} />
         </button>
       </section>
-
-      {/* ================= STAGE 5: 1초 내 상황 작문 (WritingPracticeSection) ================= */}
-      <WritingPracticeSection
-        lesson={normalized}
-        apiKey={apiKey}
-        onSaveWriting={onSaveWriting}
-      />
 
       {/* ================= AI FOLLOW-UP Q&A BAR ================= */}
       <section className="card-section" style={{

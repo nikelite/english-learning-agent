@@ -363,31 +363,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button 
-            className="btn btn-primary"
-            onClick={() => {
-              const el = document.getElementById('quiz-result-writing-section');
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth' });
-              } else {
-                onBackToStudy();
-              }
-            }}
-            style={{ 
-              background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)', 
-              boxShadow: '0 4px 15px rgba(236, 72, 153, 0.35)', 
-              fontWeight: '800',
-              padding: '0.65rem 1.25rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <Sparkles size={16} />
-            <span>✍️ 5단계: 실전 상황 작문하러 가기</span>
-          </button>
-
-          <button className="btn btn-secondary" onClick={onBackToStudy} style={{ fontWeight: '700' }}>
+          <button className="btn btn-primary" onClick={onBackToStudy} style={{ fontWeight: '800' }}>
             📖 전체 학습자료(1~3단계) 보기
           </button>
           
@@ -423,15 +399,6 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
               ➡️ 다음 미풀이 학습 {unsolvedLessonsCount !== undefined && unsolvedLessonsCount > 0 ? `(${unsolvedLessonsCount}개 남음)` : ''}
             </button>
           )}
-        </div>
-
-        {/* 5단계: 실전 상황 작문 훈련 연계 (퀴즈 완료 직후 메인 배치) */}
-        <div id="quiz-result-writing-section" style={{ marginTop: '2rem', textAlign: 'left', maxWidth: '680px', margin: '2rem auto 0 auto' }}>
-          <WritingPracticeSection
-            lesson={lesson}
-            apiKey={apiKey}
-            onSaveWriting={onSaveWriting}
-          />
         </div>
 
         {/* AI 추가 퀴즈 생성 Section */}
