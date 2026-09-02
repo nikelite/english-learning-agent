@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle } from 'lucide-react';
+import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle, SkipForward } from 'lucide-react';
 import { QuizItem, WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data, TransferQuizItem } from '../types';
 import { generateWrongAnswerCoachingStep1, generateWrongAnswerCoachingStep2, generateWrongAnswerCoachingStep3 } from '../geminiService';
 
@@ -240,22 +240,43 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
               </h3>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: '0.4rem',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <X size={20} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary btn-sm"
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.3rem 0.65rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#cbd5e1'
+              }}
+              title="코칭을 건너뛰고 계속 진행합니다"
+            >
+              <SkipForward size={13} />
+              <span>건너뛰기 (스킵)</span>
+            </button>
+
+            <button 
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '0.4rem',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* 3-Step Stepper Header */}
@@ -486,7 +507,16 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                   </div>
 
                   {/* Next Step Action Button */}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={onClose}
+                      style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}
+                    >
+                      <SkipForward size={14} />
+                      <span>코칭 건너뛰기 (스킵)</span>
+                    </button>
                     <button
                       className="btn btn-primary"
                       onClick={handleGoToStep2}
@@ -570,14 +600,25 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                   </div>
 
                   {/* Next Step Action Button */}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setCurrentStep(1)}
-                      style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
-                    >
-                      1단계 다시보기
-                    </button>
+                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setCurrentStep(1)}
+                        style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
+                      >
+                        1단계 다시보기
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={onClose}
+                        style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}
+                      >
+                        <SkipForward size={14} />
+                        <span>스킵하기</span>
+                      </button>
+                    </div>
                     <button
                       className="btn btn-primary"
                       onClick={handleGoToStep3}

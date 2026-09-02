@@ -522,10 +522,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     if (isCorrect) {
       setScore(prev => prev + 1);
       
-      // If this was an injected review question, graduate it!
-      if (activeQuestion.isReview) {
-        onGraduateReview(activeQuestion.id);
-      }
+      // Remove from session wrongs & attempt wrongs so it disappears from retry list
+      setSessionWrongs(prev => prev.filter(q => q.id !== activeQuestion.id));
+      setAttemptWrongs(prev => prev.filter(w => w.question !== activeQuestion.question));
+
+      // Graduate and remove from wrong answers review storage
+      onGraduateReview(activeQuestion.id);
     } else {
       // Add to session wrongs for targeted review
       setSessionWrongs(prev => {
@@ -551,8 +553,17 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
   const handleFinishQuiz = () => {
     setShowResult(true);
-    const finalScore = score;
-    let finalWrongs = [...attemptWrongs];
+    // Recalculate score based on current submittedAnswers
+    const finalScore = injectedQuizzes.filter(q => submittedAnswers[q.id] === q.correctIndex).length;
+    let finalWrongs = injectedQuizzes
+      .filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex)
+      .map(q => ({
+        question: q.question,
+        choices: q.choices,
+        userAnswerIndex: submittedAnswers[q.id],
+        correctIndex: q.correctIndex,
+        rationale: q.rationale
+      }));
 
     const finalAnswers: Record<string, number> = {};
     Object.entries(submittedAnswers).forEach(([key, val]) => {
@@ -561,18 +572,20 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
       }
     });
 
-    // Complete quiz in parent state
-    if (activeQuizzes.length === injectedQuizzes.length) {
-      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
-    } else {
-      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
-    }
+    onQuizCompleted(finalScore, injectedQuizzes.length, finalWrongs, finalAnswers);
   };
 
   const handleNext = () => {
     setSavedWrongId(null);
     setSelectedAns(null);
     setIsSubmitted(false);
+
+    // If this was a single targeted retry, restore back to all quizzes and show result
+    if (activeQuizzes.length === 1 && activeQuizzes[0].id !== injectedQuizzes[0]?.id) {
+      setActiveQuizzes(injectedQuizzes);
+      handleFinishQuiz();
+      return;
+    }
 
     if (currentIdx < activeQuizzes.length - 1) {
       setCurrentIdx(prev => prev + 1);
