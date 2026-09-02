@@ -30,8 +30,8 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     firstVocab ? `${firstVocab.word} (${firstVocab.meaning})` : null
   ].filter(Boolean) as string[];
 
-  const dynamicSituation = `본문 "${lesson.title}"에서 배운 핵심 어휘 '${firstVocab ? `${firstVocab.word} (${firstVocab.meaning})` : '주요 표현'}'을(를) 활용하여 상대방에게 자신의 생각을 전달하는 상황입니다.`;
-  const dynamicIntent = `"${firstVocab ? `${firstVocab.word}(${firstVocab.meaning})` : '본문 핵심 어휘'}"을(를) 활용하여, 상황에 맞는 자연스러운 1문장을 영어로 완성해 보세요.`;
+  const dynamicSituation = `본문 "${lesson.title}"에서 배운 핵심 어휘·표현 '${firstVocab ? `${firstVocab.word} (${firstVocab.meaning})` : '주요 표현'}'을(를) 활용하여 상대방에게 자신의 생각을 전달하는 상황입니다.`;
+  const dynamicIntent = `"${firstVocab ? `${firstVocab.word}(${firstVocab.meaning})` : '본문 핵심 어휘·표현'}"을(를) 활용하여, 상황에 맞는 자연스러운 1문장을 영어로 완성해 보세요.`;
   const dynamicTemplate = firstVocab ? `We need to ____________________ to ${firstVocab.word}.` : `In this situation, we need to ____________________.`;
 
   const [localWritingTemplate, setLocalWritingTemplate] = useState<WritingTemplateData>(() => {
@@ -40,13 +40,13 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     }
     return {
       targetWord: firstVocab ? `${firstVocab.word} (${firstVocab.meaning})` : undefined,
-      prompt: "본문의 핵심 어휘를 활용하여 상황에 맞는 1문장을 완성해 보세요.",
+      prompt: "본문의 핵심 어휘 또는 표현을 활용하여 상황에 맞는 1문장을 완성해 보세요.",
       situation: dynamicSituation,
       koreanIntent: dynamicIntent,
       template: dynamicTemplate,
       sampleSentence: firstVocab ? `We need to take action to ${firstVocab.word}.` : "",
       keyKeywords: defaultKeywords,
-      tip: firstVocab ? `본문에서 학습한 '${firstVocab.word}' 어휘를 활용해 보세요.` : "본문의 핵심 어휘를 활용해 보세요.",
+      tip: firstVocab ? `본문에서 학습한 '${firstVocab.word}' 어휘/표현을 활용해 보세요.` : "본문의 핵심 어휘 또는 표현을 활용해 보세요.",
       scenarios: []
     };
   });
@@ -379,7 +379,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             border: '1px solid rgba(236, 72, 153, 0.4)',
             marginBottom: '0.75rem'
           }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#f472b6' }}>🎯 집중 목표 어휘:</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#f472b6' }}>🎯 집중 목표 어휘·표현:</span>
             <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#ffffff' }}>
               {currentScenario.targetWord || currentScenario.keyKeywords?.[0] || `${firstVocab?.word} (${firstVocab?.meaning})`}
             </span>
