@@ -1503,8 +1503,8 @@ export async function generateWrongAnswerCoachingStep1(
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
   const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
-  const prompt = `You are a Socratic English reading tutor. The student solved a reading comprehension or vocabulary quiz and chose a WRONG answer.
-Do NOT reveal the correct answer. The goal is to stimulate cognitive retrieval, contextual clues analysis, and self-correction.
+  const prompt = `You are a friendly, encouraging 1:1 English coach. The student solved a reading/vocabulary quiz and picked a WRONG answer.
+Do NOT reveal the correct answer. Your goal is to guide the student with VERY EASY, FRIENDLY, and INTUITIVE Korean hints (ELI5 level: Explain Like I'm 5) so they can effortlessly discover the answer themselves.
 
 ${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1000)}..."\n` : ''}
 Quiz Question:
@@ -1516,18 +1516,19 @@ ${choicesStr}
 Student's Selected Wrong Answer:
 "${userWrongAnswer}"
 
-Provide:
-1. socraticHint: A helpful Socratic guiding hint in Korean (1-2 sentences) pointing to the passage context or nuance without giving away the answer.
-2. reflectiveQuestion: ONE decisive reflective question in Korean prompting the student to reconsider their logic.
-3. guidedChoices: An array of 2-3 brief hint strings in Korean.
-4. guidingInsight: A brief encouraging insight in Korean.
+CRITICAL GUIDELINES:
+1. Use warm, simple, everyday Korean without complex grammatical jargon.
+2. socraticHint: 1~2 very easy sentences pointing directly to the clue in the sentence/passage.
+3. reflectiveQuestion: A very easy, direct question in Korean (e.g. '문맥상 ~라는 뜻이 어울릴까요, 아니면 ~라는 뜻이 맞을까요?').
+4. guidedChoices: 2~3 friendly, short hint chips in Korean comparing the choices.
+5. guidingInsight: A 1-line easy takeaway summary.
 
-Output JSON only matching this schema:
+Output JSON matching this schema:
 {
-  "socraticHint": "본문 문맥과 단서를 짚어주는 소크라테스식 힌트",
-  "reflectiveQuestion": "정답을 유추할 수 있도록 생각을 유도하는 질문",
-  "guidedChoices": ["단서 힌트 1", "단서 힌트 2"],
-  "guidingInsight": "핵심 착안점 요약"
+  "socraticHint": "초등학생도 이해할 수 있는 매우 쉽고 명확한 본문 단서 힌트",
+  "reflectiveQuestion": "정답을 쉽게 떠올릴 수 있는 직관적인 한 줄 질문",
+  "guidedChoices": ["💡 보기 힌트 1", "💡 보기 힌트 2"],
+  "guidingInsight": "한 줄 핵심 꿀팁 요약"
 }
 Do not wrap in markdown \`\`\`json.`;
 
@@ -1550,7 +1551,7 @@ Do not wrap in markdown \`\`\`json.`;
 }
 
 /**
- * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개
+ * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개 (쉬운 설명 & 실생활 예문)
  */
 export async function generateWrongAnswerCoachingStep2(
   question: string,
@@ -1564,8 +1565,8 @@ export async function generateWrongAnswerCoachingStep2(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const prompt = `You are an expert native English reading tutor and coach.
-The student has now seen the correct answer. Your goal is deep nuance comparison and contextual understanding.
+  const prompt = `You are an encouraging, friendly 1:1 English coach.
+The student has now seen the correct answer. Your goal is to explain why [Wrong Choice] was misleading and why [Correct Answer] fits best in VERY EASY, INTUITIVE, and CLEAR Korean (ELI5 level).
 
 ${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1000)}..."\n` : ''}
 Question:
@@ -1580,23 +1581,23 @@ Actual Correct Answer:
 Explanation/Rationale:
 ${rationale}
 
-Provide:
-1. nuanceContrast: Contrast the nuance and meaning difference between [Wrong Choice] and [Correct Answer] in 2 clear Korean sentences.
-2. collocations: Provide EXACTLY 2 native English collocations (natural partner phrases) featuring the correct word/expression, with Korean meaning and a practical example sentence.
+CRITICAL GUIDELINES:
+1. nuanceContrast: Explain in 2 super-simple, friendly Korean sentences why the wrong choice doesn't fit and why the correct answer is the perfect choice (use an easy real-life metaphor if helpful).
+2. collocations: Provide EXACTLY 2 super-useful, everyday native English partner expressions (5~8 words each, easy vocabulary) with natural Korean translations and simple examples.
 
 Output JSON matching this schema:
 {
-  "nuanceContrast": "오답과 정답의 뉘앙스/문맥 차이 2문장 대조",
+  "nuanceContrast": "오답과 정답의 차이를 초등학생도 알기 쉽게 설명한 2문장",
   "collocations": [
     {
-      "phrase": "Native collocation 1",
-      "meaning": "한글 의미",
-      "example": "Practical example sentence in English"
+      "phrase": "Easy native collocation 1",
+      "meaning": "쉬운 한글 뜻",
+      "example": "Simple, everyday English example sentence"
     },
     {
-      "phrase": "Native collocation 2",
-      "meaning": "한글 의미",
-      "example": "Practical example sentence in English"
+      "phrase": "Easy native collocation 2",
+      "meaning": "쉬운 한글 뜻",
+      "example": "Simple, everyday English example sentence"
     }
   ]
 }
@@ -1621,7 +1622,7 @@ Do not wrap in markdown \`\`\`json.`;
 }
 
 /**
- * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 실전 변형 문제 2개 (Far Transfer)
+ * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 쉬운 실전 변형 문제 2개 (Easy & Intuitive Far Transfer)
  */
 export async function generateWrongAnswerCoachingStep3(
   question: string,
@@ -1633,30 +1634,40 @@ export async function generateWrongAnswerCoachingStep3(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const prompt = `You are an expert English quiz creator.
-The student made a mistake on a specific reading/vocabulary/grammar concept:
-Original Question Context: "${question}"
+  const prompt = `You are an expert, encouraging English teacher.
+The student made a mistake on a specific vocabulary/grammar concept:
+Original Question: "${question}"
 Wrong Choice: "${userWrongAnswer}"
 Correct Choice: "${correctAnswer}"
 
-Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions in DIFFERENT real-world contexts (Far Transfer) that test the same underlying concept/rule.
+CRITICAL TASK:
+Generate EXACTLY 2 NEW 3-choice fill-in-the-blank questions in simple everyday situations that test the SAME core word or rule, but are VERY EASY AND ACCESSIBLE TO SOLVE.
+
+CRITICAL GUIDELINES FOR EASY VARIATION QUIZZES:
+1. Sentence Length & Vocabulary: Keep sentences short (6~10 words) with simple, high-frequency everyday vocabulary.
+2. Context Clue: Make the context clue super obvious so applying the correct word feels natural and rewarding.
+3. Distractors: The other 2 choices must be clearly different and easy words, so the student can solve it with confidence.
+4. Include a clear Korean translation of the question sentence so the user understands the context without stress.
+5. Provide a short, friendly 1~2 sentence Korean explanation.
 
 Output JSON matching this schema:
 {
   "transferQuizzes": [
     {
       "id": "t1",
-      "question": "Question sentence in English with a blank (e.g. She decided to go ________ the bad weather.)",
+      "question": "Short, clear English sentence with a blank (e.g. 'I drink water every morning to stay _______ .')",
+      "translation": "자연스러운 한글 해석 (예: '나는 매일 아침 수분을 유지하기 위해 물을 마신다.')",
       "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 0,
-      "rationale": "Clear Korean explanation of why this answer is correct and why other choices are wrong."
+      "rationale": "초등학생도 쉽게 이해할 수 있는 친절한 1~2문장 해설"
     },
     {
       "id": "t2",
-      "question": "Question sentence in English with a blank",
+      "question": "Short, clear English sentence with a blank",
+      "translation": "자연스러운 한글 해석",
       "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 1,
-      "rationale": "Clear Korean explanation."
+      "rationale": "친절하고 쉬운 1~2문장 해설"
     }
   ]
 }
@@ -1668,7 +1679,7 @@ Do not wrap in markdown \`\`\`json.`;
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.4,
+        temperature: 0.3,
         responseMimeType: "application/json"
       }
     })

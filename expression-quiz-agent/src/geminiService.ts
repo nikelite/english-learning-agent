@@ -1795,8 +1795,8 @@ export async function generateWrongAnswerCoachingStep1(
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
   const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
-  const prompt = `You are a Socratic English tutor. The student solved an English quiz and chose a WRONG answer.
-Do NOT reveal the correct answer. The goal is to stimulate cognitive retrieval and self-correction.
+  const prompt = `You are a friendly, encouraging 1:1 English coach. The student solved an English quiz and chose a WRONG answer.
+Do NOT reveal the correct answer. Your goal is to guide the student with VERY EASY, FRIENDLY, and INTUITIVE Korean hints (ELI5 level: Explain Like I'm 5) so they can effortlessly discover the answer themselves.
 
 Quiz Question:
 ${question}
@@ -1807,14 +1807,15 @@ ${choicesStr}
 Student's Selected Wrong Answer:
 "${userWrongAnswer}"
 
-Provide:
-1. cognitiveIllusion: Why did the student likely choose this wrong answer? Analyze the cognitive trap or Korean translation habit in 1-2 Korean sentences.
-2. clueQuestion: ONE decisive Socratic clue question (contextual or grammatical hint) in Korean that leads the student to infer the correct answer without naming it directly.
+CRITICAL GUIDELINES:
+1. Use warm, simple, everyday Korean without complex grammatical jargon.
+2. cognitiveIllusion: In 1-2 very simple Korean sentences, explain why this wrong choice felt tempting or what simple confusion caused it.
+3. clueQuestion: ONE decisive, very easy and friendly Socratic clue question in Korean that makes the student instantly realize the right direction.
 
-Output JSON only matching this schema:
+Output JSON matching this schema:
 {
-  "cognitiveIllusion": "왜 이 오답을 골랐을지 인지적 착각 원인 분석",
-  "clueQuestion": "정답을 유추할 수 있는 결정적 단서 질문"
+  "cognitiveIllusion": "초등학생도 이해할 수 있는 친절하고 쉬운 오답 이유 분석",
+  "clueQuestion": "정답을 쉽게 떠올릴 수 있는 직관적인 한 줄 힌트 질문"
 }
 Do not wrap in markdown \`\`\`json.`;
 
@@ -1837,7 +1838,7 @@ Do not wrap in markdown \`\`\`json.`;
 }
 
 /**
- * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개
+ * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개 (쉬운 설명 & 실생활 예문)
  */
 export async function generateWrongAnswerCoachingStep2(
   question: string,
@@ -1848,8 +1849,8 @@ export async function generateWrongAnswerCoachingStep2(
 ): Promise<WrongAnswerCoachingStep2Data> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
 
-  const prompt = `You are an expert native English linguist and coach.
-The student has now seen the correct answer. Your goal is deep nuance comparison and mental model correction.
+  const prompt = `You are an encouraging, friendly 1:1 English coach.
+The student has now seen the correct answer. Your goal is to explain why [Wrong Choice] was misleading and why [Correct Answer] fits best in VERY EASY, INTUITIVE, and CLEAR Korean (ELI5 level).
 
 Question:
 ${question}
@@ -1863,23 +1864,23 @@ Actual Correct Answer:
 Explanation/Rationale:
 ${rationale}
 
-Provide:
-1. nuanceContrast: Contrast the nuance difference between [Wrong Choice] and [Correct Answer] in business/daily real-world contexts in EXACTLY 2 clear Korean sentences.
-2. collocations: Provide EXACTLY 2 native English collocations (natural partner phrases) featuring the correct word/expression, with Korean meaning and a practical example sentence.
+CRITICAL GUIDELINES:
+1. nuanceContrast: Explain in 2 super-simple, friendly Korean sentences why the wrong choice doesn't fit and why the correct answer is the perfect choice (use an easy real-life metaphor if helpful).
+2. collocations: Provide EXACTLY 2 super-useful, everyday native English partner expressions (5~8 words each, easy vocabulary) with natural Korean translations and simple examples.
 
 Output JSON matching this schema:
 {
-  "nuanceContrast": "오답과 정답의 뉘앙스 차이 실사용 맥락 2문장 대조",
+  "nuanceContrast": "오답과 정답의 차이를 초등학생도 알기 쉽게 설명한 2문장",
   "collocations": [
     {
-      "phrase": "Native collocation 1",
-      "meaning": "한글 의미",
-      "example": "Practical example sentence in English"
+      "phrase": "Easy native collocation 1",
+      "meaning": "쉬운 한글 뜻",
+      "example": "Simple, everyday English example sentence"
     },
     {
-      "phrase": "Native collocation 2",
-      "meaning": "한글 의미",
-      "example": "Practical example sentence in English"
+      "phrase": "Easy native collocation 2",
+      "meaning": "쉬운 한글 뜻",
+      "example": "Simple, everyday English example sentence"
     }
   ]
 }
@@ -1906,7 +1907,7 @@ Do not wrap in markdown \`\`\`json.`;
 }
 
 /**
- * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 실전 변형 문제 2개 (Far Transfer)
+ * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 쉬운 실전 변형 문제 2개 (Easy & Intuitive Far Transfer)
  */
 export async function generateWrongAnswerCoachingStep3(
   question: string,
@@ -1918,30 +1919,40 @@ export async function generateWrongAnswerCoachingStep3(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
-  const prompt = `You are an expert English quiz creator.
+  const prompt = `You are an expert, encouraging English teacher.
 The student made a mistake on a specific grammar/vocabulary/expression concept:
 Original Question Context: "${question}"
 Wrong Choice: "${userWrongAnswer}"
 Correct Choice: "${correctAnswer}"
 
-Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions in DIFFERENT real-world contexts (Far Transfer) that test the same underlying concept/rule.
+CRITICAL TASK:
+Generate EXACTLY 2 NEW 3-choice fill-in-the-blank questions in simple everyday situations that test the SAME core word or rule, but are VERY EASY AND ACCESSIBLE TO SOLVE.
+
+CRITICAL GUIDELINES FOR EASY VARIATION QUIZZES:
+1. Sentence Length & Vocabulary: Keep sentences short (6~10 words) with simple, high-frequency everyday vocabulary.
+2. Context Clue: Make the context clue super obvious so applying the correct word feels natural and rewarding.
+3. Distractors: The other 2 choices must be clearly different and easy words, so the student can solve it with confidence.
+4. Include a clear Korean translation of the question sentence so the user understands the context without stress.
+5. Provide a short, friendly 1~2 sentence Korean explanation.
 
 Output JSON matching this schema:
 {
   "transferQuizzes": [
     {
       "id": "t1",
-      "question": "Question sentence in English with a blank (e.g. She decided to go ________ the bad weather.)",
+      "question": "Short, clear English sentence with a blank (e.g. 'She decided to go ________ the bad weather.')",
+      "translation": "자연스러운 한글 해석 (예: '그녀는 궂은 날씨에도 불구하고 가기로 결정했다.')",
       "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 0,
-      "rationale": "Clear Korean explanation of why this answer is correct and why other choices are wrong."
+      "rationale": "초등학생도 쉽게 이해할 수 있는 친절한 1~2문장 해설"
     },
     {
       "id": "t2",
-      "question": "Question sentence in English with a blank",
+      "question": "Short, clear English sentence with a blank",
+      "translation": "자연스러운 한글 해석",
       "choices": ["Option A", "Option B", "Option C"],
       "correctIndex": 1,
-      "rationale": "Clear Korean explanation."
+      "rationale": "친절하고 쉬운 1~2문장 해설"
     }
   ]
 }

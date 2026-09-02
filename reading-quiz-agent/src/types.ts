@@ -74,6 +74,7 @@ export interface WrongAnswerCoachingStep2Data {
 export interface TransferQuizItem {
   id: string;
   question: string;
+  translation?: string; // 친절하고 쉬운 한글 해석/의도
   choices: string[];
   correctIndex: number;
   rationale: string;

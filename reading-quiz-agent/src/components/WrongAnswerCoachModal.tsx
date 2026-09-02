@@ -598,6 +598,12 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                             )}
                           </div>
 
+                          {tQuiz.translation && (
+                            <div style={{ fontSize: '0.8rem', color: '#93c5fd', backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '0.35rem 0.65rem', borderRadius: '6px', borderLeft: '2px solid #3b82f6' }}>
+                              <span style={{ fontWeight: '600' }}>💡 문맥 해석:</span> {tQuiz.translation}
+                            </div>
+                          )}
+
                           {/* Choices */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                             {tQuiz.choices.map((choice, cIdx) => {
