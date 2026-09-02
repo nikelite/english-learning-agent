@@ -25,8 +25,9 @@ export interface ReadingParagraph {
 
 // 1초 실전 상황 작문 (Situational Writing)
 export interface WritingScenarioOption {
-  category: string; // 예: "🏢 비즈니스 / 업무", "☕ 일상 / 대화"
-  situation: string; // 구체적 실전 상황 설명
+  category: string; // 예: "🔬 과학/학술", "☕ 일상/대화"
+  targetWord?: string; // 이 상황에서 집중 연습할 핵심 어휘 1개 (예: "deter (단념시키다/방지하다)")
+  situation: string; // 친절하고 이해하기 쉬운 실전 상황 설명
   koreanIntent: string; // 말하고자 하는 한국어 의도
   template: string; // 빈칸 템플릿
   sampleSentence: string; // 모범 완성 문장
@@ -35,6 +36,7 @@ export interface WritingScenarioOption {
 }
 
 export interface WritingTemplateData {
+  targetWord?: string;
   situation?: string;
   koreanIntent?: string;
   prompt: string;
