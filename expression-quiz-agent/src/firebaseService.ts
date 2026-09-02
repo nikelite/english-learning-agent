@@ -577,11 +577,19 @@ export async function sendEmailReport(
   totalCount: number,
   questionsList: any[],
   stats: AppStats,
-  customEmail?: string | null
+  customEmail?: string | null,
+  writingData?: {
+    sentence?: string;
+    feedback?: any | null;
+    scenario?: {
+      situation?: string;
+      koreanIntent?: string;
+    };
+  } | null
 ): Promise<void> {
   try {
-    const percentage = Math.round((correctCount / totalCount) * 100);
-    const isPerfect = correctCount === totalCount;
+    const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+    const isPerfect = totalCount > 0 && correctCount === totalCount;
     const primaryColor = '#8b5cf6'; // Premium Purple theme
     const secondaryColor = '#ec4899'; // Pink highlighting
     const successColor = '#10b981'; // Green
@@ -639,6 +647,75 @@ export async function sendEmailReport(
       `;
     }
 
+    // Situational Writing Section HTML
+    let writingSectionHtml = '';
+    if (writingData && (writingData.sentence || writingData.feedback)) {
+      const fb = writingData.feedback;
+      const scoreBadge = fb?.score !== undefined 
+        ? `<span style="font-size: 0.8rem; background: rgba(236, 72, 153, 0.2); color: #f472b6; padding: 4px 10px; border-radius: 9999px; font-weight: bold; border: 1px solid rgba(236, 72, 153, 0.4);">상황 완성도 ${fb.score}점</span>`
+        : '';
+
+      const situationBlock = writingData.scenario?.situation 
+        ? `<div style="margin-bottom: 10px;">
+             <span style="font-size: 0.75rem; color: #f472b6; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 4px;">🏢 실전 상황 시나리오</span>
+             <p style="margin: 0; font-size: 0.875rem; color: #e2e8f0; line-height: 1.5;">${writingData.scenario.situation}</p>
+           </div>`
+        : '';
+
+      const intentBlock = writingData.scenario?.koreanIntent
+        ? `<div style="background: rgba(236, 72, 153, 0.08); border-left: 3px solid #ec4899; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px;">
+             <span style="font-size: 0.7rem; color: #f472b6; font-weight: bold;">🎯 전달하고자 한 한국어 의도</span>
+             <p style="margin: 2px 0 0 0; font-size: 0.95rem; color: #ffffff; font-weight: bold;">"${writingData.scenario.koreanIntent}"</p>
+           </div>`
+        : '';
+
+      const userSentenceBlock = writingData.sentence
+        ? `<div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+             <span style="font-size: 0.75rem; color: #94a3b8; font-weight: bold; display: block; margin-bottom: 4px;">내가 작성한 영문:</span>
+             <p style="margin: 0; font-size: 0.95rem; color: #38bdf8; font-weight: bold;">"${writingData.sentence}"</p>
+           </div>`
+        : '';
+
+      const correctedBlock = fb?.correctedSentence
+        ? `<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+             <span style="font-size: 0.75rem; color: #6ee7b7; font-weight: bold; display: block; margin-bottom: 4px;">✨ AI 상황 맞춤 교정 완성 문장:</span>
+             <p style="margin: 0; font-size: 0.95rem; color: #10b981; font-weight: bold;">"${fb.correctedSentence}"</p>
+           </div>`
+        : '';
+
+      const nativeAltBlock = (fb?.nativeAlternative && fb.nativeAlternative !== fb.correctedSentence)
+        ? `<div style="background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.25); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px;">
+             <span style="font-size: 0.75rem; color: #22d3ee; font-weight: bold; display: block; margin-bottom: 4px;">🌟 원어민 실사용 추천 대체 표현:</span>
+             <p style="margin: 0; font-size: 0.9rem; color: #ffffff; font-weight: 600;">"${fb.nativeAlternative}"</p>
+           </div>`
+        : '';
+
+      const feedbackBlock = fb?.feedback
+        ? `<div style="background: rgba(255, 255, 255, 0.02); border: 1px dashed #475569; padding: 12px; border-radius: 8px; margin-top: 8px;">
+             <p style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; margin: 0;">
+               💬 <strong>AI 코칭 피드백:</strong> ${fb.feedback}
+             </p>
+           </div>`
+        : '';
+
+      writingSectionHtml = `
+        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid rgba(236, 72, 153, 0.4); border-radius: 16px; padding: 20px; margin: 24px 0; box-shadow: 0 10px 25px -5px rgba(236, 72, 153, 0.15);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <h3 style="margin: 0; font-size: 1.05rem; color: #f472b6; font-weight: 800;">
+              ✍️ 마지막 문제: 1초 실전 상황 작문 결과
+            </h3>
+            ${scoreBadge}
+          </div>
+          ${situationBlock}
+          ${intentBlock}
+          ${userSentenceBlock}
+          ${correctedBlock}
+          ${nativeAltBlock}
+          ${feedbackBlock}
+        </div>
+      `;
+    }
+
     const emailHtml = `
       <!DOCTYPE html>
       <html>
@@ -658,21 +735,38 @@ export async function sendEmailReport(
 
           <!-- Score Card -->
           <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 1px;">이번 표현 테스트 점수</span>
-            <h2 style="font-size: 3rem; font-weight: 900; margin: 8px 0; color: ${isPerfect ? successColor : '#f8fafc'};">
-              ${correctCount} / ${totalCount}
-              <span style="font-size: 1.5rem; font-weight: 500; color: #94a3b8;">(${percentage}%)</span>
-            </h2>
-            <div style="background-color: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); padding: 8px 16px; border-radius: 8px; display: inline-block; font-size: 0.85rem; color: #a78bfa; font-weight: bold; margin-bottom: 8px;">
+            <span style="font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 1px;">이번 표현 테스트 종합 성적</span>
+            
+            <div style="display: flex; justify-content: center; align-items: center; gap: 24px; margin: 12px 0;">
+              <div>
+                <span style="font-size: 0.75rem; color: #94a3b8; display: block;">객관식 점수</span>
+                <span style="font-size: 2.25rem; font-weight: 900; color: ${isPerfect ? successColor : '#f8fafc'};">
+                  ${correctCount} / ${totalCount}
+                </span>
+                <span style="font-size: 0.85rem; color: #94a3b8; display: block;">(${percentage}%)</span>
+              </div>
+              ${writingData?.feedback?.score !== undefined ? `
+                <div style="width: 1px; height: 50px; background-color: #334155;"></div>
+                <div>
+                  <span style="font-size: 0.75rem; color: #f472b6; display: block; font-weight: 700;">실전 상황 작문</span>
+                  <span style="font-size: 2.25rem; font-weight: 900; color: #ec4899;">
+                    ${writingData.feedback.score}점
+                  </span>
+                  <span style="font-size: 0.85rem; color: #f472b6; display: block;">(상황 완성도)</span>
+                </div>
+              ` : ''}
+            </div>
+
+            <div style="background-color: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); padding: 8px 16px; border-radius: 8px; display: inline-block; font-size: 0.85rem; color: #a78bfa; font-weight: bold; margin-top: 8px;">
               🔥 ${stats.streak}일 연속 스트릭 달성 중!
             </div>
-            <p style="margin: 8px 0 0 0; font-size: 0.9rem; color: #cbd5e1; font-weight: bold;">
+            <p style="margin: 12px 0 0 0; font-size: 0.9rem; color: #cbd5e1; font-weight: bold;">
               주제: "${lessonTitle}"
             </p>
           </div>
 
           <!-- Lifetime Stats -->
-          <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 16px 20px; margin-bottom: 32px;">
+          <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 16px 20px; margin-bottom: 24px;">
             <h3 style="margin: 0 0 12px 0; font-size: 0.9rem; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">📊 나의 누적 클라우드 통계</h3>
             <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
               <tr>
@@ -696,9 +790,12 @@ export async function sendEmailReport(
             </table>
           </div>
 
+          <!-- Situational Writing Section Breakdown -->
+          ${writingSectionHtml}
+
           <!-- Questions Breakdown -->
-          <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #f8fafc; border-bottom: 2px solid ${isPerfect ? successColor : '#ef4444'}; padding-bottom: 6px;">
-            📝 전체 문항 상세 해설 및 분석
+          <h3 style="margin: 24px 0 12px 0; font-size: 1rem; color: #f8fafc; border-bottom: 2px solid ${isPerfect ? successColor : '#ef4444'}; padding-bottom: 6px;">
+            📝 객관식 점검 문항 상세 해설 및 분석
           </h3>
           ${questionsHtml}
 
@@ -722,11 +819,15 @@ export async function sendEmailReport(
       toEmail = 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
     }
 
+    const emailSubject = (writingData?.feedback?.score !== undefined)
+      ? `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (객관식: ${correctCount}/${totalCount}, 작문: ${writingData.feedback.score}점)`
+      : `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`;
+
     const mailCollection = collection(db, 'mail');
     await addDoc(mailCollection, {
       to: toEmail,
       message: {
-        subject: `[EXPRESS.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
+        subject: emailSubject,
         html: emailHtml
       }
     });

@@ -1708,8 +1708,17 @@ ${quiz.rationale}`;
               allQuestionsList = list;
             }
 
+            const writingData = (activeLesson.userWritingSentence || activeLesson.userWritingFeedback) ? {
+              sentence: activeLesson.userWritingSentence,
+              feedback: activeLesson.userWritingFeedback,
+              scenario: {
+                situation: activeLesson.writingTemplate?.scenarios?.[0]?.situation || activeLesson.writingTemplate?.situation,
+                koreanIntent: activeLesson.writingTemplate?.scenarios?.[0]?.koreanIntent || activeLesson.writingTemplate?.koreanIntent
+              }
+            } : null;
+
             logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-            sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
+            sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail, writingData);
           } catch (logErr) {
             console.warn("Cloud quiz attempt logging error (non-fatal):", logErr);
           }
