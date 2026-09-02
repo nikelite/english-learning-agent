@@ -413,6 +413,16 @@ Strict Target & Formatting Rules:
    - When asking fill-in-the-blank or sentence completion questions (e.g., "Select the grammatically correct phrase...", "Which word best fits...", "Complete the sentence..."), you MUST INCLUDE THE FULL TARGET SENTENCE WITH A BLANK ("_______") directly inside the "question" text string!
    - Example CORRECT: "Select the grammatically correct phrase to complete the sentence: 'Looking up at the sky, we saw _______ moving across the horizon.'"
    - Example INCORRECT (FORBIDDEN): "Select the grammatically correct phrase to complete the sentence:" (WITHOUT any sentence or blank). NEVER output empty or sentence-less question stems!
+6. SITUATIONAL WRITING TEMPLATE (1초 실전 상황 작문 템플릿):
+   - You MUST include a 'writingTemplate' object with 2 realistic scenarios ('scenarios' array) precisely aligned with the passage's domain and topic (e.g. Science, Tech, History, Culture, Society, Business, or General Conversation).
+   - In each scenario, select 1~2 specific key vocabulary words or expressions from your 'vocabulary' list and design a realistic situation and sentence around them.
+   - "category": A vivid Korean category name matching the passage's theme (e.g. "🔬 과학 탐구 / 학술 토론 상황", "💻 IT 기술 / 실무 회의 상황", "🏛️ 인문·역사 분석 / 의견 개진", "🌍 사회·환경 이슈 / 토론 상황", "☕ 일상 대화 / 문화 토론 상황").
+   - "situation": 2-3 detailed sentences in Korean describing the realistic context.
+   - "koreanIntent": The exact Korean sentence the user wants to say, with target English vocabulary indicated in parentheses.
+   - "template": English scaffold with blanks "_______" to guide sentence construction.
+   - "sampleSentence": High-quality natural native English completion.
+   - "keyKeywords": 2-3 target words formatted like ["deter (단념시키다/방어하다)", "loss (손실)"].
+   - "tip": 1-2 sentence tip in Korean.
 
 Strict JSON Schema Requirements:
 {
@@ -448,7 +458,36 @@ Strict JSON Schema Requirements:
       "rationale": "Extremely detailed, easy-to-understand explanation in KOREAN that directly cites the original English sentences to clarify correct and incorrect choices.",
       "type": "comprehension or vocab"
     }
-  ]
+  ],
+  "writingTemplate": {
+    "situation": "Detailed scenario in Korean matching passage domain",
+    "koreanIntent": "The target Korean sentence to say in quotes",
+    "prompt": "본문 핵심 어휘를 활용하여 상황에 맞는 1문장을 완성해 보세요.",
+    "template": "English fill-in-the-blank template with blanks _______",
+    "sampleSentence": "A natural, high-quality native English completion",
+    "tip": "Helpful tip in Korean",
+    "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
+    "scenarios": [
+      {
+        "category": "Vivid category in Korean matching the passage context (e.g. 🔬 과학/학술, 💻 IT/실무, 🏛️ 인문/역사, 🌍 사회/환경, ☕ 일상/문화 등)",
+        "situation": "Detailed situation in Korean (2-3 sentences)",
+        "koreanIntent": "The target Korean sentence to say in quotes",
+        "template": "English fill-in-the-blank template with blanks _______",
+        "sampleSentence": "Natural native English sentence",
+        "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
+        "tip": "Tip in Korean"
+      },
+      {
+        "category": "Another vivid category in Korean matching the passage context",
+        "situation": "Detailed situation in Korean (2-3 sentences)",
+        "koreanIntent": "The target Korean sentence to say in quotes",
+        "template": "English fill-in-the-blank template with blanks _______",
+        "sampleSentence": "Natural native English sentence",
+        "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
+        "tip": "Tip in Korean"
+      }
+    ]
+  }
 }`;
 
 export async function generateReadingLesson(
@@ -1660,34 +1699,55 @@ Analyze this reading passage:
 - Passage Excerpt: "${lesson.passageText.slice(0, 1500)}"
 - Key Vocabulary/Expressions: "${vocabListStr}"
 
-Generate 2 DISTINCT, HIGHLY VIVID, REAL-WORLD SITUATIONAL SCENARIOS (1 Business/Workplace scenario, 1 Daily Life/Casual scenario) where the student must write 1 practical English sentence using the key theme or vocabulary from this article.
+CRITICAL TASK:
+Generate 2 DISTINCT, HIGHLY VIVID, REAL-WORLD SITUATIONAL SCENARIOS tailored precisely to the domain/theme of this passage (e.g. Science, Technology, History, Culture, Society, Business, or Daily Life) that directly test the student's ability to apply the core theme and specific key vocabulary from this article in 1 practical English sentence.
+
+CRITICAL GUIDELINES:
+1. TOPIC-ALIGNED CATEGORY (category in Korean):
+   - Do NOT just use fixed '비즈니스 / 업무 상황'.
+   - Dynamically create a vivid category label that fits the passage's subject matter (e.g. '🔬 과학 탐구 / 학술 발표 상황', '💻 IT 기술 / 실무 회의 상황', '🏛️ 인문·역사 분석 / 의견 개진', '🌍 사회·환경 이슈 / 토론 상황', '☕ 일상 대화 / 문화 토론 상황').
+2. MANDATORY VOCABULARY INTEGRATION:
+   - For each scenario, pick 1~2 specific key vocabulary words or expressions from the passage (e.g. from: ${vocabListStr}).
+   - The scenario and the sentence the user must compose MUST actively require utilizing these target words.
+3. VIVID REAL-WORLD CONTEXT (situation in Korean):
+   - 2-3 detailed sentences describing WHO the user is talking to, WHAT the realistic setting/discussion/conflict is, and WHY they need to say this sentence now.
+4. CONCRETE TARGET KOREAN INTENT (koreanIntent in Korean):
+   - The exact Korean sentence the user wants to say, clearly indicating the target English nuance or vocabulary in parentheses (e.g. '우리는 잠재적 리스크를 단념시키고(deter) 추가 손실을 방지하기 위해 이 조치를 시행해야 합니다.').
+5. SENTENCE SCAFFOLD (template in English):
+   - A helpful fill-in-the-blank template or sentence frame with blanks '_______' to guide sentence construction.
+6. NATURAL SAMPLE SENTENCE (sampleSentence in English):
+   - A natural, professional native English sentence completing the thought.
+7. TARGET KEYWORDS (keyKeywords in Korean/English):
+   - Array of 2-3 target keyword chips like ["deter (단념시키다/방지하다)", "potential risks (잠재적 위험)"].
+8. PRACTICAL TIP (tip in Korean):
+   - 1-2 sentence tip explaining why this vocabulary and structure is best suited for this exact scenario.
 
 Return a JSON object with this exact schema:
 {
-  "situation": "Detailed Workplace scenario in Korean (2 sentences describing context)",
-  "koreanIntent": "The specific Korean sentence the student wants to say in quotes (e.g. '이 보고서의 핵심 요약본을 내일까지 공유해 드릴게요.')",
-  "prompt": "Punchy 1-line writing challenge in Korean",
-  "template": "English fill-in-the-blank template matching the grammar topic with options in parentheses",
-  "sampleSentence": "A natural, high-quality native English completion of the template",
+  "situation": "Detailed scenario in Korean matching the passage context",
+  "koreanIntent": "The target Korean sentence to say in quotes",
+  "prompt": "본문 핵심 어휘를 활용하여 상황에 맞는 1문장을 완성해 보세요.",
+  "template": "English fill-in-the-blank template matching the target structure",
+  "sampleSentence": "A natural, high-quality native English completion",
   "tip": "Helpful tip in Korean explaining the choice in this scenario",
-  "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+  "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
   "scenarios": [
     {
-      "category": "🏢 비즈니스 / 업무 상황",
-      "situation": "Detailed workplace situation in Korean",
-      "koreanIntent": "The target Korean sentence to say",
-      "template": "English fill-in-the-blank template matching the grammar topic",
+      "category": "Vivid category in Korean matching the passage context (e.g. 🔬 과학/학술, 💻 IT/실무, 🏛️ 인문/역사, 🌍 사회/환경, ☕ 일상/문화 등)",
+      "situation": "Detailed situation in Korean (2-3 sentences)",
+      "koreanIntent": "The target Korean sentence to say in quotes",
+      "template": "English fill-in-the-blank template with blanks _______",
       "sampleSentence": "Natural native English sentence",
-      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
       "tip": "Tip in Korean"
     },
     {
-      "category": "☕ 일상 / 대화 상황",
-      "situation": "Detailed daily conversation situation in Korean",
-      "koreanIntent": "The target Korean sentence to say",
-      "template": "English fill-in-the-blank template matching the grammar topic",
+      "category": "Another vivid category in Korean matching the passage context",
+      "situation": "Detailed situation in Korean (2-3 sentences)",
+      "koreanIntent": "The target Korean sentence to say in quotes",
+      "template": "English fill-in-the-blank template with blanks _______",
       "sampleSentence": "Natural native English sentence",
-      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "keyKeywords": ["keyword1 (meaning)", "keyword2 (meaning)"],
       "tip": "Tip in Korean"
     }
   ]

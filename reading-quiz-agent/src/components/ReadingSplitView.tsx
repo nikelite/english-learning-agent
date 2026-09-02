@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react';
 import { safeSetLocalStorage } from '../utils/storage';
 import { saveToIndexedDB, loadFromIndexedDB, STORE_ANALYSIS } from '../utils/indexedDBStorage';
 import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2, Edit3 } from 'lucide-react';
-import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis, WritingEvaluationResult } from '../types';
+import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis, WritingEvaluationResult, WritingTemplateData } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 import { QuizContextSentence } from './QuizContextSentence';
@@ -24,6 +24,7 @@ interface ReadingSplitViewProps {
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: ReadingQuizItem, lessonId?: string) => Promise<void>;
   onSaveWriting?: (sentence: string, feedback: WritingEvaluationResult) => void;
+  onSaveWritingTemplate?: (template: WritingTemplateData) => void;
 }
 
 
@@ -41,7 +42,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   mochiApiKey,
   mochiQuizDeckId,
   onAddQuizToMochi,
-  onSaveWriting
+  onSaveWriting,
+  onSaveWritingTemplate
 }) => {
   // Active questions under play (changes if user filters to 'retry incorrect')
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -1587,6 +1589,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                       lesson={lesson}
                       apiKey={apiKey}
                       onSaveWriting={onSaveWriting}
+                      onSaveWritingTemplate={onSaveWritingTemplate}
                       isQuizMode={true}
                       onCompleteQuiz={handleFinishQuiz}
                     />

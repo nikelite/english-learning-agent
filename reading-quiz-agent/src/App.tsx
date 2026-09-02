@@ -7,7 +7,7 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
-import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary, WritingEvaluationResult } from './types';
+import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary, WritingEvaluationResult, WritingTemplateData } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from './geminiService';
 import { getContextSentence } from './components/QuizContextSentence';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
@@ -2025,6 +2025,18 @@ ${quiz.rationale}`;
     }
   };
 
+  const handleSaveWritingTemplate = async (template: WritingTemplateData) => {
+    if (!activeLesson) return;
+    const updatedLesson: ReadingLesson = {
+      ...activeLesson,
+      writingTemplate: template
+    };
+    setActiveLesson(updatedLesson);
+    if (!activeLesson.id.startsWith('preset-')) {
+      await saveLessonToHistory(updatedLesson);
+    }
+  };
+
   const handleAddCustomVocabulary = (newVocab: ReadingVocabulary) => {
     if (!activeLesson) return;
     const updatedLesson = {
@@ -2891,6 +2903,7 @@ ${quiz.rationale}`;
                 mochiQuizDeckId={mochiQuizDeckId}
                 onAddQuizToMochi={handlePushSingleQuizToMochi}
                 onSaveWriting={handleSaveWriting}
+                onSaveWritingTemplate={handleSaveWritingTemplate}
               />
             )}
           </div>

@@ -10,6 +10,7 @@ interface WritingPracticeSectionProps {
   lesson: ReadingLesson;
   apiKey: string;
   onSaveWriting?: (sentence: string, feedback: WritingEvaluationResult) => void;
+  onSaveWritingTemplate?: (template: WritingTemplateData) => void;
   isQuizMode?: boolean;
   onCompleteQuiz?: () => void;
 }
@@ -18,16 +19,37 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   lesson,
   apiKey,
   onSaveWriting,
+  onSaveWritingTemplate,
   isQuizMode = false,
   onCompleteQuiz
 }) => {
+  // Construct smart dynamic fallback based on actual lesson vocabulary
+  const firstVocab = (lesson.vocabulary && lesson.vocabulary.length > 0) ? lesson.vocabulary[0] : null;
+  const secondVocab = (lesson.vocabulary && lesson.vocabulary.length > 1) ? lesson.vocabulary[1] : null;
+  const thirdVocab = (lesson.vocabulary && lesson.vocabulary.length > 2) ? lesson.vocabulary[2] : null;
+
+  const defaultKeywords = [
+    firstVocab ? `${firstVocab.word} (${firstVocab.meaning})` : null,
+    secondVocab ? `${secondVocab.word} (${secondVocab.meaning})` : null,
+    thirdVocab ? `${thirdVocab.word} (${thirdVocab.meaning})` : null
+  ].filter(Boolean) as string[];
+
+  const dynamicSituation = `본문 "${lesson.title}"의 주요 내용을 바탕으로, 비즈니스 미팅 또는 대화에서 '${firstVocab ? `${firstVocab.word}(${firstVocab.meaning})` : '본문 핵심 어휘'}'의 의미를 살려 자신의 견해나 향후 계획을 전달해야 하는 상황입니다.`;
+  const dynamicIntent = `"${firstVocab ? `${firstVocab.word}(${firstVocab.meaning})` : '본문 핵심 어휘'}"을(를) 활용하여, 본문의 문맥에 맞는 자연스러운 1문장을 영어로 완성해 보세요.`;
+  const dynamicTemplate = firstVocab ? `In order to ${firstVocab.word}, we should ____________________.` : `In this situation, we need to ____________________.`;
+
   const [localWritingTemplate, setLocalWritingTemplate] = useState<WritingTemplateData>(() => {
-    if (lesson.writingTemplate) return lesson.writingTemplate;
+    if (lesson.writingTemplate?.scenarios && lesson.writingTemplate.scenarios.length > 0) {
+      return lesson.writingTemplate;
+    }
     return {
-      prompt: "본문의 핵심 표현과 주제를 활용하여 1초 내에 실전 영어 문장을 완성해 보세요.",
-      template: "____________________.",
-      sampleSentence: "",
-      tip: "본문에서 배운 어휘나 표현을 자유롭게 활용해 보세요.",
+      prompt: "본문의 핵심 어휘와 주제를 활용하여 1초 내에 실전 영어 문장을 완성해 보세요.",
+      situation: dynamicSituation,
+      koreanIntent: dynamicIntent,
+      template: dynamicTemplate,
+      sampleSentence: firstVocab ? `In order to ${firstVocab.word}, we should take immediate action.` : "",
+      keyKeywords: defaultKeywords,
+      tip: firstVocab ? `본문에서 학습한 '${firstVocab.word}' 어휘의 뉘앙스를 살려 문장을 구성해 보세요.` : "본문의 핵심 어휘를 응용해 보세요.",
       scenarios: []
     };
   });
@@ -42,24 +64,49 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
   const [isGeneratingScenarios, setIsGeneratingScenarios] = useState<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync when lesson changes
+  // Sync when lesson changes or auto-generate if missing
   useEffect(() => {
-    if (lesson.writingTemplate) {
+    if (lesson.writingTemplate?.scenarios && lesson.writingTemplate.scenarios.length > 0) {
       setLocalWritingTemplate(lesson.writingTemplate);
+    } else if (apiKey) {
+      // Auto-generate high quality bespoke scenarios using Gemini
+      let isSubscribed = true;
+      setIsGeneratingScenarios(true);
+      generateReadingWritingScenarios(lesson, apiKey)
+        .then(generated => {
+          if (isSubscribed && generated && generated.scenarios && generated.scenarios.length > 0) {
+            setLocalWritingTemplate(generated);
+            setActiveScenarioIdx(0);
+            if (onSaveWritingTemplate) {
+              onSaveWritingTemplate(generated);
+            }
+          }
+        })
+        .catch(err => {
+          console.error("Auto-generate reading writing scenarios failed:", err);
+        })
+        .finally(() => {
+          if (isSubscribed) {
+            setIsGeneratingScenarios(false);
+          }
+        });
+      return () => {
+        isSubscribed = false;
+      };
     }
     setUserSentence(lesson.userWritingSentence || '');
     setFeedback(lesson.userWritingFeedback || null);
     setActiveScenarioIdx(0);
-  }, [lesson.id]);
+  }, [lesson.id, apiKey]);
 
   const defaultScenario: WritingScenarioOption = {
-    category: "🏢 실전 비즈니스 / 대화 상황",
-    situation: localWritingTemplate.situation || "본문의 핵심 주제와 관련된 실전 대화 상황입니다.",
-    koreanIntent: localWritingTemplate.koreanIntent || "상황에 알맞은 1문장을 영어로 완성해 보세요.",
-    template: localWritingTemplate.template || "____________________.",
-    sampleSentence: localWritingTemplate.sampleSentence || "",
-    keyKeywords: localWritingTemplate.keyKeywords || (lesson.vocabulary ? lesson.vocabulary.slice(0, 3).map(v => v.word) : []),
-    tip: localWritingTemplate.tip || "본문의 핵심 표현을 응용해 보세요."
+    category: localWritingTemplate.scenarios?.[0]?.category || "📖 본문 맥락 실전 대화 상황",
+    situation: localWritingTemplate.situation || dynamicSituation,
+    koreanIntent: localWritingTemplate.koreanIntent || dynamicIntent,
+    template: localWritingTemplate.template || dynamicTemplate,
+    sampleSentence: localWritingTemplate.sampleSentence || (firstVocab ? `In order to ${firstVocab.word}, we should take action.` : ""),
+    keyKeywords: (localWritingTemplate.keyKeywords && localWritingTemplate.keyKeywords.length > 0) ? localWritingTemplate.keyKeywords : defaultKeywords,
+    tip: localWritingTemplate.tip || (firstVocab ? `본문에서 학습한 '${firstVocab.word}' 어휘를 응용해 보세요.` : "본문의 핵심 어휘를 응용해 보세요.")
   };
 
   const scenarios: WritingScenarioOption[] = (localWritingTemplate.scenarios && localWritingTemplate.scenarios.length > 0)
@@ -79,6 +126,9 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       if (generated && generated.scenarios && generated.scenarios.length > 0) {
         setLocalWritingTemplate(generated);
         setActiveScenarioIdx(0);
+        if (onSaveWritingTemplate) {
+          onSaveWritingTemplate(generated);
+        }
       }
     } catch (err: any) {
       alert("AI 실전 시나리오 생성 실패: " + err.message);
@@ -190,6 +240,31 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       }
     }
   };
+
+  if (isGeneratingScenarios && (!localWritingTemplate.scenarios || localWritingTemplate.scenarios.length === 0)) {
+    return (
+      <div className="card-section animate-fade-in text-center" style={{
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        border: '1.5px solid rgba(236, 72, 153, 0.4)',
+        borderRadius: '16px',
+        padding: '3rem 1.5rem',
+        boxShadow: '0 8px 25px rgba(236, 72, 153, 0.12)',
+        marginTop: '1rem'
+      }}>
+        <Sparkles className="pulse-glow" style={{ color: '#ec4899', width: '38px', height: '38px', margin: '0 auto 1rem auto' }} />
+        <h4 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'white', marginBottom: '0.6rem', fontFamily: 'var(--font-display)' }}>
+          본문 핵심 어휘 기반 실전 작문 상황 생성 중...
+        </h4>
+        <p style={{ color: '#cbd5e1', fontSize: '0.85rem', lineHeight: '1.6', maxWidth: '460px', margin: '0 auto 1.5rem auto' }}>
+          AI가 지문("{lesson.title}")의 핵심 어휘({(lesson.vocabulary || []).slice(0, 3).map(v => v.word).join(', ')})와 문맥을 분석하여 실제 써먹을 수 있는 생생한 비즈니스 및 대화 상황을 구성하고 있습니다.
+        </p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          <RefreshCw className="animate-spin" size={14} />
+          <span>잠시만 기다려 주세요 (약 2~3초 소요)</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card-section animate-fade-in" style={{
