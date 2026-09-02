@@ -12,6 +12,9 @@ interface WrongAnswerCoachModalProps {
   apiKey: string;
   onAddQuizToMochi?: (quiz: QuizItem | TransferQuizItem) => Promise<void>;
   onGraduate?: () => void;
+  onRetryOriginalQuestion?: (quizItem: QuizItem) => void;
+  remainingWrongsCount?: number;
+  onNextWrongQuestion?: () => void;
 }
 
 export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
@@ -22,7 +25,10 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
   lessonTitle,
   apiKey,
   onAddQuizToMochi,
-  onGraduate
+  onGraduate,
+  onRetryOriginalQuestion,
+  remainingWrongsCount = 0,
+  onNextWrongQuestion
 }) => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
@@ -724,23 +730,65 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                       소크라테스식 힌트 ➔ 뉘앙스 대조 ➔ 변형 실전 적용까지 완벽하게 체화되었습니다.
                     </p>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                      {onGraduate && (
+                      {onRetryOriginalQuestion && (
                         <button
                           className="btn btn-primary"
+                          onClick={() => {
+                            onRetryOriginalQuestion(quizItem);
+                            onClose();
+                          }}
+                          style={{
+                            padding: '0.65rem 1.35rem',
+                            fontSize: '0.9rem',
+                            fontWeight: '800',
+                            background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
+                            boxShadow: '0 4px 15px rgba(236, 72, 153, 0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          <Sparkles size={16} />
+                          <span>🎯 본 문제 바로 다시 풀기</span>
+                        </button>
+                      )}
+
+                      {onNextWrongQuestion && remainingWrongsCount > 0 && (
+                        <button
+                          className="btn btn-accent"
+                          onClick={onNextWrongQuestion}
+                          style={{
+                            padding: '0.65rem 1.25rem',
+                            fontSize: '0.85rem',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          <span>➡️ 다음 오답 코칭 ({remainingWrongsCount}개 남음)</span>
+                          <ArrowRight size={15} />
+                        </button>
+                      )}
+
+                      {onGraduate && (
+                        <button
+                          className="btn btn-secondary"
                           onClick={() => {
                             onGraduate();
                             onClose();
                           }}
-                          style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
+                          style={{ padding: '0.65rem 1.15rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                         >
                           <BookmarkCheck size={16} />
-                          오답 마스터 완료 (졸업 처리)
+                          <span>오답 마스터 완료 (졸업)</span>
                         </button>
                       )}
+
                       <button
                         className="btn btn-secondary"
                         onClick={onClose}
-                        style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
+                        style={{ padding: '0.65rem 1.15rem', fontSize: '0.85rem' }}
                       >
                         닫기
                       </button>

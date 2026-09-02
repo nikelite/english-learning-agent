@@ -287,17 +287,40 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
 
   const handleRetryIncorrect = () => {
     const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
-    setActiveQuizzes(wrongs);
-    setSessionWrongs([]);
-    setAttemptWrongs([]);
-    // Reset answers for retry
-    setSubmittedAnswers({});
+    if (wrongs.length === 0) return;
+    
+    // Automatically launch AI 3-Step Socratic Coaching on the first wrong question
+    const firstWrong = wrongs[0];
+    const userAns = submittedAnswers[firstWrong.id] ?? (firstWrong.choices.length > 0 ? (firstWrong.correctIndex === 0 ? 1 : 0) : 0);
+    setCoachingQuizItem({ quiz: firstWrong, userAns });
+  };
+
+  const handleRetryOriginalQuestionFromCoach = (quizItem: QuizItem) => {
+    setCoachingQuizItem(null);
+    setActiveQuizzes([quizItem]);
+    setSubmittedAnswers(prev => {
+      const next = { ...prev };
+      delete next[quizItem.id];
+      return next;
+    });
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
-    setScore(0);
     setShowResult(false);
     setSavedWrongId(null);
+  };
+
+  const handleNextWrongCoaching = () => {
+    const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
+    const currentQuizId = coachingQuizItem?.quiz.id;
+    const nextIndex = wrongs.findIndex(q => q.id === currentQuizId) + 1;
+    if (nextIndex < wrongs.length) {
+      const nextWrong = wrongs[nextIndex];
+      const userAns = submittedAnswers[nextWrong.id] ?? 0;
+      setCoachingQuizItem({ quiz: nextWrong, userAns });
+    } else {
+      setCoachingQuizItem(null);
+    }
   };
 
   // Render Result Screen
@@ -372,9 +395,17 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             <button 
               className="btn btn-accent" 
               onClick={handleRetryIncorrect}
-              style={{ background: 'linear-gradient(135deg, var(--accent) 0%, #f43f5e 100%)', boxShadow: '0 4px 15px rgba(244,63,94,0.2)' }}
+              style={{
+                background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
+                boxShadow: '0 4px 15px rgba(244,63,94,0.3)',
+                fontWeight: '800',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
             >
-              🔄 틀린 문제만 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})
+              <Brain size={16} />
+              <span>🧠 틀린 문제 AI 3단계 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length}개)</span>
             </button>
           )}
 
@@ -828,6 +859,13 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             onGraduateReview(coachingQuizItem.quiz.id);
             setCoachingQuizItem(null);
           }}
+          onRetryOriginalQuestion={handleRetryOriginalQuestionFromCoach}
+          remainingWrongsCount={(() => {
+            const wrongList = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
+            const currentWrongIdx = wrongList.findIndex(q => q.id === coachingQuizItem.quiz.id);
+            return currentWrongIdx !== -1 ? Math.max(0, wrongList.length - 1 - currentWrongIdx) : 0;
+          })()}
+          onNextWrongQuestion={handleNextWrongCoaching}
         />
       )}
     </div>

@@ -145,6 +145,41 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     }
   };
 
+  const handleNextScenarioAndRetry = async () => {
+    setUserSentence('');
+    setFeedback(null);
+    setShowHint(false);
+    setShowSample(false);
+
+    if (scenarios.length > 1 && activeScenarioIdx < scenarios.length - 1) {
+      setActiveScenarioIdx(prev => prev + 1);
+      setTimeout(() => {
+        if (textareaRef.current) textareaRef.current.focus();
+      }, 100);
+    } else {
+      if (apiKey) {
+        setIsGeneratingScenarios(true);
+        try {
+          const generated = await generateWritingScenarios(lesson, apiKey);
+          if (generated && generated.scenarios && generated.scenarios.length > 0) {
+            setLocalWritingTemplate(generated);
+            setActiveScenarioIdx(0);
+          }
+        } catch (err: any) {
+          console.error("AI 시나리오 생성 실패:", err);
+          setActiveScenarioIdx(0);
+        } finally {
+          setIsGeneratingScenarios(false);
+        }
+      } else {
+        setActiveScenarioIdx(prev => (prev + 1) % scenarios.length);
+      }
+      setTimeout(() => {
+        if (textareaRef.current) textareaRef.current.focus();
+      }, 100);
+    }
+  };
+
   const handleCopyTemplate = () => {
     const rawTemplate = currentScenario.template.replace(/_{3,}/g, '');
     setUserSentence(rawTemplate);
@@ -800,34 +835,149 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
             </div>
           )}
 
-          {/* In Quiz Mode: Proceed to Final Quiz Results Button */}
-          {isQuizMode && onCompleteQuiz && (
+          {/* In Quiz Mode: Conditional Action Bar Based on 90 Point Threshold */}
+          {isQuizMode && (
             <div style={{
               marginTop: '1.5rem',
               paddingTop: '1.25rem',
               borderTop: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
-              justifyContent: 'center'
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '0.85rem'
             }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={onCompleteQuiz}
-                style={{
-                  padding: '0.85rem 2rem',
-                  fontSize: '1rem',
-                  fontWeight: '800',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
-                  boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)',
-                  cursor: 'pointer'
-                }}
-              >
-                <span>✨ 퀴즈 &amp; 작문 최종 결과 확인하기</span>
-                <Sparkles size={18} />
-              </button>
+              {!feedback ? (
+                /* Before submitting feedback in quiz mode */
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                  💡 실전 상황에 맞게 1문장을 작성하고 <strong>90점 이상</strong>을 획득하면 퀴즈가 최종 완료됩니다.
+                </p>
+              ) : feedback.score >= 90 ? (
+                /* Score >= 90: Passed! */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
+                  <div style={{
+                    padding: '0.55rem 1.15rem',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#6ee7b7',
+                    fontWeight: '700',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}>
+                    <CheckCircle2 size={16} />
+                    <span>🎉 90점 이상 달성 ({feedback.score}점)! 실전 작문 기준을 완벽히 통과하셨습니다.</span>
+                  </div>
+
+                  {onCompleteQuiz && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={onCompleteQuiz}
+                      style={{
+                        padding: '0.85rem 2.25rem',
+                        fontSize: '1rem',
+                        fontWeight: '800',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
+                        boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>✨ 퀴즈 &amp; 작문 최종 결과 확인하기</span>
+                      <Sparkles size={18} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                /* Score < 90: Fail threshold -> Switch Scenario & Retry */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
+                  <div style={{
+                    padding: '0.75rem 1.25rem',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    color: '#fde68a',
+                    fontWeight: '700',
+                    fontSize: '0.85rem',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.25rem',
+                    maxWidth: '560px'
+                  }}>
+                    <span style={{ color: '#fbbf24', fontSize: '0.925rem' }}>
+                      ⚠️ 작문 퀴즈 기준 점수 미달 ({feedback.score}점 / 목표 90점)
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#cbd5e1', fontWeight: '500' }}>
+                      표현의 실전 응용력을 완벽히 익히기 위해 <strong>새로운 상황 시나리오</strong>로 전환하여 다시 도전해 보세요!
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleNextScenarioAndRetry}
+                      disabled={isGeneratingScenarios}
+                      style={{
+                        padding: '0.8rem 1.75rem',
+                        fontSize: '0.95rem',
+                        fontWeight: '800',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #ec4899 100%)',
+                        boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isGeneratingScenarios ? (
+                        <>
+                          <RefreshCw className="animate-spin" size={16} />
+                          <span>새로운 상황 생성 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={16} />
+                          <span>🔄 새로운 실전 상황으로 다시 도전하기</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleRetryEdit}
+                      style={{ fontSize: '0.85rem', fontWeight: '700' }}
+                    >
+                      <Edit3 size={15} />
+                      <span>현재 상황에서 문장 고쳐 쓰기</span>
+                    </button>
+                  </div>
+
+                  {onCompleteQuiz && (
+                    <button
+                      type="button"
+                      onClick={onCompleteQuiz}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.75rem',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        marginTop: '0.35rem'
+                      }}
+                    >
+                      현재 점수({feedback.score}점)로 퀴즈 완료하고 넘어가기
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
