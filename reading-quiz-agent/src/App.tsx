@@ -7,7 +7,7 @@ import { ReviewRoom } from './components/ReviewRoom';
 import { Analytics } from './components/Analytics';
 import { ShareModal } from './components/ShareModal';
 import { fetchMochiDecks, createMochiCard } from './mochiService';
-import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary } from './types';
+import { ReadingLesson, WrongReadingAnswer, AppStats, ReadingQuizItem, ReadingVocabulary, WritingEvaluationResult } from './types';
 import { PRESET_READING_LESSONS, generateReadingLesson, deserializeLesson, splitPassageIntoLessons, splitIntoSentences, analyzePassageSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from './geminiService';
 import { getContextSentence } from './components/QuizContextSentence';
 import { Sparkles, Info, BookOpen, AlertCircle, RefreshCw, Layers, Edit2 } from 'lucide-react';
@@ -1896,8 +1896,15 @@ ${quiz.rationale}`;
             allQuestionsList = list;
           }
 
+          const writingData = (activeLesson.userWritingSentence || activeLesson.userWritingFeedback) ? {
+            sentence: activeLesson.userWritingSentence,
+            feedback: activeLesson.userWritingFeedback,
+            scenario: activeLesson.writingTemplate?.scenarios?.[0]?.situation || activeLesson.writingTemplate?.situation,
+            koreanIntent: activeLesson.writingTemplate?.scenarios?.[0]?.koreanIntent || activeLesson.writingTemplate?.koreanIntent
+          } : null;
+
           logQuizAttempt(userId, activeLesson.id, loggedTitle, correctCount, totalCount, list);
-          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail);
+          sendEmailReport(userId, loggedTitle, correctCount, totalCount, allQuestionsList, newStats, userEmail, writingData);
 
           const getEmailText = (id: string, custom?: string) => {
             if (custom && custom.trim()) return custom.trim();
@@ -2002,6 +2009,19 @@ ${quiz.rationale}`;
     } else {
       const savedLesson = await saveLessonToHistory(updatedLesson);
       setActiveLesson(savedLesson);
+    }
+  };
+
+  const handleSaveWriting = async (sentence: string, feedback: WritingEvaluationResult) => {
+    if (!activeLesson) return;
+    const updatedLesson: ReadingLesson = {
+      ...activeLesson,
+      userWritingSentence: sentence,
+      userWritingFeedback: feedback
+    };
+    setActiveLesson(updatedLesson);
+    if (!activeLesson.id.startsWith('preset-')) {
+      await saveLessonToHistory(updatedLesson);
     }
   };
 
@@ -2870,6 +2890,7 @@ ${quiz.rationale}`;
                 mochiApiKey={mochiApiKey}
                 mochiQuizDeckId={mochiQuizDeckId}
                 onAddQuizToMochi={handlePushSingleQuizToMochi}
+                onSaveWriting={handleSaveWriting}
               />
             )}
           </div>

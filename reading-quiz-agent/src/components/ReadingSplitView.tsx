@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { safeSetLocalStorage } from '../utils/storage';
 import { saveToIndexedDB, loadFromIndexedDB, STORE_ANALYSIS } from '../utils/indexedDBStorage';
-import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2 } from 'lucide-react';
-import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis } from '../types';
+import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2, Edit3 } from 'lucide-react';
+import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis, WritingEvaluationResult } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
 import { QuizContextSentence } from './QuizContextSentence';
+import { WritingPracticeSection } from './WritingPracticeSection';
+import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
 
 interface ReadingSplitViewProps {
   lesson: ReadingLesson;
@@ -21,6 +23,7 @@ interface ReadingSplitViewProps {
   mochiApiKey: string;
   mochiQuizDeckId: string;
   onAddQuizToMochi: (quiz: ReadingQuizItem, lessonId?: string) => Promise<void>;
+  onSaveWriting?: (sentence: string, feedback: WritingEvaluationResult) => void;
 }
 
 
@@ -37,7 +40,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   onAddCustomVocabulary,
   mochiApiKey,
   mochiQuizDeckId,
-  onAddQuizToMochi
+  onAddQuizToMochi,
+  onSaveWriting
 }) => {
   // Active questions under play (changes if user filters to 'retry incorrect')
   const [activeQuizzes, setActiveQuizzes] = useState<ReadingQuizItem[]>(() => injectedQuizzes);
@@ -272,6 +276,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   const [showResult, setShowResult] = useState(false);
   const [savedWrongId, setSavedWrongId] = useState<string | null>(null);
   const [addingToMochiIds, setAddingToMochiIds] = useState<Set<string>>(new Set());
+  const [coachingQuizItem, setCoachingQuizItem] = useState<{ quiz: ReadingQuizItem; userAns: number } | null>(null);
 
   const handlePushToMochi = async (quiz: ReadingQuizItem) => {
     if (!mochiApiKey.trim() || !mochiQuizDeckId.trim()) {
@@ -480,7 +485,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const activeQuestion = activeQuizzes[currentIdx];
-  const progressPercent = activeQuizzes.length > 0 ? ((currentIdx) / activeQuizzes.length) * 100 : 0;
+  const totalQuizSteps = activeQuizzes.length + 1;
+  const isLastWritingStep = currentIdx === activeQuizzes.length;
+  const progressPercent = Math.min(100, Math.round(((currentIdx + 1) / totalQuizSteps) * 100));
 
   const handleSelect = (idx: number) => {
     if (isSubmitted) return;
@@ -488,7 +495,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const handleSubmit = () => {
-    if (selectedAns === null || isSubmitted) return;
+    if (selectedAns === null || isSubmitted || !activeQuestion) return;
 
     setIsSubmitted(true);
     const isCorrect = selectedAns === activeQuestion.correctIndex;
@@ -540,6 +547,26 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     }
   };
 
+  const handleFinishQuiz = () => {
+    setShowResult(true);
+    const finalScore = score;
+    let finalWrongs = [...attemptWrongs];
+
+    const finalAnswers: Record<string, number> = {};
+    Object.entries(submittedAnswers).forEach(([key, val]) => {
+      if (val !== null && val !== undefined) {
+        finalAnswers[key] = val;
+      }
+    });
+
+    // Complete quiz in parent state
+    if (activeQuizzes.length === injectedQuizzes.length) {
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
+    } else {
+      onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
+    }
+  };
+
   const handleNext = () => {
     setSavedWrongId(null);
     setSelectedAns(null);
@@ -547,38 +574,11 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
     if (currentIdx < activeQuizzes.length - 1) {
       setCurrentIdx(prev => prev + 1);
+    } else if (currentIdx === activeQuizzes.length - 1) {
+      // Advance to final Situational Writing Question
+      setCurrentIdx(activeQuizzes.length);
     } else {
-      setShowResult(true);
-      const finalScore = score;
-      let finalWrongs = [...attemptWrongs];
-      if (selectedAns !== null && selectedAns !== activeQuestion.correctIndex) {
-        if (!finalWrongs.some(w => w.question === activeQuestion.question)) {
-          finalWrongs.push({
-            question: activeQuestion.question,
-            choices: activeQuestion.choices,
-            userAnswerIndex: selectedAns,
-            correctIndex: activeQuestion.correctIndex,
-            rationale: activeQuestion.rationale
-          });
-        }
-      }
-
-      const finalAnswers: Record<string, number> = {};
-      Object.entries(submittedAnswers).forEach(([key, val]) => {
-        if (val !== null && val !== undefined) {
-          finalAnswers[key] = val;
-        }
-      });
-      if (selectedAns !== null) {
-        finalAnswers[activeQuestion.id] = selectedAns;
-      }
-
-      // Complete quiz in parent state
-      if (activeQuizzes.length === injectedQuizzes.length) {
-        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers);
-      } else {
-        onQuizCompleted(finalScore, activeQuizzes.length, finalWrongs, finalAnswers, true);
-      }
+      handleFinishQuiz();
     }
   };
 
@@ -600,18 +600,41 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const handleRetryIncorrect = () => {
-    const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
-    setActiveQuizzes(wrongs);
-    setSessionWrongs([]);
-    setAttemptWrongs([]);
-    // Reset answers for retry
-    setSubmittedAnswers({});
+    const incorrectQuizzes = injectedQuizzes.filter(q => {
+      const ans = submittedAnswers[q.id];
+      return ans !== undefined && ans !== q.correctIndex;
+    });
+
+    if (incorrectQuizzes.length > 0) {
+      const firstWrong = incorrectQuizzes[0];
+      const userAns = submittedAnswers[firstWrong.id] ?? 0;
+      setCoachingQuizItem({ quiz: firstWrong, userAns });
+    }
+  };
+
+  const handleDirectRetryQuestion = (targetQuiz: ReadingQuizItem) => {
+    setActiveQuizzes([targetQuiz]);
     setCurrentIdx(0);
     setSelectedAns(null);
     setIsSubmitted(false);
-    setScore(0);
     setShowResult(false);
     setSavedWrongId(null);
+  };
+
+  const handleNextWrongCoaching = () => {
+    if (!coachingQuizItem) return;
+    const wrongList = activeQuizzes.filter(q => {
+      const ans = submittedAnswers[q.id];
+      return ans !== undefined && ans !== q.correctIndex;
+    });
+    const currentWrongIdx = wrongList.findIndex(q => q.id === coachingQuizItem.quiz.id);
+    if (currentWrongIdx !== -1 && currentWrongIdx < wrongList.length - 1) {
+      const nextWrong = wrongList[currentWrongIdx + 1];
+      const userAns = submittedAnswers[nextWrong.id] ?? 0;
+      setCoachingQuizItem({ quiz: nextWrong, userAns });
+    } else {
+      setCoachingQuizItem(null);
+    }
   };
 
   const handleAddNewVocab = async () => {
@@ -1264,38 +1287,60 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                       퀴즈 세트 완료!
                     </h3>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                      실전 훈련 결과를 확인하세요.
+                      "{lesson.title}"
                     </p>
 
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                       <div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>정답률</span>
-                        <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--secondary)' }}>
-                          {Math.round((score / activeQuizzes.length) * 100)}%
-                        </span>
-                      </div>
-                      <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
-                      <div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>점수</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>객관식 정답</span>
                         <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--primary)' }}>
                           {score} / {activeQuizzes.length}
                         </span>
                       </div>
+                      <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>객관식 정답률</span>
+                        <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--secondary)' }}>
+                          {activeQuizzes.length > 0 ? Math.round((score / activeQuizzes.length) * 100) : 0}%
+                        </span>
+                      </div>
+                      {lesson.userWritingFeedback?.score !== undefined && (
+                        <>
+                          <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
+                          <div>
+                            <span style={{ fontSize: '0.75rem', color: '#f472b6', display: 'block', fontWeight: '700' }}>실전 상황 작문</span>
+                            <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#ec4899' }}>
+                              {lesson.userWritingFeedback.score}점
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' }}>
                     {activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length > 0 && (
                       <button 
                         className="btn btn-accent" 
                         onClick={handleRetryIncorrect}
-                        style={{ width: '100%', background: 'linear-gradient(135deg, var(--accent) 0%, #f43f5e 100%)', boxShadow: '0 4px 15px rgba(244,63,94,0.2)' }}
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(135deg, var(--accent) 0%, #ec4899 100%)',
+                          boxShadow: '0 4px 15px rgba(236,72,153,0.25)',
+                          fontWeight: '800',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          padding: '0.85rem'
+                        }}
                       >
-                        ✍️ 틀린 문제만 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})
+                        <Brain size={18} />
+                        <span>🧠 틀린 문제 AI 3단계 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})</span>
                       </button>
                     )}
                     
-                    <button className="btn btn-primary" onClick={handleRestart} style={{ width: '100%' }}>
+                    <button className="btn btn-primary" onClick={handleRestart} style={{ width: '100%', padding: '0.75rem' }}>
                       <RefreshCw size={16} />
                       이 지문으로 다시 풀기
                     </button>
@@ -1330,15 +1375,37 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                               </span>
                               <span>Q{qIdx + 1}. {quiz.question.replace(/^🔄\s*\[.*?\]\s*/, '')}</span>
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
-                              onClick={() => handlePushToMochi(quiz)}
-                              disabled={addingToMochiIds.has(quiz.id)}
-                            >
-                              {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              {!isCorrect && userAnswer !== undefined && userAnswer !== null && (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{
+                                    padding: '0.15rem 0.5rem',
+                                    fontSize: '0.65rem',
+                                    flexShrink: 0,
+                                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                                    fontWeight: '700',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                  }}
+                                  onClick={() => setCoachingQuizItem({ quiz, userAns: userAnswer })}
+                                >
+                                  <Brain size={12} />
+                                  AI 3단계 코칭
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', flexShrink: 0 }}
+                                onClick={() => handlePushToMochi(quiz)}
+                                disabled={addingToMochiIds.has(quiz.id)}
+                              >
+                                {addingToMochiIds.has(quiz.id) ? "추가됨" : "⚡ Mochi 추가"}
+                              </button>
+                            </div>
                           </h5>
                           
                           <QuizContextSentence questionText={quiz.question} lesson={lesson} choices={quiz.choices} />
@@ -1397,6 +1464,132 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                         </div>
                       );
                     })}
+
+                    {/* Final Question: Situational Writing Result Analysis Card */}
+                    {(lesson.userWritingSentence || lesson.userWritingFeedback) && (
+                      <div style={{
+                        backgroundColor: 'rgba(236, 72, 153, 0.03)',
+                        border: '1.5px solid rgba(236, 72, 153, 0.35)',
+                        borderRadius: '12px',
+                        padding: '1.25rem',
+                        marginBottom: '1rem',
+                        boxShadow: '0 4px 15px rgba(236, 72, 153, 0.1)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <span style={{ color: (lesson.userWritingFeedback?.score ?? 0) >= 90 ? 'var(--success)' : '#f472b6', fontWeight: '900' }}>
+                              {(lesson.userWritingFeedback?.score ?? 0) >= 90 ? '✓' : '✍️'}
+                            </span>
+                            <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'white' }}>
+                              Q{totalQuizSteps}. 마지막 문제: 1초 실전 상황 작문
+                            </span>
+                          </div>
+                          {lesson.userWritingFeedback?.score !== undefined && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: '800',
+                              backgroundColor: (lesson.userWritingFeedback.score >= 90) ? 'rgba(16, 185, 129, 0.2)' : 'rgba(236, 72, 153, 0.2)',
+                              color: (lesson.userWritingFeedback.score >= 90) ? '#6ee7b7' : '#f472b6',
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '9999px',
+                              border: `1px solid ${(lesson.userWritingFeedback.score >= 90) ? 'rgba(16, 185, 129, 0.4)' : 'rgba(236, 72, 153, 0.4)'}`
+                            }}>
+                              상황 완성도 {lesson.userWritingFeedback.score}점
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Scenario Context */}
+                        {(lesson.writingTemplate?.scenarios?.[0]?.situation || lesson.writingTemplate?.situation) && (
+                          <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(0, 0, 0, 0.2)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#f472b6', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '0.2rem' }}>
+                              🏢 실전 상황
+                            </span>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.5' }}>
+                              {lesson.writingTemplate?.scenarios?.[0]?.situation || lesson.writingTemplate?.situation}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Target Korean Intent */}
+                        {(lesson.writingTemplate?.scenarios?.[0]?.koreanIntent || lesson.writingTemplate?.koreanIntent) && (
+                          <div style={{ marginBottom: '0.75rem', padding: '0.55rem 0.85rem', backgroundColor: 'rgba(236, 72, 153, 0.08)', borderRadius: '6px', borderLeft: '3px solid #ec4899' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: 'white' }}>
+                              🎯 의도: "{lesson.writingTemplate?.scenarios?.[0]?.koreanIntent || lesson.writingTemplate?.koreanIntent}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* User Written Sentence */}
+                        {lesson.userWritingSentence && (
+                          <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(0, 0, 0, 0.3)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                              내가 작성한 영문:
+                            </span>
+                            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#38bdf8' }}>
+                              "{lesson.userWritingSentence}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* AI Corrected Sentence */}
+                        {lesson.userWritingFeedback?.correctedSentence && (
+                          <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                              ✨ AI 상황 맞춤 교정 완성 문장:
+                            </span>
+                            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#10b981' }}>
+                              "{lesson.userWritingFeedback.correctedSentence}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Native Alternative Expression */}
+                        {lesson.userWritingFeedback?.nativeAlternative && lesson.userWritingFeedback.nativeAlternative !== lesson.userWritingFeedback.correctedSentence && (
+                          <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(6, 182, 212, 0.06)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#22d3ee', fontWeight: '700', display: 'block', marginBottom: '0.2rem' }}>
+                              🌟 원어민 실사용 추천 대체 표현:
+                            </span>
+                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'white' }}>
+                              "{lesson.userWritingFeedback.nativeAlternative}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* AI Feedback explanation */}
+                        {lesson.userWritingFeedback?.feedback && (
+                          <div className="eli5-analogy-box" style={{ padding: '0.75rem 0.9rem', fontSize: '0.8rem', lineHeight: '1.5', color: '#cbd5e1', margin: 0, borderRadius: '8px', borderStyle: 'dashed' }}>
+                            <strong style={{ color: '#f472b6', display: 'block', marginBottom: '0.25rem' }}>💬 AI 첨삭 피드백:</strong>
+                            {lesson.userWritingFeedback.feedback}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : isLastWritingStep ? (
+                /* FINAL QUESTION: SITUATIONAL WRITING CHALLENGE */
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      <span>실전 테스트 진행 상태</span>
+                      <span style={{ fontWeight: '700', color: '#f472b6' }}>
+                        {totalQuizSteps} / {totalQuizSteps} 문항 (마지막 문제: 1초 실전 상황 작문)
+                      </span>
+                    </div>
+                    <div className="quiz-progress-bar" style={{ height: '4px' }}>
+                      <div className="quiz-progress-fill" style={{ width: '100%', background: 'linear-gradient(90deg, var(--primary) 0%, #ec4899 100%)' }}></div>
+                    </div>
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <WritingPracticeSection
+                      lesson={lesson}
+                      apiKey={apiKey}
+                      onSaveWriting={onSaveWriting}
+                      isQuizMode={true}
+                      onCompleteQuiz={handleFinishQuiz}
+                    />
                   </div>
                 </div>
               ) : !activeQuestion ? (
@@ -1414,7 +1607,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <span>실전 테스트</span>
                       <span style={{ fontWeight: '700', color: 'var(--secondary)' }}>
-                        {currentIdx + 1} / {activeQuizzes.length} 문항
+                        {currentIdx + 1} / {totalQuizSteps} 문항 (객관식 점검)
                       </span>
                     </div>
                     <div className="quiz-progress-bar" style={{ height: '4px' }}>
@@ -1498,12 +1691,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                           {currentIdx < activeQuizzes.length - 1 ? (
                             <>
-                              다음 문제 넘어가기
+                              <span>다음 문제 넘어가기</span>
                               <ArrowRight size={15} />
                             </>
                           ) : (
                             <>
-                              시험 완료! 결과 보기
+                              <span>마지막 문제: 1초 실전 상황 작문 풀기</span>
                               <Sparkles size={15} />
                             </>
                           )}
@@ -1514,7 +1707,7 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                     {/* Explanations rationale box */}
                     {isSubmitted && (
                       <div className="quiz-explanation-box">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
                           {selectedAns === activeQuestion.correctIndex ? (
                             <span className="explanation-heading success" style={{ fontSize: '0.9rem' }}>
                               <BookmarkCheck size={18} /> 정답입니다! {activeQuestion.isReview && "오답 노트 정복 완료! 🎉"}
@@ -1524,15 +1717,38 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                               <AlertCircle size={18} /> 오답입니다. 오답 자동 보관됨 ✍️
                             </span>
                           )}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                            onClick={() => handlePushToMochi(activeQuestion)}
-                            disabled={addingToMochiIds.has(activeQuestion.id)}
-                          >
-                            {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가됨" : "⚡ Mochi 카드 추가"}
-                          </button>
+
+                          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                            {selectedAns !== activeQuestion.correctIndex && selectedAns !== null && (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  padding: '0.2rem 0.55rem',
+                                  fontSize: '0.7rem',
+                                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                                  fontWeight: '700',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                                onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns })}
+                              >
+                                <Brain size={13} />
+                                <span>🧠 AI 3단계 코칭</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                              onClick={() => handlePushToMochi(activeQuestion)}
+                              disabled={addingToMochiIds.has(activeQuestion.id)}
+                            >
+                              {addingToMochiIds.has(activeQuestion.id) ? "✓ Mochi 추가됨" : "⚡ Mochi 카드 추가"}
+                            </button>
+                          </div>
                         </div>
                         <div style={{ fontSize: '0.875rem', color: 'var(--text-primary)', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
                           {activeQuestion.rationale}
@@ -1647,6 +1863,39 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         </div>
       </div>
 
+      {/* Socratic Wrong Answer Coaching Modal */}
+      <WrongAnswerCoachModal
+        isOpen={coachingQuizItem !== null}
+        onClose={() => setCoachingQuizItem(null)}
+        quizItem={coachingQuizItem?.quiz || null}
+        userAnswerIndex={coachingQuizItem?.userAns ?? 0}
+        lessonTitle={lesson.title}
+        passageContext={lesson.passageText}
+        apiKey={apiKey}
+        onAddQuizToMochi={async (q) => {
+          const item: ReadingQuizItem = 'type' in q ? q : {
+            id: q.id,
+            question: q.question,
+            choices: q.choices,
+            correctIndex: q.correctIndex,
+            rationale: q.rationale,
+            type: 'comprehension'
+          };
+          await onAddQuizToMochi(item, lesson.id);
+        }}
+        onGraduate={() => {
+          if (coachingQuizItem?.quiz?.id) {
+            onGraduateReview(coachingQuizItem.quiz.id);
+          }
+        }}
+        onRetryOriginalQuestion={handleDirectRetryQuestion}
+        remainingWrongsCount={
+          coachingQuizItem
+            ? Math.max(0, activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length - 1)
+            : 0
+        }
+        onNextWrongQuestion={handleNextWrongCoaching}
+      />
     </div>
   );
 };

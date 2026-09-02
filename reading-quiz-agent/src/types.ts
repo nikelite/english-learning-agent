@@ -23,6 +23,66 @@ export interface ReadingParagraph {
   koreanTranslation: string;
 }
 
+// 1초 실전 상황 작문 (Situational Writing)
+export interface WritingScenarioOption {
+  category: string; // 예: "🏢 비즈니스 / 업무", "☕ 일상 / 대화"
+  situation: string; // 구체적 실전 상황 설명
+  koreanIntent: string; // 말하고자 하는 한국어 의도
+  template: string; // 빈칸 템플릿
+  sampleSentence: string; // 모범 완성 문장
+  keyKeywords?: string[]; // 추천 단어/표현 힌트
+  tip?: string; // 팁
+}
+
+export interface WritingTemplateData {
+  situation?: string;
+  koreanIntent?: string;
+  prompt: string;
+  template: string;
+  sampleSentence: string;
+  tip: string;
+  keyKeywords?: string[];
+  scenarios?: WritingScenarioOption[];
+}
+
+export interface WritingEvaluationResult {
+  isNatural: boolean;
+  score: number; // 1 ~ 100
+  feedback: string;
+  correctedSentence: string;
+  nativeAlternative: string;
+  explanation: string;
+}
+
+// AI 3단계 오답 코칭 (3-Stage Socratic Coaching)
+export interface WrongAnswerCoachingStep1Data {
+  socraticHint: string;
+  reflectiveQuestion: string;
+  guidedChoices: string[];
+  guidingInsight: string;
+}
+
+export interface WrongAnswerCoachingStep2Data {
+  nuanceContrast: string;
+  collocations: {
+    phrase: string;
+    meaning: string;
+    example: string;
+  }[];
+}
+
+export interface TransferQuizItem {
+  id: string;
+  question: string;
+  choices: string[];
+  correctIndex: number;
+  rationale: string;
+}
+
+export interface WrongAnswerCoachingStep3Data {
+  transferQuizzes: TransferQuizItem[];
+}
+
 export interface ReadingLesson {
   id: string;
   title: string;
@@ -31,6 +91,9 @@ export interface ReadingLesson {
   paragraphs: ReadingParagraph[];
   vocabulary: ReadingVocabulary[];
   quizzes: ReadingQuizItem[];
+  writingTemplate?: WritingTemplateData;
+  userWritingSentence?: string;
+  userWritingFeedback?: WritingEvaluationResult;
   ownerId?: string | null;
   sharedWith?: string[];
   userAnswers?: Record<string, number>;

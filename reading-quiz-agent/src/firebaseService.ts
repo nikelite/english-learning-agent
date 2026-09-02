@@ -14,7 +14,7 @@ import {
   deleteDoc,
   addDoc
 } from 'firebase/firestore';
-import { ReadingLesson, AppStats, WrongReadingAnswer, SentenceAnalysis } from './types';
+import { ReadingLesson, AppStats, WrongReadingAnswer, SentenceAnalysis, WritingEvaluationResult } from './types';
 
 // Embedded Firebase Configuration for User's english-agent project
 const firebaseConfig = {
@@ -646,7 +646,13 @@ export async function sendEmailReport(
   totalCount: number,
   questionsList: any[],
   stats: AppStats,
-  customEmail?: string | null
+  customEmail?: string | null,
+  writingData?: {
+    sentence?: string;
+    feedback?: WritingEvaluationResult;
+    scenario?: string;
+    koreanIntent?: string;
+  } | null
 ): Promise<void> {
   try {
     const percentage = Math.round((correctCount / totalCount) * 100);
@@ -707,6 +713,67 @@ export async function sendEmailReport(
       `;
     }
 
+    // Situational Writing Result Section for Email
+    let writingHtml = '';
+    if (writingData && (writingData.sentence || writingData.feedback)) {
+      const wScore = writingData.feedback?.score !== undefined ? `${writingData.feedback.score}점` : '완료';
+      const isHigh = (writingData.feedback?.score || 0) >= 80;
+      
+      writingHtml = `
+        <div style="margin-top: 24px; background: linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border: 1.5px solid #ec4899; border-radius: 12px; padding: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid rgba(236, 72, 153, 0.2); padding-bottom: 10px;">
+            <h3 style="margin: 0; font-size: 1.05rem; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+              <span>✍️ 실전 상황 작문 (Situational Writing) 결과</span>
+            </h3>
+            <span style="font-size: 0.8rem; font-weight: bold; background-color: ${isHigh ? '#10b981' : '#ec4899'}; color: white; padding: 4px 10px; border-radius: 9999px;">
+              완성도 ${wScore}
+            </span>
+          </div>
+
+          ${writingData.scenario ? `
+            <div style="background-color: rgba(0,0,0,0.3); padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85rem; color: #cbd5e1;">
+              <strong style="color: #f472b6; display: block; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 2px;">🏢 실전 상황:</strong>
+              ${writingData.scenario}
+            </div>
+          ` : ''}
+
+          ${writingData.koreanIntent ? `
+            <div style="background-color: rgba(236, 72, 153, 0.1); border-left: 3px solid #ec4899; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 0.9rem; color: #ffffff; font-weight: bold;">
+              🎯 의도: "${writingData.koreanIntent}"
+            </div>
+          ` : ''}
+
+          ${writingData.sentence ? `
+            <div style="margin-bottom: 10px; background-color: rgba(0,0,0,0.4); padding: 10px 14px; border-radius: 8px;">
+              <span style="font-size: 0.75rem; color: #94a3b8; font-weight: bold; display: block; margin-bottom: 2px;">내가 작성한 영문:</span>
+              <p style="margin: 0; font-size: 0.95rem; color: #38bdf8; font-weight: bold;">"${writingData.sentence}"</p>
+            </div>
+          ` : ''}
+
+          ${writingData.feedback?.correctedSentence ? `
+            <div style="margin-bottom: 10px; background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 10px 14px; border-radius: 8px;">
+              <span style="font-size: 0.75rem; color: #34d399; font-weight: bold; display: block; margin-bottom: 2px;">✨ AI 교정 완성 문장:</span>
+              <p style="margin: 0; font-size: 0.95rem; color: #10b981; font-weight: bold;">"${writingData.feedback.correctedSentence}"</p>
+            </div>
+          ` : ''}
+
+          ${writingData.feedback?.nativeAlternative ? `
+            <div style="margin-bottom: 10px; background-color: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.25); padding: 10px 14px; border-radius: 8px;">
+              <span style="font-size: 0.75rem; color: #22d3ee; font-weight: bold; display: block; margin-bottom: 2px;">🌟 원어민 실사용 추천 대체 표현:</span>
+              <p style="margin: 0; font-size: 0.9rem; color: #ffffff; font-weight: 600;">"${writingData.feedback.nativeAlternative}"</p>
+            </div>
+          ` : ''}
+
+          ${writingData.feedback?.feedback ? `
+            <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px dashed #475569; padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.5; color: #cbd5e1;">
+              <strong style="color: #f472b6; display: block; margin-bottom: 4px;">💬 AI 첨삭 피드백:</strong>
+              ${writingData.feedback.feedback}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
     const emailHtml = `
       <!DOCTYPE html>
       <html>
@@ -727,9 +794,9 @@ export async function sendEmailReport(
           <!-- Score Card -->
           <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); text-align: center; margin-bottom: 24px;">
             <span style="font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 1px;">이번 지문 테스트 점수</span>
-            <h2 style="font-size: 3rem; font-weight: 900; margin: 8px 0; color: ${isPerfect ? successColor : '#f8fafc'};">
-              ${correctCount} / ${totalCount}
-              <span style="font-size: 1.5rem; font-weight: 500; color: #94a3b8;">(${percentage}%)</span>
+            <h2 style="font-size: 2.5rem; font-weight: 900; margin: 8px 0; color: ${isPerfect ? successColor : '#f8fafc'};">
+              객관식: ${correctCount} / ${totalCount} (${percentage}%)
+              ${writingData?.feedback?.score !== undefined ? `<span style="font-size: 1.3rem; color: #f472b6; display: block; margin-top: 4px;">상황 작문: ${writingData.feedback.score}점</span>` : ''}
             </h2>
             <div style="background-color: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2); padding: 8px 16px; border-radius: 8px; display: inline-block; font-size: 0.85rem; color: #22d3ee; font-weight: bold; margin-bottom: 8px;">
               🔥 ${stats.streak}일 연속 스트릭 달성 중!
@@ -770,6 +837,9 @@ export async function sendEmailReport(
           </h3>
           ${questionsHtml}
 
+          <!-- Situational Writing Breakdown -->
+          ${writingHtml}
+
           <!-- Footer -->
           <div style="text-align: center; margin-top: 48px; border-top: 1px solid #334155; padding-top: 16px; font-size: 0.75rem; color: #64748b;">
             <p style="margin: 0;">본 메일은 <strong>READ.AGENT</strong> 인공지능 영어 학습 도우미가 발송한 결과 보고서입니다.</p>
@@ -790,11 +860,13 @@ export async function sendEmailReport(
       toEmail = 'nikelite+quiz@gmail.com, yjkwon98@hanmail.net, junhupark21@gmail.com';
     }
 
+    const writingScoreText = writingData?.feedback?.score !== undefined ? `, 작문: ${writingData.feedback.score}점` : '';
+
     const mailCollection = collection(db, 'mail');
     await addDoc(mailCollection, {
       to: toEmail,
       message: {
-        subject: `[READ.AGENT] ${lessonTitle} - 학습 결과 리포트 (점수: ${correctCount}/${totalCount})`,
+        subject: `[READ.AGENT] ${lessonTitle} - 학습 결과 리포트 (객관식: ${correctCount}/${totalCount}${writingScoreText})`,
         html: emailHtml
       }
     });

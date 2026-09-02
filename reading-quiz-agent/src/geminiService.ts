@@ -1,5 +1,9 @@
 import sbd from 'sbd';
-import { ReadingLesson, ReadingVocabulary, SentenceAnalysis } from './types';
+import { 
+  ReadingLesson, ReadingVocabulary, SentenceAnalysis,
+  WritingTemplateData, WritingEvaluationResult,
+  WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data
+} from './types';
 
 // Centralized sentence splitting function using sbd (Sentence Boundary Detection) with robust masking for abbreviations and initials
 export function splitIntoSentences(text: string): string[] {
@@ -1431,4 +1435,342 @@ export function formatPdfFileName(title: string): string {
 
   return clean || "Reading_Lesson";
 }
+
+function cleanJsonString(str: string): string {
+  let cleaned = str.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.substring(7);
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.substring(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.substring(0, cleaned.length - 3);
+  }
+  return cleaned.trim();
+}
+
+/**
+ * 3단계 오답 코칭 Step 1: 정답을 가리고 인지적 착각 원인과 소크라테스식 힌트 질문 생성
+ */
+export async function generateWrongAnswerCoachingStep1(
+  question: string,
+  choices: string[],
+  userWrongAnswer: string,
+  apiKey: string,
+  passageContext?: string
+): Promise<WrongAnswerCoachingStep1Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
+  const prompt = `You are a Socratic English reading tutor. The student solved a reading comprehension or vocabulary quiz and chose a WRONG answer.
+Do NOT reveal the correct answer. The goal is to stimulate cognitive retrieval, contextual clues analysis, and self-correction.
+
+${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1000)}..."\n` : ''}
+Quiz Question:
+${question}
+
+Choices:
+${choicesStr}
+
+Student's Selected Wrong Answer:
+"${userWrongAnswer}"
+
+Provide:
+1. socraticHint: A helpful Socratic guiding hint in Korean (1-2 sentences) pointing to the passage context or nuance without giving away the answer.
+2. reflectiveQuestion: ONE decisive reflective question in Korean prompting the student to reconsider their logic.
+3. guidedChoices: An array of 2-3 brief hint strings in Korean.
+4. guidingInsight: A brief encouraging insight in Korean.
+
+Output JSON only matching this schema:
+{
+  "socraticHint": "본문 문맥과 단서를 짚어주는 소크라테스식 힌트",
+  "reflectiveQuestion": "정답을 유추할 수 있도록 생각을 유도하는 질문",
+  "guidedChoices": ["단서 힌트 1", "단서 힌트 2"],
+  "guidingInsight": "핵심 착안점 요약"
+}
+Do not wrap in markdown \`\`\`json.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 1단계 코칭 힌트를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep1Data;
+}
+
+/**
+ * 3단계 오답 코칭 Step 2: 뉘앙스 비교 및 멘탈 모델 교정 + 원어민 짝꿍 표현 2개
+ */
+export async function generateWrongAnswerCoachingStep2(
+  question: string,
+  userWrongAnswer: string,
+  correctAnswer: string,
+  rationale: string,
+  apiKey: string,
+  passageContext?: string
+): Promise<WrongAnswerCoachingStep2Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an expert native English reading tutor and coach.
+The student has now seen the correct answer. Your goal is deep nuance comparison and contextual understanding.
+
+${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1000)}..."\n` : ''}
+Question:
+${question}
+
+Student's Wrong Choice:
+"${userWrongAnswer}"
+
+Actual Correct Answer:
+"${correctAnswer}"
+
+Explanation/Rationale:
+${rationale}
+
+Provide:
+1. nuanceContrast: Contrast the nuance and meaning difference between [Wrong Choice] and [Correct Answer] in 2 clear Korean sentences.
+2. collocations: Provide EXACTLY 2 native English collocations (natural partner phrases) featuring the correct word/expression, with Korean meaning and a practical example sentence.
+
+Output JSON matching this schema:
+{
+  "nuanceContrast": "오답과 정답의 뉘앙스/문맥 차이 2문장 대조",
+  "collocations": [
+    {
+      "phrase": "Native collocation 1",
+      "meaning": "한글 의미",
+      "example": "Practical example sentence in English"
+    },
+    {
+      "phrase": "Native collocation 2",
+      "meaning": "한글 의미",
+      "example": "Practical example sentence in English"
+    }
+  ]
+}
+Do not wrap in markdown \`\`\`json.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 2단계 뉘앙스 대조를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep2Data;
+}
+
+/**
+ * 3단계 오답 코칭 Step 3: 즉시 적용을 위한 실전 변형 문제 2개 (Far Transfer)
+ */
+export async function generateWrongAnswerCoachingStep3(
+  question: string,
+  userWrongAnswer: string,
+  correctAnswer: string,
+  apiKey: string
+): Promise<WrongAnswerCoachingStep3Data> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an expert English quiz creator.
+The student made a mistake on a specific reading/vocabulary/grammar concept:
+Original Question Context: "${question}"
+Wrong Choice: "${userWrongAnswer}"
+Correct Choice: "${correctAnswer}"
+
+Generate EXACTLY 2 NEW 3-choice multiple-choice fill-in-the-blank questions in DIFFERENT real-world contexts (Far Transfer) that test the same underlying concept/rule.
+
+Output JSON matching this schema:
+{
+  "transferQuizzes": [
+    {
+      "id": "t1",
+      "question": "Question sentence in English with a blank (e.g. She decided to go ________ the bad weather.)",
+      "choices": ["Option A", "Option B", "Option C"],
+      "correctIndex": 0,
+      "rationale": "Clear Korean explanation of why this answer is correct and why other choices are wrong."
+    },
+    {
+      "id": "t2",
+      "question": "Question sentence in English with a blank",
+      "choices": ["Option A", "Option B", "Option C"],
+      "correctIndex": 1,
+      "rationale": "Clear Korean explanation."
+    }
+  ]
+}
+Do not wrap in markdown \`\`\`json.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 3단계 변형 문제를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep3Data;
+}
+
+/**
+ * Generates 2 bespoke writing scenarios based on the reading passage's core vocabulary & theme.
+ */
+export async function generateReadingWritingScenarios(
+  lesson: ReadingLesson,
+  apiKey: string
+): Promise<WritingTemplateData> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const vocabListStr = (lesson.vocabulary || []).map(v => `${v.word} (${v.meaning})`).join(', ');
+
+  const prompt = `You are an expert native English instructional designer and writing tutor.
+Analyze this reading passage:
+- Article Title: "${lesson.title}"
+- Passage Excerpt: "${lesson.passageText.slice(0, 1500)}"
+- Key Vocabulary/Expressions: "${vocabListStr}"
+
+Generate 2 DISTINCT, HIGHLY VIVID, REAL-WORLD SITUATIONAL SCENARIOS (1 Business/Workplace scenario, 1 Daily Life/Casual scenario) where the student must write 1 practical English sentence using the key theme or vocabulary from this article.
+
+Return a JSON object with this exact schema:
+{
+  "situation": "Detailed Workplace scenario in Korean (2 sentences describing context)",
+  "koreanIntent": "The specific Korean sentence the student wants to say in quotes (e.g. '이 보고서의 핵심 요약본을 내일까지 공유해 드릴게요.')",
+  "prompt": "Punchy 1-line writing challenge in Korean",
+  "template": "English fill-in-the-blank template matching the grammar topic with options in parentheses",
+  "sampleSentence": "A natural, high-quality native English completion of the template",
+  "tip": "Helpful tip in Korean explaining the choice in this scenario",
+  "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+  "scenarios": [
+    {
+      "category": "🏢 비즈니스 / 업무 상황",
+      "situation": "Detailed workplace situation in Korean",
+      "koreanIntent": "The target Korean sentence to say",
+      "template": "English fill-in-the-blank template matching the grammar topic",
+      "sampleSentence": "Natural native English sentence",
+      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "tip": "Tip in Korean"
+    },
+    {
+      "category": "☕ 일상 / 대화 상황",
+      "situation": "Detailed daily conversation situation in Korean",
+      "koreanIntent": "The target Korean sentence to say",
+      "template": "English fill-in-the-blank template matching the grammar topic",
+      "sampleSentence": "Natural native English sentence",
+      "keyKeywords": ["keyword1", "keyword2", "keyword3"],
+      "tip": "Tip in Korean"
+    }
+  ]
+}
+
+Do not wrap in markdown \`\`\`json. Return raw JSON string only.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 실전 시나리오를 생성하지 못했습니다.");
+  return JSON.parse(cleanJsonString(text)) as WritingTemplateData;
+}
+
+/**
+ * 실시간 작문 첨삭 및 코칭 함수 for Reading Lesson
+ */
+export async function evaluateReadingUserSentence(
+  lesson: ReadingLesson,
+  userSentence: string,
+  apiKey: string,
+  activeContext?: { situation?: string; koreanIntent?: string; template?: string }
+): Promise<WritingEvaluationResult> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+  if (!userSentence.trim()) throw new Error("작문 문장을 입력해 주세요.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are an encouraging, expert native English writing coach and tutor.
+The student is practicing writing based on this reading lesson:
+- Article Title: "${lesson.title}"
+- Passage Theme: "${lesson.passageText.slice(0, 800)}"
+- Real-Life Situation Given: "${activeContext?.situation || lesson.writingTemplate?.situation || ''}"
+- Target Korean Intent: "${activeContext?.koreanIntent || lesson.writingTemplate?.koreanIntent || ''}"
+- Given Template: "${activeContext?.template || lesson.writingTemplate?.template || ''}"
+- Student's Written Sentence: "${userSentence.trim()}"
+
+CRITICAL EVALUATION INSTRUCTIONS:
+1. PRIMARY GOAL: Check whether the student effectively expressed the intended meaning in natural English suitable for the given situation.
+2. If the sentence is grammatically correct and matches the situation well, award a HIGH SCORE (85~100) and praise their expression!
+3. 'correctedSentence' should polish minor grammar, prepositions, or phrasing.
+4. 'nativeAlternative' should demonstrate how a native speaker naturally says this exact thought in this context.
+5. 'feedback' and 'explanation' in Korean must provide warm, constructive feedback.
+
+Return a JSON object matching this schema:
+{
+  "isNatural": true or false,
+  "score": integer between 1 and 100,
+  "feedback": "Warm, encouraging 1-2 sentences in Korean evaluating how well they expressed the thought.",
+  "correctedSentence": "The perfected English sentence.",
+  "nativeAlternative": "A natural native speaker alternative sentence in English in this situation.",
+  "explanation": "Clear 1-2 sentence Korean explanation of key nuances or grammar."
+}
+
+Do not wrap in markdown \`\`\`json. Return raw JSON string only.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 첨삭 결과를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as WritingEvaluationResult;
+}
+
 
