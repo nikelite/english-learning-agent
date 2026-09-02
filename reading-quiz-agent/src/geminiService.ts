@@ -1525,16 +1525,18 @@ Student's Selected Wrong Answer:
 "${userWrongAnswer}"
 
 CRITICAL GUIDELINES:
-1. passageExcerpt: Directly quote the EXACT 1~2 key sentences or clauses from the reading passage above that contain the decisive clue for this question (in English).
-2. excerptTranslation: Provide a clear, natural Korean translation of the excerpted sentence so the student immediately understands its meaning.
-3. connectionExplanation: Explain in 1~2 simple, friendly Korean sentences HOW this excerpted sentence connects to the question and helps resolve the confusion (e.g. '본문의 이 부분에서 주인공에게 ~역할이 주어졌다고 직접 언급되어 있으므로, 질문의 역할 보기와 바로 연결됩니다.').
-4. socraticHint: 1~2 easy sentences pointing out the logical bridge without giving away the direct choice index.
-5. reflectiveQuestion: A very easy, direct question in Korean (e.g. '발췌된 문장의 ~표현을 볼 때, 주인공의 의도는 A에 가까울까요, B에 가까울까요?').
-6. guidedChoices: 2~3 friendly, short hint chips in Korean comparing the choices.
-7. guidingInsight: A 1-line easy takeaway summary.
+1. locationLabel: Specify EXACTLY which paragraph or section this clue comes from (e.g. '📍 본문 제 2문단 (Paragraph 2)' or '📍 본문 제 1문단').
+2. passageExcerpt: Directly quote the EXACT 1~2 key sentences or clauses from that paragraph that contain the decisive clue for this question (in English).
+3. excerptTranslation: Provide a clear, natural Korean translation of the excerpted sentence so the student immediately understands its meaning.
+4. connectionExplanation: Explain in 1~2 simple, friendly Korean sentences HOW this excerpted sentence in that paragraph connects to the question and helps resolve the confusion (e.g. '본문 제 2문단의 이 부분에서 주인공에게 ~역할이 주어졌다고 직접 언급되어 있으므로, 질문의 역할 보기와 바로 연결됩니다.').
+5. socraticHint: 1~2 easy sentences pointing out the logical bridge without giving away the direct choice index.
+6. reflectiveQuestion: A very easy, direct question in Korean (e.g. '발췌된 문장의 ~표현을 볼 때, 주인공의 의도는 A에 가까울까요, B에 가까울까요?').
+7. guidedChoices: 2~3 friendly, short hint chips in Korean comparing the choices.
+8. guidingInsight: A 1-line easy takeaway summary.
 
 Output JSON matching this schema:
 {
+  "locationLabel": "📍 본문 제 2문단 (Paragraph 2)",
   "passageExcerpt": "Exact English sentence or clause from the passage containing the decisive clue",
   "excerptTranslation": "발췌 문장의 자연스러운 쉬운 한글 해석",
   "connectionExplanation": "발췌된 본문 문장이 문제의 질문/보기와 어떻게 연결되는지 알기 쉬운 1~2문장 설명",

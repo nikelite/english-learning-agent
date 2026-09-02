@@ -391,9 +391,24 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                       border: '1.5px solid rgba(59, 130, 246, 0.3)',
                       boxShadow: '0 4px 15px rgba(59, 130, 246, 0.1)'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#60a5fa', fontWeight: '800', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.6rem' }}>
-                        <BookOpen size={16} />
-                        <span>📖 본문 결정적 단서 문장 발췌</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#60a5fa', fontWeight: '800', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          <BookOpen size={16} />
+                          <span>📖 본문 결정적 단서 문장 발췌</span>
+                        </div>
+                        {step1Data.locationLabel && (
+                          <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: '700',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '9999px',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            color: '#93c5fd',
+                            border: '1px solid rgba(59, 130, 246, 0.35)'
+                          }}>
+                            {step1Data.locationLabel}
+                          </span>
+                        )}
                       </div>
                       <p style={{ fontSize: '1rem', color: '#ffffff', fontWeight: '600', lineHeight: '1.6', margin: '0 0 0.5rem 0', fontStyle: 'italic', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid #3b82f6' }}>
                         "{step1Data.passageExcerpt}"

@@ -1873,7 +1873,9 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
         quizItem={coachingQuizItem?.quiz || null}
         userAnswerIndex={coachingQuizItem?.userAns ?? 0}
         lessonTitle={lesson.title}
-        passageContext={lesson.passageText}
+        passageContext={lesson.paragraphs && lesson.paragraphs.length > 0
+          ? lesson.paragraphs.map(p => `[제 ${p.id}문단 (Paragraph ${p.id})]\n${p.englishText}`).join('\n\n')
+          : lesson.passageText}
         apiKey={apiKey}
         onAddQuizToMochi={async (q) => {
           const item: ReadingQuizItem = 'type' in q ? q : {
