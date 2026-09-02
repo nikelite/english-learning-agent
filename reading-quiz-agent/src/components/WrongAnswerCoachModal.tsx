@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle } from 'lucide-react';
+import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle, BookOpen } from 'lucide-react';
 import { ReadingQuizItem, WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data, TransferQuizItem } from '../types';
 import { generateWrongAnswerCoachingStep1, generateWrongAnswerCoachingStep2, generateWrongAnswerCoachingStep3 } from '../geminiService';
 
@@ -382,6 +382,48 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
                 </div>
               ) : step1Data ? (
                 <>
+                  {/* Passage Clue Excerpt (본문 직접 발췌) */}
+                  {step1Data.passageExcerpt && (
+                    <div style={{
+                      padding: '1.25rem',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                      border: '1.5px solid rgba(59, 130, 246, 0.3)',
+                      boxShadow: '0 4px 15px rgba(59, 130, 246, 0.1)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#60a5fa', fontWeight: '800', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.6rem' }}>
+                        <BookOpen size={16} />
+                        <span>📖 본문 결정적 단서 문장 발췌</span>
+                      </div>
+                      <p style={{ fontSize: '1rem', color: '#ffffff', fontWeight: '600', lineHeight: '1.6', margin: '0 0 0.5rem 0', fontStyle: 'italic', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid #3b82f6' }}>
+                        "{step1Data.passageExcerpt}"
+                      </p>
+                      {step1Data.excerptTranslation && (
+                        <p style={{ fontSize: '0.85rem', color: '#93c5fd', margin: 0, lineHeight: '1.5' }}>
+                          <strong style={{ color: '#bfdbfe' }}>한글 해석:</strong> {step1Data.excerptTranslation}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Connection / Bridge Explanation (발췌문과 문제의 연결 고리) */}
+                  {step1Data.connectionExplanation && (
+                    <div style={{
+                      padding: '1rem 1.25rem',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                      border: '1px solid rgba(16, 185, 129, 0.25)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#34d399', fontWeight: '700', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
+                        <Sparkles size={16} />
+                        <span>🔗 발췌 문장과 문제의 연결 고리</span>
+                      </div>
+                      <p style={{ fontSize: '0.9rem', color: '#e2e8f0', lineHeight: '1.55', margin: 0 }}>
+                        {step1Data.connectionExplanation}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Socratic Hint */}
                   <div style={{
                     padding: '1.25rem',

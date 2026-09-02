@@ -58,6 +58,9 @@ export interface WritingEvaluationResult {
 
 // AI 3단계 오답 코칭 (3-Stage Socratic Coaching)
 export interface WrongAnswerCoachingStep1Data {
+  passageExcerpt?: string; // 본문에서 직접 발췌한 결정적 핵심 문장/단서
+  excerptTranslation?: string; // 발췌 문장의 쉬운 한글 해석
+  connectionExplanation?: string; // 발췌한 본문 문장과 문제의 인과관계/단서 연결 설명
   socraticHint: string;
   reflectiveQuestion: string;
   guidedChoices: string[];

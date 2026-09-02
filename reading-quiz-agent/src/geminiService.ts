@@ -1511,10 +1511,10 @@ export async function generateWrongAnswerCoachingStep1(
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
   const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
-  const prompt = `You are a friendly, encouraging 1:1 English coach. The student solved a reading/vocabulary quiz and picked a WRONG answer.
-Do NOT reveal the correct answer. Your goal is to guide the student with VERY EASY, FRIENDLY, and INTUITIVE Korean hints (ELI5 level: Explain Like I'm 5) so they can effortlessly discover the answer themselves.
+  const prompt = `You are a friendly, encouraging 1:1 English reading coach. The student solved a reading comprehension or vocabulary quiz and picked a WRONG answer.
+Do NOT reveal the correct answer. Your goal is to guide the student with VERY EASY, FRIENDLY, and INTUITIVE Korean hints (ELI5 level: Explain Like I'm 5) so they can effortlessly discover the answer themselves by connecting the passage clue directly to the question.
 
-${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1000)}..."\n` : ''}
+${passageContext ? `Reading Passage Context:\n"${passageContext.slice(0, 1500)}..."\n` : ''}
 Quiz Question:
 ${question}
 
@@ -1525,14 +1525,19 @@ Student's Selected Wrong Answer:
 "${userWrongAnswer}"
 
 CRITICAL GUIDELINES:
-1. Use warm, simple, everyday Korean without complex grammatical jargon.
-2. socraticHint: 1~2 very easy sentences pointing directly to the clue in the sentence/passage.
-3. reflectiveQuestion: A very easy, direct question in Korean (e.g. '문맥상 ~라는 뜻이 어울릴까요, 아니면 ~라는 뜻이 맞을까요?').
-4. guidedChoices: 2~3 friendly, short hint chips in Korean comparing the choices.
-5. guidingInsight: A 1-line easy takeaway summary.
+1. passageExcerpt: Directly quote the EXACT 1~2 key sentences or clauses from the reading passage above that contain the decisive clue for this question (in English).
+2. excerptTranslation: Provide a clear, natural Korean translation of the excerpted sentence so the student immediately understands its meaning.
+3. connectionExplanation: Explain in 1~2 simple, friendly Korean sentences HOW this excerpted sentence connects to the question and helps resolve the confusion (e.g. '본문의 이 부분에서 주인공에게 ~역할이 주어졌다고 직접 언급되어 있으므로, 질문의 역할 보기와 바로 연결됩니다.').
+4. socraticHint: 1~2 easy sentences pointing out the logical bridge without giving away the direct choice index.
+5. reflectiveQuestion: A very easy, direct question in Korean (e.g. '발췌된 문장의 ~표현을 볼 때, 주인공의 의도는 A에 가까울까요, B에 가까울까요?').
+6. guidedChoices: 2~3 friendly, short hint chips in Korean comparing the choices.
+7. guidingInsight: A 1-line easy takeaway summary.
 
 Output JSON matching this schema:
 {
+  "passageExcerpt": "Exact English sentence or clause from the passage containing the decisive clue",
+  "excerptTranslation": "발췌 문장의 자연스러운 쉬운 한글 해석",
+  "connectionExplanation": "발췌된 본문 문장이 문제의 질문/보기와 어떻게 연결되는지 알기 쉬운 1~2문장 설명",
   "socraticHint": "초등학생도 이해할 수 있는 매우 쉽고 명확한 본문 단서 힌트",
   "reflectiveQuestion": "정답을 쉽게 떠올릴 수 있는 직관적인 한 줄 질문",
   "guidedChoices": ["💡 보기 힌트 1", "💡 보기 힌트 2"],
