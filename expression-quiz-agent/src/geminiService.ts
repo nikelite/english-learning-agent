@@ -1832,6 +1832,9 @@ Do not wrap in markdown \`\`\`json.`;
   });
 
   const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error.message || `Gemini API 오류 (${data.error.code || 'UNKNOWN'})`);
+  }
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini가 유효한 1단계 코칭 힌트를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep1Data;
@@ -1901,6 +1904,9 @@ Do not wrap in markdown \`\`\`json.`;
   });
 
   const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error.message || `Gemini API 오류 (${data.error.code || 'UNKNOWN'})`);
+  }
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini가 유효한 2단계 뉘앙스 대조를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep2Data;
@@ -1971,6 +1977,9 @@ Do not wrap in markdown \`\`\`json.`;
   });
 
   const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error.message || `Gemini API 오류 (${data.error.code || 'UNKNOWN'})`);
+  }
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini가 유효한 3단계 변형 문제를 반환하지 않았습니다.");
   return JSON.parse(cleanJsonString(text)) as WrongAnswerCoachingStep3Data;

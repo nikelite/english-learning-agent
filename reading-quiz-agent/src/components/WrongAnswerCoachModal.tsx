@@ -51,30 +51,17 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
   const [transferAnswers, setTransferAnswers] = useState<Record<string, number>>({});
   const [addingMochiIds, setAddingMochiIds] = useState<Set<string>>(new Set());
 
-  // Reset and load Step 1 when modal opens or quiz changes
-  useEffect(() => {
-    if (isOpen && quizItem) {
-      setCurrentStep(1);
-      setStep1Data(null);
-      setStep1Error(null);
-      setStep2Data(null);
-      setStep2Error(null);
-      setStep3Data(null);
-      setStep3Error(null);
-      setTransferAnswers({});
-      setAddingMochiIds(new Set());
+  // Compute safe wrong answer and correct answer text
+  const safeWrongIdx = (quizItem && userAnswerIndex !== undefined && userAnswerIndex >= 0 && userAnswerIndex < quizItem.choices.length && userAnswerIndex !== quizItem.correctIndex)
+    ? userAnswerIndex
+    : (quizItem?.correctIndex === 0 ? 1 : 0);
 
-      fetchStep1();
-    }
-  }, [isOpen, quizItem?.id, userAnswerIndex]);
-
-  if (!isOpen || !quizItem) return null;
-
-  const userWrongAnswerText = quizItem.choices[userAnswerIndex] || `보기 ${String.fromCharCode(65 + userAnswerIndex)}`;
-  const correctAnswerText = quizItem.choices[quizItem.correctIndex] || `보기 ${String.fromCharCode(65 + quizItem.correctIndex)}`;
+  const userWrongAnswerText = quizItem?.choices[safeWrongIdx] || `보기 ${String.fromCharCode(65 + safeWrongIdx)}`;
+  const correctAnswerText = quizItem?.choices[quizItem.correctIndex] || `보기 ${String.fromCharCode(65 + (quizItem?.correctIndex ?? 0))}`;
 
   // Fetch Step 1
   const fetchStep1 = async () => {
+    if (!quizItem) return;
     if (!apiKey) {
       setStep1Error("Gemini API Key가 필요합니다. 우측 상단 설정(⚙️)에서 키를 입력해 주세요.");
       return;
@@ -96,6 +83,25 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
       setLoadingStep1(false);
     }
   };
+
+  // Reset and load Step 1 when modal opens or quiz changes
+  useEffect(() => {
+    if (isOpen && quizItem) {
+      setCurrentStep(1);
+      setStep1Data(null);
+      setStep1Error(null);
+      setStep2Data(null);
+      setStep2Error(null);
+      setStep3Data(null);
+      setStep3Error(null);
+      setTransferAnswers({});
+      setAddingMochiIds(new Set());
+
+      fetchStep1();
+    }
+  }, [isOpen, quizItem?.id, userAnswerIndex]);
+
+  if (!isOpen || !quizItem) return null;
 
   // Fetch Step 2
   const fetchStep2 = async () => {

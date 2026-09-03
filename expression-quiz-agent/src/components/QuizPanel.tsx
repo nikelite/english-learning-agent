@@ -286,12 +286,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleRetryIncorrect = () => {
-    const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
+    const candidateList = activeQuizzes.length > 0 ? activeQuizzes : (lesson.quizzes || []);
+    const wrongs = candidateList.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
     if (wrongs.length === 0) return;
     
     // Automatically launch AI 3-Step Socratic Coaching on the first wrong question
     const firstWrong = wrongs[0];
-    const userAns = submittedAnswers[firstWrong.id] ?? (firstWrong.choices.length > 0 ? (firstWrong.correctIndex === 0 ? 1 : 0) : 0);
+    const userAns = (submittedAnswers[firstWrong.id] !== undefined && submittedAnswers[firstWrong.id] !== firstWrong.correctIndex)
+      ? submittedAnswers[firstWrong.id]
+      : (firstWrong.correctIndex === 0 ? 1 : 0);
     setCoachingQuizItem({ quiz: firstWrong, userAns });
   };
 
@@ -311,12 +314,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleNextWrongCoaching = () => {
-    const wrongs = activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
+    const candidateList = activeQuizzes.length > 0 ? activeQuizzes : (lesson.quizzes || []);
+    const wrongs = candidateList.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex);
     const currentQuizId = coachingQuizItem?.quiz.id;
     const nextIndex = wrongs.findIndex(q => q.id === currentQuizId) + 1;
     if (nextIndex < wrongs.length) {
       const nextWrong = wrongs[nextIndex];
-      const userAns = submittedAnswers[nextWrong.id] ?? 0;
+      const userAns = (submittedAnswers[nextWrong.id] !== undefined && submittedAnswers[nextWrong.id] !== nextWrong.correctIndex)
+        ? submittedAnswers[nextWrong.id]
+        : (nextWrong.correctIndex === 0 ? 1 : 0);
       setCoachingQuizItem({ quiz: nextWrong, userAns });
     } else {
       setCoachingQuizItem(null);

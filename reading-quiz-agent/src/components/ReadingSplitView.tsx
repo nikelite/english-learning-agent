@@ -615,14 +615,25 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const handleRetryIncorrect = () => {
-    const incorrectQuizzes = injectedQuizzes.filter(q => {
+    // 1. Identify incorrect quizzes from activeQuizzes, injectedQuizzes, or lesson.quizzes
+    const candidateList = activeQuizzes.length > 0 ? activeQuizzes : (injectedQuizzes.length > 0 ? injectedQuizzes : (lesson.quizzes || []));
+    let incorrectQuizzes = candidateList.filter(q => {
       const ans = submittedAnswers[q.id];
       return ans !== undefined && ans !== q.correctIndex;
     });
 
+    if (incorrectQuizzes.length === 0 && injectedQuizzes.length > 0) {
+      incorrectQuizzes = injectedQuizzes.filter(q => {
+        const ans = submittedAnswers[q.id];
+        return ans !== undefined && ans !== q.correctIndex;
+      });
+    }
+
     if (incorrectQuizzes.length > 0) {
       const firstWrong = incorrectQuizzes[0];
-      const userAns = submittedAnswers[firstWrong.id] ?? 0;
+      const userAns = (submittedAnswers[firstWrong.id] !== undefined && submittedAnswers[firstWrong.id] !== firstWrong.correctIndex)
+        ? submittedAnswers[firstWrong.id]
+        : (firstWrong.correctIndex === 0 ? 1 : 0);
       setCoachingQuizItem({ quiz: firstWrong, userAns });
     }
   };
@@ -638,14 +649,17 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
 
   const handleNextWrongCoaching = () => {
     if (!coachingQuizItem) return;
-    const wrongList = activeQuizzes.filter(q => {
+    const candidateList = activeQuizzes.length > 0 ? activeQuizzes : (injectedQuizzes.length > 0 ? injectedQuizzes : (lesson.quizzes || []));
+    const wrongList = candidateList.filter(q => {
       const ans = submittedAnswers[q.id];
       return ans !== undefined && ans !== q.correctIndex;
     });
     const currentWrongIdx = wrongList.findIndex(q => q.id === coachingQuizItem.quiz.id);
     if (currentWrongIdx !== -1 && currentWrongIdx < wrongList.length - 1) {
       const nextWrong = wrongList[currentWrongIdx + 1];
-      const userAns = submittedAnswers[nextWrong.id] ?? 0;
+      const userAns = (submittedAnswers[nextWrong.id] !== undefined && submittedAnswers[nextWrong.id] !== nextWrong.correctIndex)
+        ? submittedAnswers[nextWrong.id]
+        : (nextWrong.correctIndex === 0 ? 1 : 0);
       setCoachingQuizItem({ quiz: nextWrong, userAns });
     } else {
       setCoachingQuizItem(null);
