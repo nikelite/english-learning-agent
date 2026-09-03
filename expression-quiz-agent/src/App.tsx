@@ -1621,7 +1621,14 @@ ${quiz.rationale}`;
 
     // Avoid duplicating exact same question
     setWrongAnswers(prev => {
-      if (prev.some(wa => wa.quizItem.id === quizItem.id || wa.quizItem.question === quizItem.question)) {
+      const existingIdx = prev.findIndex(wa => wa.quizItem.id === quizItem.id || wa.quizItem.question === quizItem.question);
+      if (existingIdx !== -1) {
+        const existing = prev[existingIdx];
+        if (existing.isArchived) {
+          const updated = [...prev];
+          updated[existingIdx] = { ...existing, isArchived: false, userAnswerIndex: selectedAnswerIndex, timestamp: Date.now() };
+          return updated;
+        }
         return prev;
       }
       const newWrong: WrongAnswer = {
@@ -1630,7 +1637,8 @@ ${quiz.rationale}`;
         lessonTitle: activeLesson.title,
         quizItem,
         userAnswerIndex: selectedAnswerIndex,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isArchived: false
       };
       return [newWrong, ...prev];
     });

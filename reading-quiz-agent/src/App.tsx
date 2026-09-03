@@ -1750,8 +1750,14 @@ export default function App() {
     if (!activeLesson) return;
 
     setWrongAnswers(prev => {
-      // Avoid duplicates based on original question string
-      if (prev.some(wa => wa.quizItem.question === quizItem.question)) {
+      const existingIdx = prev.findIndex(wa => wa.quizItem.question === quizItem.question || wa.quizItem.id === quizItem.id);
+      if (existingIdx !== -1) {
+        const existing = prev[existingIdx];
+        if (existing.isArchived) {
+          const updated = [...prev];
+          updated[existingIdx] = { ...existing, isArchived: false, userAnswerIndex: selectedIndex, timestamp: Date.now() };
+          return updated;
+        }
         return prev;
       }
       const newWrong: WrongReadingAnswer = {
@@ -1760,7 +1766,8 @@ export default function App() {
         lessonTitle: activeLesson.title,
         quizItem,
         userAnswerIndex: selectedIndex,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isArchived: false
       };
       return [newWrong, ...prev];
     });

@@ -299,6 +299,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   };
 
   const handleRetryOriginalQuestionFromCoach = (quizItem: QuizItem) => {
+    // Ensure quizItem is saved to the persistent wrong answers notebook (오답노트)
+    const userAns = (submittedAnswers[quizItem.id] !== undefined && submittedAnswers[quizItem.id] !== quizItem.correctIndex)
+      ? submittedAnswers[quizItem.id]
+      : (quizItem.correctIndex === 0 ? 1 : 0);
+    onAddWrongAnswer(quizItem, userAns);
+
     setCoachingQuizItem(null);
     setActiveQuizzes([quizItem]);
     setSubmittedAnswers(prev => {
@@ -932,7 +938,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           apiKey={apiKey}
           onAddQuizToMochi={onAddQuizToMochi}
           onGraduate={() => {
-            onGraduateReview(coachingQuizItem.quiz.id);
+            // Keep in wrong answers notebook as requested by user
             setCoachingQuizItem(null);
           }}
           onRetryOriginalQuestion={handleRetryOriginalQuestionFromCoach}

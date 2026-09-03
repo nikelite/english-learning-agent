@@ -522,12 +522,15 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
     if (isCorrect) {
       setScore(prev => prev + 1);
       
-      // Remove from session wrongs & attempt wrongs so it disappears from retry list
+      // Remove from session wrongs & attempt wrongs so it disappears from immediate retry list
       setSessionWrongs(prev => prev.filter(q => q.id !== activeQuestion.id));
       setAttemptWrongs(prev => prev.filter(w => w.question !== activeQuestion.question));
 
-      // Graduate and remove from wrong answers review storage
-      onGraduateReview(activeQuestion.id);
+      // Only graduate from persistent wrong answers notebook if it was an injected review question
+      // (User requirement: "ai coach로 풀어도 오답노트에 한번은 넣어서 재복습하게 해줘")
+      if (activeQuestion.isReview) {
+        onGraduateReview(activeQuestion.id);
+      }
     } else {
       // Add to session wrongs for targeted review
       setSessionWrongs(prev => {
@@ -639,6 +642,12 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
   };
 
   const handleDirectRetryQuestion = (targetQuiz: ReadingQuizItem) => {
+    // Ensure targetQuiz is recorded in the wrong answers notebook (오답노트) so user can re-review later
+    const userAns = (submittedAnswers[targetQuiz.id] !== undefined && submittedAnswers[targetQuiz.id] !== targetQuiz.correctIndex)
+      ? submittedAnswers[targetQuiz.id]
+      : (targetQuiz.correctIndex === 0 ? 1 : 0);
+    onAddWrongAnswer(targetQuiz, userAns);
+
     setActiveQuizzes([targetQuiz]);
     setCurrentIdx(0);
     setSelectedAns(null);
@@ -1916,9 +1925,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
           await onAddQuizToMochi(item, lesson.id);
         }}
         onGraduate={() => {
-          if (coachingQuizItem?.quiz?.id) {
-            onGraduateReview(coachingQuizItem.quiz.id);
-          }
+          // Keep in wrong answers notebook for future review as requested
+          setCoachingQuizItem(null);
         }}
         onRetryOriginalQuestion={handleDirectRetryQuestion}
         remainingWrongsCount={
