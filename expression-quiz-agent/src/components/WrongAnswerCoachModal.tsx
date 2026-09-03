@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle, SkipForward } from 'lucide-react';
-import { QuizItem, WrongAnswerCoachingStep1Data, WrongAnswerCoachingStep2Data, WrongAnswerCoachingStep3Data, TransferQuizItem } from '../types';
-import { generateWrongAnswerCoachingStep1, generateWrongAnswerCoachingStep2, generateWrongAnswerCoachingStep3 } from '../geminiService';
+import { Sparkles, Brain, Check, X, ArrowRight, RefreshCw, BookmarkCheck, AlertCircle, HelpCircle, BookOpen, SkipForward, Zap, Lightbulb } from 'lucide-react';
+import { QuizItem, MicroCoachingData, TransferQuizItem } from '../types';
+import { generateMicroCoaching } from '../geminiService';
 
 interface WrongAnswerCoachModalProps {
   isOpen: boolean;
@@ -30,25 +30,12 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
   remainingWrongsCount = 0,
   onNextWrongQuestion
 }) => {
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-
-  // Step 1 State
-  const [step1Data, setStep1Data] = useState<WrongAnswerCoachingStep1Data | null>(null);
-  const [loadingStep1, setLoadingStep1] = useState(false);
-  const [step1Error, setStep1Error] = useState<string | null>(null);
-  const [step1SelectedChoice, setStep1SelectedChoice] = useState<number | null>(null);
-
-  // Step 2 State
-  const [step2Data, setStep2Data] = useState<WrongAnswerCoachingStep2Data | null>(null);
-  const [loadingStep2, setLoadingStep2] = useState(false);
-  const [step2Error, setStep2Error] = useState<string | null>(null);
-
-  // Step 3 State
-  const [step3Data, setStep3Data] = useState<WrongAnswerCoachingStep3Data | null>(null);
-  const [loadingStep3, setLoadingStep3] = useState(false);
-  const [step3Error, setStep3Error] = useState<string | null>(null);
-  const [transferAnswers, setTransferAnswers] = useState<Record<string, number>>({});
-  const [addingMochiIds, setAddingMochiIds] = useState<Set<string>>(new Set());
+  const [coachingData, setCoachingData] = useState<MicroCoachingData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTransferAnswer, setSelectedTransferAnswer] = useState<number | null>(null);
+  const [isMochiAdded, setIsMochiAdded] = useState(false);
+  const [addingMochi, setAddingMochi] = useState(false);
 
   // Compute safe wrong answer and correct answer text
   const safeWrongIdx = (quizItem && userAnswerIndex !== undefined && userAnswerIndex >= 0 && userAnswerIndex < quizItem.choices.length && userAnswerIndex !== quizItem.correctIndex)
@@ -58,226 +45,184 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
   const userWrongAnswerText = quizItem?.choices[safeWrongIdx] || `보기 ${String.fromCharCode(65 + safeWrongIdx)}`;
   const correctAnswerText = quizItem?.choices[quizItem.correctIndex] || `보기 ${String.fromCharCode(65 + (quizItem?.correctIndex ?? 0))}`;
 
-  // Fetch Step 1
-  const fetchStep1 = async () => {
+  // Fetch Micro Coaching Data
+  const fetchCoaching = async () => {
     if (!quizItem) return;
     if (!apiKey) {
-      setStep1Error("Gemini API Key가 필요합니다. 우측 상단 설정(⚙️)에서 키를 입력해 주세요.");
+      setError("Gemini API Key가 필요합니다. 우측 상단 설정(⚙️)에서 키를 입력해 주세요.");
       return;
     }
-    setLoadingStep1(true);
-    setStep1Error(null);
+    setLoading(true);
+    setError(null);
+    setSelectedTransferAnswer(null);
+    setIsMochiAdded(false);
+
     try {
-      const data = await generateWrongAnswerCoachingStep1(
+      const data = await generateMicroCoaching(
         quizItem.question,
         quizItem.choices,
-        userWrongAnswerText,
-        apiKey
-      );
-      setStep1Data(data);
-    } catch (err: any) {
-      setStep1Error(err.message || "1단계 힌트 생성에 실패했습니다.");
-    } finally {
-      setLoadingStep1(false);
-    }
-  };
-
-  // Reset and load Step 1 when modal opens or quiz changes
-  useEffect(() => {
-    if (isOpen && quizItem) {
-      setCurrentStep(1);
-      setStep1Data(null);
-      setStep1Error(null);
-      setStep1SelectedChoice(null);
-      setStep2Data(null);
-      setStep2Error(null);
-      setStep3Data(null);
-      setStep3Error(null);
-      setTransferAnswers({});
-      setAddingMochiIds(new Set());
-
-      fetchStep1();
-    }
-  }, [isOpen, quizItem?.id, userAnswerIndex]);
-
-  if (!isOpen || !quizItem) return null;
-
-  // Fetch Step 2
-  const fetchStep2 = async () => {
-    if (step2Data || loadingStep2) return;
-    if (!apiKey) {
-      setStep2Error("Gemini API Key가 필요합니다.");
-      return;
-    }
-    setLoadingStep2(true);
-    setStep2Error(null);
-    try {
-      const data = await generateWrongAnswerCoachingStep2(
-        quizItem.question,
         userWrongAnswerText,
         correctAnswerText,
         quizItem.rationale,
         apiKey
       );
-      setStep2Data(data);
+      setCoachingData(data);
     } catch (err: any) {
-      setStep2Error(err.message || "2단계 뉘앙스 대조 생성에 실패했습니다.");
+      setError(err.message || "마이크로 오답 코칭 생성에 실패했습니다.");
     } finally {
-      setLoadingStep2(false);
+      setLoading(false);
     }
   };
 
-  // Fetch Step 3
-  const fetchStep3 = async () => {
-    if (step3Data || loadingStep3) return;
-    if (!apiKey) {
-      setStep3Error("Gemini API Key가 필요합니다.");
-      return;
+  useEffect(() => {
+    if (isOpen && quizItem) {
+      fetchCoaching();
     }
-    setLoadingStep3(true);
-    setStep3Error(null);
+  }, [isOpen, quizItem?.id, userAnswerIndex]);
+
+  if (!isOpen || !quizItem) return null;
+
+  const handleTransferSelect = (index: number) => {
+    if (selectedTransferAnswer !== null) return;
+    setSelectedTransferAnswer(index);
+  };
+
+  const handleAddCollocationToMochi = async () => {
+    if (!coachingData?.collocation || isMochiAdded || !onAddQuizToMochi) return;
+    setAddingMochi(true);
     try {
-      const data = await generateWrongAnswerCoachingStep3(
-        quizItem.question,
-        userWrongAnswerText,
-        correctAnswerText,
-        apiKey
-      );
-      setStep3Data(data);
-    } catch (err: any) {
-      setStep3Error(err.message || "3단계 변형 문제 생성에 실패했습니다.");
+      const syntheticQuiz: TransferQuizItem = {
+        id: `colloc-${Date.now()}`,
+        question: `[짝꿍 표현] "${coachingData.collocation.phrase}"의 올바른 의미와 쓰임은?`,
+        translation: coachingData.collocation.meaning,
+        choices: [
+          coachingData.collocation.meaning,
+          "전혀 다른 의미의 표현",
+          "문법적으로 잘못된 표현"
+        ],
+        correctIndex: 0,
+        rationale: `예문: ${coachingData.collocation.example}`
+      };
+      await onAddQuizToMochi(syntheticQuiz as any);
+      setIsMochiAdded(true);
+    } catch (err) {
+      console.error("단어장 저장 실패", err);
     } finally {
-      setLoadingStep3(false);
+      setAddingMochi(false);
     }
   };
 
-  const handleGoToStep2 = () => {
-    setCurrentStep(2);
-    if (!step2Data) fetchStep2();
-  };
-
-  const handleGoToStep3 = () => {
-    setCurrentStep(3);
-    if (!step3Data) fetchStep3();
-  };
-
-  const handlePushTransferToMochi = async (tQuiz: TransferQuizItem) => {
-    if (!onAddQuizToMochi) return;
-    setAddingMochiIds(prev => new Set(prev).add(tQuiz.id));
-    try {
-      await onAddQuizToMochi({
-        id: `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        question: tQuiz.question,
-        choices: tQuiz.choices,
-        correctIndex: tQuiz.correctIndex,
-        rationale: tQuiz.rationale
-      });
-    } catch (err: any) {
-      alert(err.message || "Mochi 추가 실패");
-      setAddingMochiIds(prev => {
-        const next = new Set(prev);
-        next.delete(tQuiz.id);
-        return next;
-      });
+  const handleDirectRetry = () => {
+    if (onRetryOriginalQuestion) {
+      onRetryOriginalQuestion(quizItem);
+    } else {
+      onClose();
     }
   };
 
   return (
-    <div 
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(8px)',
-        zIndex: 9999,
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      padding: '16px'
+    }}>
+      <div style={{
+        background: '#ffffff',
+        width: '100%',
+        maxWidth: '680px',
+        maxHeight: '90vh',
+        borderRadius: '24px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1rem'
-      }}
-      onClick={onClose}
-    >
-      <div 
-        className="glass-panel"
-        style={{
-          width: '100%',
-          maxWidth: '720px',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: '#0f172a',
-          border: '1px solid rgba(139, 92, 246, 0.3)',
-          borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-          overflow: 'hidden'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
+        flexDirection: 'column',
+        overflow: 'hidden',
+        border: '1px solid #e2e8f0'
+      }}>
+        {/* Top Header */}
         <div style={{
-          padding: '1.25rem 1.5rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          padding: '16px 20px',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+          borderBottom: '1px solid #e2e8f0',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%)'
+          justifyContent: 'space-between'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
               width: '32px',
               height: '32px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%)',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.3)'
+              color: '#ffffff'
             }}>
-              <Brain size={18} style={{ color: 'white' }} />
+              <Zap size={18} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                AI 3단계 오답 코칭
-                {lessonTitle && (
-                  <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)', fontWeight: '500' }}>
-                    {lessonTitle}
-                  </span>
-                )}
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>
+                  1초 마이크로 오답 코칭
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: '#4f46e5',
+                  background: '#e0e7ff',
+                  padding: '2px 7px',
+                  borderRadius: '12px'
+                }}>
+                  원스크린 완결
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
+                단서 확인 ➔ 1초 인출 테스트 ➔ 본 문제 바로 맞히기
+              </p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-secondary btn-sm"
-              style={{
-                fontSize: '0.75rem',
-                padding: '0.3rem 0.65rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                color: '#cbd5e1'
-              }}
-              title="코칭을 건너뛰고 계속 진행합니다"
-            >
-              <SkipForward size={13} />
-              <span>건너뛰기 (스킵)</span>
-            </button>
 
-            <button 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={handleDirectRetry}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: '#475569',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="코칭을 건너뛰고 바로 본 문제를 다시 풉니다."
+            >
+              <SkipForward size={14} />
+              <span>바로 풀기</span>
+            </button>
+            <button
               onClick={onClose}
               style={{
-                background: 'transparent',
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
                 border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                padding: '0.4rem',
-                borderRadius: '6px',
+                background: 'transparent',
+                color: '#94a3b8',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                cursor: 'pointer'
               }}
             >
               <X size={20} />
@@ -285,572 +230,371 @@ export const WrongAnswerCoachModal: React.FC<WrongAnswerCoachModalProps> = ({
           </div>
         </div>
 
-        {/* 3-Step Stepper Header */}
+        {/* Scrollable Body */}
         <div style={{
-          display: 'flex',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          backgroundColor: 'rgba(0, 0, 0, 0.2)'
-        }}>
-          <button
-            onClick={() => setCurrentStep(1)}
-            style={{
-              flex: 1,
-              padding: '0.85rem 0.5rem',
-              background: currentStep === 1 ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
-              border: 'none',
-              borderBottom: currentStep === 1 ? '2px solid var(--primary)' : '2px solid transparent',
-              color: currentStep === 1 ? '#c084fc' : 'var(--text-muted)',
-              fontWeight: currentStep === 1 ? '700' : '500',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            <span>💡 1단계: 소크라테스 힌트</span>
-          </button>
-
-          <button
-            onClick={handleGoToStep2}
-            style={{
-              flex: 1,
-              padding: '0.85rem 0.5rem',
-              background: currentStep === 2 ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
-              border: 'none',
-              borderBottom: currentStep === 2 ? '2px solid var(--secondary)' : '2px solid transparent',
-              color: currentStep === 2 ? '#22d3ee' : 'var(--text-muted)',
-              fontWeight: currentStep === 2 ? '700' : '500',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            <span>⚖️ 2단계: 뉘앙스 &amp; 짝꿍</span>
-          </button>
-
-          <button
-            onClick={handleGoToStep3}
-            style={{
-              flex: 1,
-              padding: '0.85rem 0.5rem',
-              background: currentStep === 3 ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-              border: 'none',
-              borderBottom: currentStep === 3 ? '2px solid var(--success)' : '2px solid transparent',
-              color: currentStep === 3 ? '#34d399' : 'var(--text-muted)',
-              fontWeight: currentStep === 3 ? '700' : '500',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            <span>🎯 3단계: 실전 변형 문제</span>
-          </button>
-        </div>
-
-        {/* Modal Scrollable Body */}
-        <div style={{
-          padding: '1.5rem',
+          padding: '20px',
           overflowY: 'auto',
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: '1.25rem'
+          gap: '16px'
         }}>
-          {/* Original Problem Context Card */}
+          {/* Question & Mistake Overview */}
           <div style={{
-            padding: '1rem 1.25rem',
-            borderRadius: '12px',
-            backgroundColor: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)'
+            background: '#f8fafc',
+            borderRadius: '16px',
+            padding: '14px 16px',
+            border: '1px solid #e2e8f0'
           }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem', fontWeight: '600' }}>
-              틀린 문제 원문
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
+              ❓ {quizItem.question}
             </div>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'white', lineHeight: '1.5', margin: 0 }}>
-              {quizItem.question}
-            </h4>
-            <div style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '9999px', backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: '700' }}>
-                ❌ 내가 고른 오답: {userWrongAnswerText}
-              </span>
-              {currentStep > 1 && (
-                <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '9999px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#6ee7b7', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: '700' }}>
-                  ✅ 실제 정답: {correctAnswerText}
-                </span>
-              )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '12px' }}>
+              <div style={{
+                background: '#fef2f2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                fontWeight: '600'
+              }}>
+                ❌ 내가 고른 오답: <span style={{ fontWeight: '700' }}>{userWrongAnswerText}</span>
+              </div>
+              <div style={{
+                background: '#ecfdf5',
+                color: '#059669',
+                border: '1px solid #a7f3d0',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                fontWeight: '600'
+              }}>
+                ✅ 실제 정답: <span style={{ fontWeight: '700' }}>{correctAnswerText}</span>
+              </div>
             </div>
           </div>
 
-          {/* ================= STEP 1: SOCRATIC HINT ================= */}
-          {currentStep === 1 && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {loadingStep1 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)' }}>
-                  <RefreshCw className="animate-spin" size={28} style={{ color: 'var(--primary)', margin: '0 auto 0.75rem auto' }} />
-                  <p style={{ fontSize: '0.9rem', color: 'white', fontWeight: '600', margin: '0 0 0.25rem 0' }}>
-                    AI가 인지적 착각 원인과 소크라테스식 힌트를 분석하고 있습니다...
-                  </p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    정답을 바로 알려주지 않고 스스로 유추할 수 있도록 돕습니다.
+          {/* Loading State */}
+          {loading && (
+            <div style={{
+              padding: '40px 20px',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <RefreshCw size={28} className="animate-spin" style={{ color: '#6366f1' }} />
+              <p style={{ fontSize: '14px', fontWeight: '600', color: '#475569', margin: 0 }}>
+                AI가 핵심 단서와 1초 확인 문제를 생성하고 있습니다...
+              </p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div style={{
+              padding: '16px',
+              borderRadius: '12px',
+              background: '#fff1f2',
+              border: '1px solid #fecdd3',
+              color: '#be123c',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span>⚠️ {error}</span>
+              <button
+                onClick={fetchCoaching}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#e11d48',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                다시 시도
+              </button>
+            </div>
+          )}
+
+          {/* Coaching Content */}
+          {coachingData && !loading && (
+            <>
+              {/* Card 1: 💡 1줄 직관 뉘앙스 & 원어민 짝꿍 표현 */}
+              <div style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                padding: '16px',
+                border: '1px solid #e0e7ff',
+                boxShadow: '0 2px 8px -2px rgba(99, 102, 241, 0.08)'
+              }}>
+                {/* Core Nuance Contrast */}
+                <div style={{
+                  background: '#f8fafc',
+                  borderRadius: '12px',
+                  padding: '12px 14px',
+                  border: '1px solid #e2e8f0',
+                  marginBottom: coachingData.collocation ? '12px' : '0'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Lightbulb size={16} style={{ color: '#eab308' }} />
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#1e293b' }}>
+                      1줄 핵심 뉘앙스
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5', margin: 0 }}>
+                    {coachingData.coreNuance}
                   </p>
                 </div>
-              ) : step1Error ? (
-                <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.85rem' }}>
-                  <AlertCircle size={16} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'text-bottom' }} />
-                  {step1Error}
-                  <button className="btn btn-secondary btn-sm" onClick={fetchStep1} style={{ marginLeft: '0.5rem' }}>다시 시도</button>
-                </div>
-              ) : step1Data ? (
-                <>
-                  {/* Cause analysis */}
+
+                {/* Collocation Partner */}
+                {coachingData.collocation && (
                   <div style={{
-                    padding: '1.25rem',
+                    background: '#fefce8',
                     borderRadius: '12px',
-                    backgroundColor: 'rgba(139, 92, 246, 0.08)',
-                    border: '1px solid rgba(139, 92, 246, 0.25)'
+                    padding: '10px 14px',
+                    border: '1px solid #fef08a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                      <Brain size={18} />
-                      <span>왜 이 오답을 골랐을까? (인지적 착각 분석)</span>
-                    </div>
-                    <p style={{ fontSize: '0.9rem', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
-                      {step1Data.cognitiveIllusion}
-                    </p>
-                  </div>
-
-                  {/* Socratic Clue Question */}
-                  <div style={{
-                    padding: '1.25rem',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(6, 182, 212, 0.08)',
-                    border: '1px solid rgba(6, 182, 212, 0.25)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee', fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                      <HelpCircle size={18} />
-                      <span>소크라테스식 유추 단서 질문</span>
-                    </div>
-                    <p style={{ fontSize: '0.95rem', color: '#f8fafc', fontWeight: '600', lineHeight: '1.6', margin: 0 }}>
-                      "{step1Data.clueQuestion}"
-                    </p>
-                  </div>
-
-                  {/* Interactive Rethink Choice Selector */}
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: 'white', marginBottom: '0.6rem' }}>
-                      🤔 힌트를 바탕으로 정답을 다시 골라보세요:
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {quizItem.choices.map((choice, cIdx) => {
-                        const isChosen = step1SelectedChoice === cIdx;
-                        const isRealCorrect = cIdx === quizItem.correctIndex;
-                        
-                        let borderColor = 'rgba(255, 255, 255, 0.1)';
-                        let bgColor = 'rgba(255, 255, 255, 0.02)';
-                        let textColor = 'var(--text-secondary)';
-
-                        if (step1SelectedChoice !== null) {
-                          if (isRealCorrect) {
-                            borderColor = 'var(--success)';
-                            bgColor = 'rgba(16, 185, 129, 0.15)';
-                            textColor = '#6ee7b7';
-                          } else if (isChosen) {
-                            borderColor = 'var(--error)';
-                            bgColor = 'rgba(239, 68, 68, 0.15)';
-                            textColor = '#fca5a5';
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={cIdx}
-                            onClick={() => setStep1SelectedChoice(cIdx)}
-                            style={{
-                              padding: '0.75rem 1rem',
-                              borderRadius: '8px',
-                              border: `1px solid ${borderColor}`,
-                              backgroundColor: bgColor,
-                              color: textColor,
-                              fontSize: '0.85rem',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              transition: 'all 0.2s'
-                            }}
-                          >
-                            <span>
-                              <strong>{String.fromCharCode(65 + cIdx)}.</strong> {choice}
-                            </span>
-                            {step1SelectedChoice !== null && (
-                              isRealCorrect ? <Check size={16} style={{ color: 'var(--success)' }} /> : (isChosen ? <X size={16} style={{ color: 'var(--error)' }} /> : null)
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {step1SelectedChoice !== null && (
-                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '8px', backgroundColor: step1SelectedChoice === quizItem.correctIndex ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: step1SelectedChoice === quizItem.correctIndex ? '#6ee7b7' : '#fca5a5', fontSize: '0.85rem', fontWeight: '600' }}>
-                        {step1SelectedChoice === quizItem.correctIndex ? (
-                          <span>🎉 정답입니다! 스스로 인출에 성공하셨습니다! 이제 2단계에서 깊이 있는 뉘앙스를 학습해보세요.</span>
-                        ) : (
-                          <span>💡 아쉽네요! 2단계 뉘앙스 대조를 통해 왜 정답이 맞는지 확실히 멘탈 모델을 교정해보세요.</span>
-                        )}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#854d0e', background: '#fef9c3', padding: '1px 6px', borderRadius: '4px' }}>
+                          원어민 짝꿍 표현
+                        </span>
+                        <span style={{ fontSize: '13px', fontWeight: '800', color: '#713f12' }}>
+                          {coachingData.collocation.phrase}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#a16207' }}>
+                          ({coachingData.collocation.meaning})
+                        </span>
                       </div>
+                      <div style={{ fontSize: '11px', color: '#854d0e', fontStyle: 'italic', marginTop: '2px' }}>
+                        "{coachingData.collocation.example}"
+                      </div>
+                    </div>
+
+                    {onAddQuizToMochi && (
+                      <button
+                        onClick={handleAddCollocationToMochi}
+                        disabled={isMochiAdded || addingMochi}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #fde047',
+                          background: isMochiAdded ? '#ecfdf5' : '#ffffff',
+                          color: isMochiAdded ? '#059669' : '#854d0e',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: isMochiAdded ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          flexShrink: 0
+                        }}
+                      >
+                        {isMochiAdded ? <BookmarkCheck size={12} /> : <BookOpen size={12} />}
+                        {isMochiAdded ? '저장됨' : '단어장'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: 🎯 1초 인출 확인 퀴즈 (1-Shot Transfer) */}
+              {coachingData.transferQuiz && (
+                <div style={{
+                  background: '#ffffff',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  border: '1px solid #fed7aa',
+                  boxShadow: '0 2px 8px -2px rgba(249, 115, 22, 0.08)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#ea580c',
+                        background: '#ffedd5',
+                        padding: '2px 8px',
+                        borderRadius: '6px'
+                      }}>
+                        🎯 1초 인출 확인 퀴즈
+                      </span>
+                    </div>
+                    {selectedTransferAnswer !== null && (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: selectedTransferAnswer === coachingData.transferQuiz.correctIndex ? '#059669' : '#dc2626'
+                      }}>
+                        {selectedTransferAnswer === coachingData.transferQuiz.correctIndex ? '🎉 정답입니다!' : '💡 힌트를 다시 확인해 보세요!'}
+                      </span>
                     )}
                   </div>
 
-                  {/* Next Step Action Button */}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={onClose}
-                      style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}
-                    >
-                      <SkipForward size={14} />
-                      <span>코칭 건너뛰기 (스킵)</span>
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleGoToStep2}
-                      style={{ padding: '0.65rem 1.25rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                    >
-                      <span>2단계: 뉘앙스 &amp; 멘탈 모델 교정</span>
-                      <ArrowRight size={16} />
-                    </button>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '4px' }}>
+                    {coachingData.transferQuiz.question}
                   </div>
-                </>
-              ) : null}
-            </div>
-          )}
-
-          {/* ================= STEP 2: NUANCE & COLLOCATION ================= */}
-          {currentStep === 2 && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {loadingStep2 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)' }}>
-                  <RefreshCw className="animate-spin" size={28} style={{ color: 'var(--secondary)', margin: '0 auto 0.75rem auto' }} />
-                  <p style={{ fontSize: '0.9rem', color: 'white', fontWeight: '600', margin: '0 0 0.25rem 0' }}>
-                    실사용 맥락 뉘앙스 대조 및 원어민 짝꿍 표현을 분석 중입니다...
-                  </p>
-                </div>
-              ) : step2Error ? (
-                <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.85rem' }}>
-                  <AlertCircle size={16} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'text-bottom' }} />
-                  {step2Error}
-                  <button className="btn btn-secondary btn-sm" onClick={fetchStep2} style={{ marginLeft: '0.5rem' }}>다시 시도</button>
-                </div>
-              ) : step2Data ? (
-                <>
-                  {/* Nuance Contrast 2 sentences */}
-                  <div style={{
-                    padding: '1.25rem',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(6, 182, 212, 0.08)',
-                    border: '1px solid rgba(6, 182, 212, 0.25)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee', fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                      <span>⚖️ 실사용 맥락 뉘앙스 대조 (오답 vs 정답)</span>
+                  {coachingData.transferQuiz.translation && (
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px' }}>
+                      👉 {coachingData.transferQuiz.translation}
                     </div>
-                    <p style={{ fontSize: '0.95rem', color: '#f8fafc', lineHeight: '1.7', margin: 0, whiteSpace: 'pre-line' }}>
-                      {step2Data.nuanceContrast}
-                    </p>
-                  </div>
+                  )}
 
-                  {/* Collocations */}
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: 'white', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span>🤝 원어민이 자주 쓰는 필수 짝꿍 표현 (Collocations)</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {step2Data.collocations.map((colloc, idx) => (
-                        <div 
-                          key={idx}
-                          style={{
-                            padding: '1rem',
-                            borderRadius: '10px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                            <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'rgba(139, 92, 246, 0.2)', color: '#c084fc', fontWeight: '700' }}>
-                              #{idx + 1}
-                            </span>
-                            <span style={{ fontSize: '0.95rem', fontWeight: '700', color: 'white' }}>
-                              {colloc.phrase}
-                            </span>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                              ({colloc.meaning})
-                            </span>
-                          </div>
-                          <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0.4rem 0 0 0', fontStyle: 'italic', lineHeight: '1.5' }}>
-                            "{colloc.example}"
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  {/* 3-Choices */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {coachingData.transferQuiz.choices.map((choice, cIdx) => {
+                      const isSelected = selectedTransferAnswer === cIdx;
+                      const isCorrect = cIdx === coachingData.transferQuiz.correctIndex;
+                      const isSolved = selectedTransferAnswer !== null;
 
-                  {/* Next Step Action Button */}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => setCurrentStep(1)}
-                        style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
-                      >
-                        1단계 다시보기
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={onClose}
-                        style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}
-                      >
-                        <SkipForward size={14} />
-                        <span>스킵하기</span>
-                      </button>
-                    </div>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleGoToStep3}
-                      style={{ padding: '0.65rem 1.25rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)' }}
-                    >
-                      <span>3단계: 변형 문제로 실전 검증하기</span>
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          )}
+                      let btnBg = '#f8fafc';
+                      let btnBorder = '#e2e8f0';
+                      let btnColor = '#334155';
 
-          {/* ================= STEP 3: FAR TRANSFER QUIZZES ================= */}
-          {currentStep === 3 && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {loadingStep3 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)' }}>
-                  <RefreshCw className="animate-spin" size={28} style={{ color: 'var(--success)', margin: '0 auto 0.75rem auto' }} />
-                  <p style={{ fontSize: '0.9rem', color: 'white', fontWeight: '600', margin: '0 0 0.25rem 0' }}>
-                    방금 틀린 개념을 체화할 수 있는 새로운 맥락의 실전 변형 문제 2개를 생성하고 있습니다...
-                  </p>
-                </div>
-              ) : step3Error ? (
-                <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.85rem' }}>
-                  <AlertCircle size={16} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'text-bottom' }} />
-                  {step3Error}
-                  <button className="btn btn-secondary btn-sm" onClick={fetchStep3} style={{ marginLeft: '0.5rem' }}>다시 시도</button>
-                </div>
-              ) : step3Data ? (
-                <>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
-                    🎯 <strong>실전 변형 테스트 (Far Transfer)</strong>: 새로운 맥락의 3지선다 문제를 직접 풀며 개념을 온전히 내 것으로 만드세요!
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    {step3Data.transferQuizzes.map((tQuiz, qIdx) => {
-                      const userChosenIdx = transferAnswers[tQuiz.id];
-                      const isSolved = userChosenIdx !== undefined;
-                      const isCorrect = userChosenIdx === tQuiz.correctIndex;
+                      if (isSolved) {
+                        if (isCorrect) {
+                          btnBg = '#ecfdf5';
+                          btnBorder = '#10b981';
+                          btnColor = '#065f46';
+                        } else if (isSelected) {
+                          btnBg = '#fef2f2';
+                          btnBorder = '#ef4444';
+                          btnColor = '#991b1b';
+                        } else {
+                          btnBg = '#f8fafc';
+                          btnBorder = '#e2e8f0';
+                          btnColor = '#94a3b8';
+                        }
+                      }
 
                       return (
-                        <div 
-                          key={tQuiz.id}
+                        <button
+                          key={cIdx}
+                          onClick={() => handleTransferSelect(cIdx)}
+                          disabled={isSolved}
                           style={{
-                            padding: '1.25rem',
-                            borderRadius: '12px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                            border: `1px solid ${isSolved ? (isCorrect ? 'var(--success)' : 'var(--error)') : 'rgba(255, 255, 255, 0.08)'}`
+                            padding: '10px 8px',
+                            borderRadius: '10px',
+                            border: `2px solid ${btnBorder}`,
+                            background: btnBg,
+                            color: btnColor,
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: isSolved ? 'default' : 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.15s ease'
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
-                              변형 문제 #{qIdx + 1}
-                            </span>
-                            {onAddQuizToMochi && (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem' }}
-                                onClick={() => handlePushTransferToMochi(tQuiz)}
-                                disabled={addingMochiIds.has(tQuiz.id)}
-                              >
-                                {addingMochiIds.has(tQuiz.id) ? "✓ Mochi 추가됨" : "⚡ Mochi 카드 추가"}
-                              </button>
-                            )}
-                          </div>
-
-                          <h5 style={{ fontSize: '0.925rem', fontWeight: '600', color: 'white', lineHeight: '1.5', margin: '0 0 0.5rem 0' }}>
-                            {tQuiz.question}
-                          </h5>
-
-                          {tQuiz.translation && (
-                            <div style={{ fontSize: '0.8rem', color: '#93c5fd', backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '0.35rem 0.65rem', borderRadius: '6px', borderLeft: '2px solid #3b82f6', marginBottom: '0.75rem' }}>
-                              <span style={{ fontWeight: '600' }}>💡 문맥 해석:</span> {tQuiz.translation}
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.75rem' }}>
-                            {tQuiz.choices.map((choice, cIdx) => {
-                              let choiceBorder = 'rgba(255, 255, 255, 0.08)';
-                              let choiceBg = 'rgba(255, 255, 255, 0.015)';
-                              let choiceColor = 'var(--text-secondary)';
-
-                              if (isSolved) {
-                                if (cIdx === tQuiz.correctIndex) {
-                                  choiceBorder = 'var(--success)';
-                                  choiceBg = 'rgba(16, 185, 129, 0.15)';
-                                  choiceColor = '#6ee7b7';
-                                } else if (cIdx === userChosenIdx) {
-                                  choiceBorder = 'var(--error)';
-                                  choiceBg = 'rgba(239, 68, 68, 0.15)';
-                                  choiceColor = '#fca5a5';
-                                }
-                              }
-
-                              return (
-                                <button
-                                  key={cIdx}
-                                  onClick={() => setTransferAnswers(prev => ({ ...prev, [tQuiz.id]: cIdx }))}
-                                  disabled={isSolved}
-                                  style={{
-                                    padding: '0.6rem 0.85rem',
-                                    borderRadius: '8px',
-                                    border: `1px solid ${choiceBorder}`,
-                                    backgroundColor: choiceBg,
-                                    color: choiceColor,
-                                    fontSize: '0.85rem',
-                                    textAlign: 'left',
-                                    cursor: isSolved ? 'default' : 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    transition: 'all 0.2s'
-                                  }}
-                                >
-                                  <span>
-                                    <strong>{String.fromCharCode(65 + cIdx)}.</strong> {choice}
-                                  </span>
-                                  {isSolved && (
-                                    cIdx === tQuiz.correctIndex ? <Check size={16} style={{ color: 'var(--success)' }} /> : (cIdx === userChosenIdx ? <X size={16} style={{ color: 'var(--error)' }} /> : null)
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Rationale if solved */}
-                          {isSolved && (
-                            <div style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '0.8rem', lineHeight: '1.5', color: 'var(--text-secondary)' }}>
-                              <strong style={{ color: isCorrect ? '#6ee7b7' : '#fca5a5', display: 'block', marginBottom: '0.2rem' }}>
-                                {isCorrect ? "✅ 정답입니다!" : "❌ 아쉽게 틀렸습니다."}
-                              </strong>
-                              {tQuiz.rationale}
-                            </div>
-                          )}
-                        </div>
+                          <span style={{ color: '#94a3b8', marginRight: '4px' }}>
+                            {String.fromCharCode(65 + cIdx)}.
+                          </span>
+                          {choice}
+                        </button>
                       );
                     })}
                   </div>
 
-                  {/* Completion Banner & Action Buttons */}
-                  <div style={{
-                    marginTop: '1rem',
-                    padding: '1.25rem',
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    textAlign: 'center'
-                  }}>
-                    <Sparkles size={24} style={{ color: 'var(--success)', margin: '0 auto 0.5rem auto' }} />
-                    <h4 style={{ fontSize: '1rem', fontWeight: '800', color: 'white', margin: '0 0 0.25rem 0' }}>
-                      3단계 오답 코칭 워크플로우를 완주하셨습니다! 🏆
-                    </h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem 0' }}>
-                      소크라테스식 힌트 ➔ 뉘앙스 대조 ➔ 변형 실전 적용까지 완벽하게 체화되었습니다.
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                      {onRetryOriginalQuestion && (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => {
-                            onRetryOriginalQuestion(quizItem);
-                            onClose();
-                          }}
-                          style={{
-                            padding: '0.65rem 1.35rem',
-                            fontSize: '0.9rem',
-                            fontWeight: '800',
-                            background: 'linear-gradient(135deg, var(--primary) 0%, #ec4899 100%)',
-                            boxShadow: '0 4px 15px rgba(236, 72, 153, 0.35)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.4rem'
-                          }}
-                        >
-                          <Sparkles size={16} />
-                          <span>🎯 본 문제 바로 다시 풀기</span>
-                        </button>
-                      )}
-
-                      {onNextWrongQuestion && remainingWrongsCount > 0 && (
-                        <button
-                          className="btn btn-accent"
-                          onClick={onNextWrongQuestion}
-                          style={{
-                            padding: '0.65rem 1.25rem',
-                            fontSize: '0.85rem',
-                            fontWeight: '700',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.4rem'
-                          }}
-                        >
-                          <span>➡️ 다음 오답 코칭 ({remainingWrongsCount}개 남음)</span>
-                          <ArrowRight size={15} />
-                        </button>
-                      )}
-
-                      {onGraduate && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => {
-                            onGraduate();
-                            onClose();
-                          }}
-                          style={{ padding: '0.65rem 1.15rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                        >
-                          <BookmarkCheck size={16} />
-                          <span>오답 마스터 완료 (졸업)</span>
-                        </button>
-                      )}
-
-                      <button
-                        className="btn btn-secondary"
-                        onClick={onClose}
-                        style={{ padding: '0.65rem 1.15rem', fontSize: '0.85rem' }}
-                      >
-                        닫기
-                      </button>
+                  {/* Rationale feedback after selection */}
+                  {selectedTransferAnswer !== null && (
+                    <div style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: selectedTransferAnswer === coachingData.transferQuiz.correctIndex ? '#f0fdf4' : '#fff1f2',
+                      border: `1px solid ${selectedTransferAnswer === coachingData.transferQuiz.correctIndex ? '#bbf7d0' : '#fecdd3'}`,
+                      fontSize: '12px',
+                      color: selectedTransferAnswer === coachingData.transferQuiz.correctIndex ? '#166534' : '#9f1239',
+                      lineHeight: '1.4'
+                    }}>
+                      💡 {coachingData.transferQuiz.rationale}
                     </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
+        </div>
+
+        {/* Bottom Action Bar */}
+        <div style={{
+          padding: '14px 20px',
+          background: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px'
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '12px',
+              border: '1px solid #cbd5e1',
+              background: '#ffffff',
+              color: '#475569',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            닫기
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {remainingWrongsCount > 1 && onNextWrongQuestion && (
+              <button
+                onClick={onNextWrongQuestion}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid #818cf8',
+                  background: '#e0e7ff',
+                  color: '#4338ca',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span>다음 오답 ({remainingWrongsCount - 1}개)</span>
+                <ArrowRight size={14} />
+              </button>
+            )}
+
+            <button
+              onClick={handleDirectRetry}
+              style={{
+                padding: '10px 22px',
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.35)'
+              }}
+            >
+              <Check size={16} />
+              <span>🎯 본 문제 바로 맞히기</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

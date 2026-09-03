@@ -56,12 +56,34 @@ export interface WritingEvaluationResult {
   explanation: string;
 }
 
-// AI 3단계 오답 코칭 (3-Stage Socratic Coaching)
-export interface WrongAnswerCoachingStep1Data {
+// AI 원스크린 초압축 마이크로 오답 코칭 (1-Screen Micro Coaching)
+export interface MicroCoachingData {
   locationLabel?: string; // 발췌 위치 (예: "📍 본문 제 2문단 (Paragraph 2)")
   passageExcerpt?: string; // 본문에서 직접 발췌한 결정적 핵심 문장/단서
   excerptTranslation?: string; // 발췌 문장의 쉬운 한글 해석
   connectionExplanation?: string; // 발췌한 본문 문장과 문제의 인과관계/단서 연결 설명
+  coreNuance: string; // 오답과 정답의 핵심 차이 (1~2줄 직관 해설)
+  collocation?: { // 실생활에서 바로 쓰는 원어민 짝꿍 표현 1개
+    phrase: string;
+    meaning: string;
+    example: string;
+  };
+  transferQuiz: { // 1초 인출 확인 변형 퀴즈 1개
+    id: string;
+    question: string;
+    translation: string;
+    choices: string[];
+    correctIndex: number;
+    rationale: string;
+  };
+}
+
+// 기존 3단계 호환용 인터페이스
+export interface WrongAnswerCoachingStep1Data {
+  locationLabel?: string;
+  passageExcerpt?: string;
+  excerptTranslation?: string;
+  connectionExplanation?: string;
   socraticHint: string;
   reflectiveQuestion: string;
   guidedChoices: string[];
@@ -80,7 +102,7 @@ export interface WrongAnswerCoachingStep2Data {
 export interface TransferQuizItem {
   id: string;
   question: string;
-  translation?: string; // 친절하고 쉬운 한글 해석/의도
+  translation?: string;
   choices: string[];
   correctIndex: number;
   rationale: string;

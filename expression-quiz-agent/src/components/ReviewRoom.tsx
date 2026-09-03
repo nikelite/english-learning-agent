@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Award, Check, X, RefreshCw, Trash2, CheckCircle2, Archive, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
+import { Award, Check, X, RefreshCw, Trash2, CheckCircle2, Archive, CheckSquare, Square, Brain, Sparkles, Zap } from 'lucide-react';
 import { WrongAnswer } from '../types';
 import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
 
@@ -378,8 +378,8 @@ export const ReviewRoom: React.FC<ReviewRoomProps> = ({
                       }}
                       onClick={() => setCoachingTarget(wa)}
                     >
-                      <Brain size={13} />
-                      AI 3단계 오답 코칭
+                      <Zap size={13} />
+                      ⚡ 1초 마이크로 오답 코칭
                     </button>
 
                     {wa.isArchived && (

@@ -6,6 +6,7 @@ import {
   DecisionTriggerData, 
   WritingTemplateData, 
   WritingEvaluationResult,
+  MicroCoachingData,
   WrongAnswerCoachingStep1Data, 
   WrongAnswerCoachingStep2Data, 
   WrongAnswerCoachingStep3Data 
@@ -816,7 +817,7 @@ export async function generateLessonFromText(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -1230,7 +1231,7 @@ export async function generateVocabularyLessons(
     throw new Error("분석할 텍스트가 입력되지 않았습니다.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -1475,7 +1476,7 @@ export async function evaluateUserSentence(
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
   if (!userSentence.trim()) throw new Error("작문 문장을 입력해 주세요.");
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an encouraging, expert native English writing coach and tutor.
 The student is practicing this specific English lesson:
@@ -1536,7 +1537,7 @@ export async function generateWritingScenarios(
 ): Promise<WritingTemplateData> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an expert native English instructional designer and tutor.
 Analyze this English lesson topic:
@@ -1626,7 +1627,7 @@ export async function generateAdditionalQuizzes(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an expert English quiz creator.
 The student is studying this topic:
@@ -1723,7 +1724,7 @@ export async function askGeminiFollowUpQuestion(
     throw new Error("Gemini API Key가 필요합니다. 설정창에서 입력해 주세요.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const historyPrompt = chatHistory.map(h => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${h.text}`).join('\n');
 
@@ -1782,6 +1783,86 @@ Guidelines:
 }
 
 /**
+ * AI 원스크린 초압축 마이크로 오답 코칭 (1-Screen Micro Coaching):
+ * 단 1회의 초고속 API 호출로 [1줄 직관 뉘앙스 + 실생활 짝꿍 표현 1개 + 1초 확인 미니 퀴즈 1개]를 생성
+ */
+export async function generateMicroCoaching(
+  question: string,
+  choices: string[],
+  userWrongAnswer: string,
+  correctAnswer: string,
+  rationale: string,
+  apiKey: string
+): Promise<MicroCoachingData> {
+  if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+
+  const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
+  const prompt = `You are an elite, encouraging 1:1 English coach utilizing cognitive microlearning principles.
+The student made a mistake on an English quiz question.
+
+Quiz Question:
+${question}
+
+Choices:
+${choicesStr}
+
+Student's Selected Wrong Answer:
+"${userWrongAnswer}"
+
+Actual Correct Answer:
+"${correctAnswer}"
+
+Original Rationale:
+${rationale}
+
+CRITICAL TASK: Generate a compact, all-in-one micro coaching package designed to be absorbed in 15 seconds.
+1. coreNuance: 1~2 super-clear, friendly Korean sentences explaining why the wrong choice doesn't fit and why the correct answer is perfect (ELI5 level, friendly, everyday tone).
+2. collocation: Exactly 1 high-frequency native partner expression with meaning and a short 5~8 word example.
+3. transferQuiz: Exactly 1 super-easy 3-choice fill-in-the-blank question testing the exact same concept in a simple everyday context, with Korean translation and 1-line explanation.
+
+Output JSON matching this schema:
+{
+  "coreNuance": "오답과 정답의 차이를 초등학생도 알기 쉽게 설명한 1~2문장",
+  "collocation": {
+    "phrase": "Easy native phrase",
+    "meaning": "쉬운 한글 뜻",
+    "example": "Simple everyday example sentence"
+  },
+  "transferQuiz": {
+    "id": "micro-t1",
+    "question": "Short 6~10 word English sentence with a blank (e.g. 'She decided to go ________ the bad weather.')",
+    "translation": "자연스러운 한글 해석",
+    "choices": ["Option A", "Option B", "Option C"],
+    "correctIndex": 0,
+    "rationale": "친절하고 쉬운 1문장 해설"
+  }
+}
+Do not wrap in markdown \`\`\`json.`;
+
+  const response = await fetchWithRetry(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error.message || `Gemini API 오류 (${data.error.code || 'UNKNOWN'})`);
+  }
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini가 유효한 마이크로 코칭 데이터를 반환하지 않았습니다.");
+  return JSON.parse(cleanJsonString(text)) as MicroCoachingData;
+}
+
+/**
  * 3단계 오답 코칭 Step 1: 정답을 가리고 인지적 착각 원인과 소크라테스식 힌트 질문 생성
  */
 export async function generateWrongAnswerCoachingStep1(
@@ -1792,7 +1873,7 @@ export async function generateWrongAnswerCoachingStep1(
 ): Promise<WrongAnswerCoachingStep1Data> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const choicesStr = choices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c}`).join('\n');
   const prompt = `You are a friendly, encouraging 1:1 English coach. The student solved an English quiz and chose a WRONG answer.
@@ -1889,7 +1970,7 @@ Output JSON matching this schema:
 }
 Do not wrap in markdown \`\`\`json.`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const response = await fetchWithRetry(endpoint, {
     method: "POST",
@@ -1923,7 +2004,7 @@ export async function generateWrongAnswerCoachingStep3(
 ): Promise<WrongAnswerCoachingStep3Data> {
   if (!apiKey) throw new Error("Gemini API Key가 필요합니다.");
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const prompt = `You are an expert, encouraging English teacher.
 The student made a mistake on a specific grammar/vocabulary/expression concept:

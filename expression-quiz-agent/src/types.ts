@@ -138,29 +138,51 @@ export interface AppStats {
   masteredCount: number;
 }
 
+// AI 원스크린 초압축 마이크로 오답 코칭 (1-Screen Micro Coaching)
+export interface MicroCoachingData {
+  locationLabel?: string;
+  passageExcerpt?: string;
+  excerptTranslation?: string;
+  connectionExplanation?: string;
+  coreNuance: string; // 오답과 정답의 핵심 차이 (1~2줄 직관 해설)
+  collocation?: { // 실생활에서 바로 쓰는 원어민 짝꿍 표현 1개
+    phrase: string;
+    meaning: string;
+    example: string;
+  };
+  transferQuiz: { // 1초 인출 확인 변형 퀴즈 1개
+    id: string;
+    question: string;
+    translation: string;
+    choices: string[];
+    correctIndex: number;
+    rationale: string;
+  };
+}
+
 export interface WrongAnswerCoachingStep1Data {
-  cognitiveIllusion: string; // 왜 이 오답을 골랐을지 인지적 착각 원인 분석
-  clueQuestion: string; // 정답을 유추할 수 있는 결정적 단서 질문 (소크라테스식 힌트)
+  cognitiveIllusion: string;
+  clueQuestion: string;
 }
 
 export interface WrongAnswerCoachingStep2Data {
-  nuanceContrast: string; // 오답과 정답의 뉘앙스 차이 대조 (비즈니스/일상 맥락 2문장)
+  nuanceContrast: string;
   collocations: Array<{
     phrase: string;
     meaning: string;
     example: string;
-  }>; // 원어민이 자주 쓰는 짝꿍 표현 2개
+  }>;
 }
 
 export interface TransferQuizItem {
   id: string;
   question: string;
-  translation?: string; // 친절하고 쉬운 한글 해석/의도
+  translation?: string;
   choices: string[];
   correctIndex: number;
   rationale: string;
 }
 
 export interface WrongAnswerCoachingStep3Data {
-  transferQuizzes: TransferQuizItem[]; // 새로운 맥락의 3지선다 빈칸 문제 2개
+  transferQuizzes: TransferQuizItem[];
 }

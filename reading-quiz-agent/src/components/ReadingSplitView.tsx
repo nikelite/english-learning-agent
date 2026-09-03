@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { safeSetLocalStorage } from '../utils/storage';
 import { saveToIndexedDB, loadFromIndexedDB, STORE_ANALYSIS } from '../utils/indexedDBStorage';
-import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2, Edit3 } from 'lucide-react';
+import { HelpCircle, Brain, Volume2, Sparkles, Check, X, ArrowLeft, ArrowRight, BookmarkCheck, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Share2, Edit3, Zap } from 'lucide-react';
 import { ReadingLesson, ReadingQuizItem, ReadingVocabulary, SentenceAnalysis, WritingEvaluationResult, WritingTemplateData } from '../types';
 import { generateCustomVocabItem, analyzePassageSentences, splitIntoSentences, analyzeParagraphChunkSentences, autoFillMissingAnalyses, matchSentenceAnalysis, formatPdfFileName } from '../geminiService';
 import { loadPassageAnalysisFromCloud, savePassageAnalysisToCloud } from '../firebaseService';
@@ -1364,8 +1364,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                           padding: '0.85rem'
                         }}
                       >
-                        <Brain size={18} />
-                        <span>🧠 틀린 문제 AI 3단계 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})</span>
+                        <Zap size={18} />
+                        <span>⚡ 틀린 문제 1초 마이크로 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length})</span>
                       </button>
                     )}
                     
@@ -1421,8 +1421,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                                   }}
                                   onClick={() => setCoachingQuizItem({ quiz, userAns: userAnswer })}
                                 >
-                                  <Brain size={12} />
-                                  AI 3단계 코칭
+                                  <Zap size={12} />
+                                  1초 마이크로 코칭
                                 </button>
                               )}
                               <button
@@ -1764,8 +1764,8 @@ export const ReadingSplitView: React.FC<ReadingSplitViewProps> = ({
                                 }}
                                 onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns })}
                               >
-                                <Brain size={13} />
-                                <span>🧠 AI 3단계 코칭</span>
+                                <Zap size={13} />
+                                <span>⚡ 1초 마이크로 코칭</span>
                               </button>
                             )}
 

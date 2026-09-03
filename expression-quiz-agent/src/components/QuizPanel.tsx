@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck, Brain } from 'lucide-react';
+import { Check, X, Sparkles, AlertCircle, RefreshCw, ArrowRight, BookmarkCheck, Brain, Zap } from 'lucide-react';
 import { Lesson, QuizItem, WritingEvaluationResult } from '../types';
 import { WrongAnswerCoachModal } from './WrongAnswerCoachModal';
 import { WritingPracticeSection } from './WritingPracticeSection';
@@ -397,8 +397,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 gap: '0.4rem'
               }}
             >
-              <Brain size={16} />
-              <span>🧠 틀린 문제 AI 3단계 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length}개)</span>
+              <Zap size={16} />
+              <span>⚡ 틀린 문제 1초 마이크로 코칭 후 다시 풀기 ({activeQuizzes.filter(q => submittedAnswers[q.id] !== undefined && submittedAnswers[q.id] !== q.correctIndex).length}개)</span>
             </button>
           )}
 
@@ -553,8 +553,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                         }}
                         onClick={() => setCoachingQuizItem({ quiz, userAns: userAnswer })}
                       >
-                        <Brain size={12} />
-                        AI 3단계 코칭
+                        <Zap size={12} />
+                        1초 마이크로 코칭
                       </button>
                     )}
                     <button
@@ -872,7 +872,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                       ) : (
                         <>
                           <AlertCircle size={18} />
-                          <span>오답입니다. 아래 해설과 3단계 코칭을 확인해 보세요.</span>
+                          <span>오답입니다. 아래 해설과 1초 마이크로 코칭을 확인해 보세요.</span>
                         </>
                       )}
                     </div>
@@ -894,8 +894,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                           }}
                           onClick={() => setCoachingQuizItem({ quiz: activeQuestion, userAns: selectedAns! })}
                         >
-                          <Brain size={14} />
-                          <span>AI 3단계 코칭 받기</span>
+                          <Zap size={14} />
+                          <span>⚡ 1초 마이크로 코칭</span>
                         </button>
                       )}
 
