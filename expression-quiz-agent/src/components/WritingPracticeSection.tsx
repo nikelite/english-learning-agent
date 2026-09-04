@@ -57,12 +57,9 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       sit.includes("실전 대화에서 적용") ||
       sit.includes("어색한 표현") ||
       sit.includes("불분명") ||
-      sit.includes("설명") ||
       intent.includes("말해보세요") ||
       intent.includes("영작해보세요") ||
-      intent.includes("어색한") ||
-      intent.includes("진행해 볼게요") ||
-      intent.includes("처리해 둘게요")
+      intent.includes("어색한")
     );
   };
 
@@ -130,7 +127,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
     try {
       const activeContext = {
         situation: currentScenario.situation,
-        koreanIntent: currentScenario.koreanIntent,
+        koreanIntent: cleanKoreanIntentDisplay(currentScenario.koreanIntent),
         template: currentScenario.template
       };
       const result = await evaluateUserSentence(lesson, userSentence.trim(), apiKey, activeContext);
@@ -208,7 +205,7 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
 
   const cleanKoreanIntentDisplay = (intent: string) => {
     if (!intent) return '';
-    let clean = intent
+    return intent
       .replace(/상황을 영어로 말해보세요\.?/g, '')
       .replace(/상황을 영어 1문장으로 표현해보세요\.?/g, '')
       .replace(/상황을 영어로 표현해보세요\.?/g, '')
@@ -218,22 +215,6 @@ export const WritingPracticeSection: React.FC<WritingPracticeSectionProps> = ({
       .replace(/말해보세요\.?/g, '')
       .replace(/^["'\s]+|["'\s]+$/g, '')
       .trim();
-
-    const expr = (localWritingTemplate.template || '').toLowerCase();
-    if (clean.includes('다음 날') || clean.includes('오전') || clean.includes('하루') || expr.includes('morning')) {
-      return "다음 날 오전에 회의 일정 및 결과를 회신드릴게요.";
-    }
-    if (clean.includes('비공개') || expr.includes('private')) {
-      return "제가 그 회의 일정을 비공개로 설정해 둘게요.";
-    }
-    if (clean.includes('구성') || clean.includes('설정') || expr.includes('configured') || expr.includes('handled')) {
-      return "해당 설정은 이미 시스템에 정상적으로 구성되어 있습니다.";
-    }
-    if (clean.includes('표현') || clean.includes('나타내는') || clean.includes('설명') || clean.includes('처리해 둘게요')) {
-      return "제가 관련 내용을 확인한 뒤 바로 회신드릴게요.";
-    }
-
-    return clean;
   };
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);

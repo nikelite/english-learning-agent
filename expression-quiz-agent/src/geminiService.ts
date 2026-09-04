@@ -136,25 +136,39 @@ function makeDirectSpokenSentence(
 ): string {
   if (example) {
     const parenMatch = example.match(/[\(（](.*?)[\)）]/);
-    if (parenMatch && parenMatch[1] && parenMatch[1].length >= 3) {
+    if (parenMatch && parenMatch[1] && parenMatch[1].length >= 2) {
       let t = parenMatch[1]
-        .replace(/주로 쓰는 표현.*$/, '')
-        .replace(/정형화된 표현.*$/, '')
-        .replace(/때$/, '')
-        .replace(/상황$/, '')
+        .replace(/주로 쓰는.*$/, '')
+        .replace(/정형화된.*$/, '')
+        .replace(/^["'\s]+|["'\s]+$/g, '')
         .trim();
-      if (!t.includes('표현') && !t.includes('설명') && !t.includes('의미') && !t.includes('나타내는')) {
-        if (!t.endsWith('요') && !t.endsWith('다') && !t.endsWith('어') && !t.endsWith('음') && !t.endsWith('죠')) {
-          t += (category === 'business' ? ' 확인해 볼게요.' : ' 해볼게요.');
+      if (!t.includes('한국어 직역') && !t.includes('어색한') && !t.includes('오류') && !t.includes('착각 패턴')) {
+        if (/[요다까죠음어\?\!]$/.test(t)) {
+          return t;
         }
-        return t;
+        return t + (category === 'business' ? ' 확인 부탁드립니다.' : ' 말해볼게요.');
       }
     }
   }
 
   const cleanExpr = expression.replace(/[\(\[\/].*$/, '').trim().toLowerCase();
 
-  // Pattern-based authentic direct spoken sentences
+  // 2. Expression-based specific patterns
+  if (cleanExpr.includes('clarify') || cleanExpr.includes('explain')) {
+    return category === 'business'
+      ? "해당 내용에 대해 조금 더 구체적으로 설명해 주실 수 있나요?"
+      : "그게 무슨 뜻인지 조금 더 쉽게 설명해 줄 수 있어?";
+  }
+  if (cleanExpr.includes('confirm') || cleanExpr.includes('verify')) {
+    return category === 'business'
+      ? "해당 사항이 맞는지 다시 한번 확인 부탁드립니다."
+      : "그거 맞는지 한번 확인해 줄래?";
+  }
+  if (cleanExpr.includes('could you') || cleanExpr.includes('can you') || cleanExpr.includes('would you')) {
+    return category === 'business'
+      ? "관련 사항에 대해 정중히 확인 및 설명 부탁드립니다."
+      : "관련해서 좀 알려줄 수 있어?";
+  }
   if (cleanExpr.includes('morning') || cleanExpr.includes('night') || cleanExpr.includes('day') || cleanExpr.includes('tomorrow')) {
     return category === 'business'
       ? "다음 날 오전에 회의 일정 및 결과를 회신드릴게요."
@@ -177,7 +191,7 @@ function makeDirectSpokenSentence(
   }
   if (cleanExpr.includes('boring') || cleanExpr.includes('bored') || cleanExpr.includes('confused') || cleanExpr.includes('confusing')) {
     return category === 'business'
-      ? "그 회의는 너무 지루해서 나는 발표 내내 지루했어."
+      ? "그 회의는 너무 길어서 나는 발표 내내 지루했어."
       : "그 영화는 너무 지루해서 보는 내내 지루했어.";
   }
   if (cleanExpr.includes('who') || cleanExpr.includes('anyone')) {
@@ -186,25 +200,7 @@ function makeDirectSpokenSentence(
       : "혹시 충전기 가진 사람이 있는지 알아볼게요.";
   }
 
-  // Check if condition is a clean action without meta words
-  const isMeta = !condition || 
-    condition.includes('한국어') || 
-    condition.includes('직역') || 
-    condition.includes('어색한') || 
-    condition.includes('불분명') || 
-    condition.includes('오류') ||
-    condition.includes('착각') ||
-    condition.includes('표현') ||
-    condition.includes('나타내는') ||
-    condition.includes('설명') ||
-    condition.includes('의미');
-
-  if (isMeta) {
-    return category === 'business'
-      ? `제가 관련 내용을 확인한 뒤 회신드릴게요.`
-      : `제가 그 부분에 대해 확인해 볼게요.`;
-  }
-
+  // 3. Condition-based actions
   let clean = condition
     .replace(/주로 쓰는.*$/, '')
     .replace(/정형화된.*$/, '')
@@ -214,6 +210,16 @@ function makeDirectSpokenSentence(
     .replace(/상황$/, '')
     .trim();
 
+  if (clean.includes('요청') || clean.includes('부탁') || clean.includes('문의') || clean.includes('질문')) {
+    return category === 'business'
+      ? "관련 사항에 대해 정중히 확인 및 설명 부탁드립니다."
+      : "관련해서 좀 알려줄 수 있어?";
+  }
+  if (clean.includes('설명') || clean.includes('안내')) {
+    return category === 'business'
+      ? "해당 세부 내용에 대해 간략히 설명해 드리겠습니다."
+      : "어떻게 된 건지 설명해 줄게.";
+  }
   if (clean.includes('바꿀') || clean.includes('전환할') || clean.includes('설정할')) {
     return clean.replace(/바꿀.*$/, '바꿔 둘게요.').replace(/전환할.*$/, '전환했어요.').replace(/설정할.*$/, '설정해 둘게요.');
   }
@@ -224,7 +230,11 @@ function makeDirectSpokenSentence(
     return clean.replace(/확인할.*$/, '확인해 볼게요.').replace(/알아볼.*$/, '알아볼게요.');
   }
 
-  return category === 'business' ? `${clean} 관련 내용을 확인해 볼게요.` : `${clean} 부분에 대해 확인해볼게.`;
+  if (clean && clean.length > 2 && !clean.includes('한국어') && !clean.includes('직역')) {
+    return category === 'business' ? `${clean} 관련 내용을 말씀드릴게요.` : `${clean} 부분에 대해 말해볼게.`;
+  }
+
+  return category === 'business' ? `${expression || '핵심 표현'}을(를) 활용하여 말씀해 주세요.` : `${expression || '표현'}을(를) 활용해 말해볼게.`;
 }
 
 /**
@@ -1490,12 +1500,11 @@ The student is practicing this specific English lesson:
 - Student's Written Sentence: "${userSentence.trim()}"
 
 CRITICAL EVALUATION INSTRUCTIONS:
-1. PRIMARY GOAL: Check whether the student correctly applied the LESSON'S TARGET EXPRESSIONS ("${lesson.decisionTrigger?.triggerA?.expression || ''}" or "${lesson.decisionTrigger?.triggerB?.expression || ''}") in their sentence.
-2. NEVER REPLACE THE TARGET EXPRESSION with an unrelated synonym! (For example, if the lesson is teaching 'configured / handled', DO NOT replace it with 'deployed' or other verbs. You MUST keep the target expression and polish the sentence around it).
-3. If the student correctly applied the target expression to match the intent and situation, award a HIGH SCORE (85~100) and praise their usage of the expression!
-4. 'correctedSentence' MUST ALWAYS PRESERVE the lesson's target expression while fixing any minor grammar, prepositions, or word order.
-5. 'nativeAlternative' should demonstrate how a native speaker naturally says this exact thought in this context.
-6. 'feedback' and 'explanation' in Korean must specifically comment on the student's usage of the target expression.
+1. PRIMARY GOAL: Check whether the student's sentence accurately conveys the 'Target Korean Intent' in natural English within the given 'Real-Life Situation', effectively applying the lesson's target expressions ("${lesson.decisionTrigger?.triggerA?.expression || ''}" or "${lesson.decisionTrigger?.triggerB?.expression || ''}").
+2. If the student accurately expressed the Target Korean Intent with the target expression or natural grammar, award a HIGH SCORE (85~100) and warmly praise their sentence!
+3. 'correctedSentence' MUST accurately express the Target Korean Intent in natural English, preserving the lesson's target expression while fixing any minor grammar, prepositions, or word choice.
+4. 'nativeAlternative' should demonstrate how a native speaker naturally expresses this exact Target Korean Intent in this situation.
+5. 'feedback' and 'explanation' in Korean must be encouraging, clear, and directly address the student's attempt relative to the Target Korean Intent.
 
 Return a JSON object matching this schema:
 {
@@ -1549,7 +1558,12 @@ Analyze this English lesson topic:
 - Example sentence: "${lesson.eli10?.contrastiveExample || lesson.eli5?.example || ''}"
 
 Generate 2 DISTINCT, HIGHLY VIVID, REAL-WORLD SITUATIONAL SCENARIOS (1 Business/Workplace scenario, 1 Daily Life/Casual scenario) tailored specifically to test and apply these exact expressions in 1 second.
-CRITICAL: Never use a generic 'I need to...' template unless the expression is literally 'need to'. The template MUST match the actual grammar structure of this lesson (e.g. for Despite vs Although, write '(Despite / Although) ____________________, ____________________.').
+CRITICAL:
+1. In EACH scenario, 'situation' (상황) and 'koreanIntent' (내가 전달하고자 하는 의도) and 'sampleSentence' (영어 모범 문장) MUST PERFECTLY ALIGN with each other!
+2. 'koreanIntent' MUST be the exact natural Korean spoken sentence that the user directly says in this situation, which directly translates into 'sampleSentence' using Expression A or Expression B.
+   - For example, if Expression A is 'Could you clarify ~?' and the situation is politely asking the finance team why expenses spiked, 'koreanIntent' MUST BE: '재무 보고서에 언급된 예산 변동 내역에 대해 설명해 주실 수 있나요?' (NEVER an unrelated sentence like '제가 확인해 볼게요').
+   - 'koreanIntent' must never have an opposite or unrelated meaning!
+3. Never use a generic 'I need to...' template unless the expression is literally 'need to'. The template MUST match the actual grammar structure of this lesson.
 
 Return a JSON object with this exact schema:
 {
